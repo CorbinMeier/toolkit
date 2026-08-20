@@ -26,7 +26,13 @@
   },
   "outputs": {
     "_comment": "Per-output layout overrides. Key = monitor model or connector as reported by the host (see `dashd-host --list`). 'layout' picks a top-level layout in web/app.js; omit an output to use 'auto'.",
-    "DELL U2913WM": { "layout": "wide", "scale": 1.0 },
-    "default": { "layout": "auto", "scale": 1.0 }
+    "DELL U2913WM": {
+      "layout": "wide",
+      "scale": 1.0
+    },
+    "default": {
+      "layout": "auto",
+      "scale": 1.0
+    }
   }
 }
