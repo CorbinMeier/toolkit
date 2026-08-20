@@ -284,78 +284,35 @@ function renderWeather(w) {
     return d;
   }));
 
-  renderSpark(w);
+  renderHourly(w);
   renderWeek(w);
   renderSunMoon(w);
 }
 
-function renderSpark(w) {
-  const svg = $('spark');
-  svg.replaceChildren();
-  const pts = w.hourly.filter((h) => h.temp != null);
-  if (pts.length < 2) return;
+/* Compact hourly strip: time + icon + temp, no chart. Replaces a "Next 24
+ * hours" sparkline that was vague and cost far more vertical space than
+ * the info was worth (see ISSUES.md #8). */
+function renderHourly(w) {
+  const pts = w.hourly.filter((h) => h.temp != null).slice(0, 6);
+  $('hourly').replaceChildren(...pts.map((p) => {
+    const cell = document.createElement('div');
+    cell.className = 'flex flex-col items-center gap-[0.25vmin] flex-1 min-w-0';
 
-  // Match the viewBox to the real pixel box so nothing is distorted.
-  const box = svg.getBoundingClientRect();
-  const W = Math.max(Math.round(box.width), 160);
-  const H = Math.max(Math.round(box.height), 70);
-  svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
-  const fs = Math.max(10, Math.min(Math.round(H * 0.13), 22));
+    const t = document.createElement('div');
+    t.className = 'text-faint num text-[clamp(.48rem,1vmin,.68rem)]';
+    t.textContent = hhmm(p.time);
 
-  const temps = pts.map((p) => p.temp);
-  const lo = Math.min(...temps), hi = Math.max(...temps);
-  const span = Math.max(hi - lo, 1);
-  const topPad = fs * 1.9, botPad = fs * 1.1;
-  const x = (i) => (i / (pts.length - 1)) * W;
-  const y = (t) => H - botPad - ((t - lo) / span) * (H - topPad - botPad);
+    const ico = document.createElement('div');
+    ico.className = 'w-[clamp(1rem,2.4vmin,1.7rem)] h-[clamp(1rem,2.4vmin,1.7rem)]';
+    ico.appendChild(weatherIcon(p.icon));
 
-  // precipitation probability as background columns
-  pts.forEach((p, i) => {
-    if (!p.precip) return;
-    svg.appendChild(el('rect', {
-      x: x(i) - W / pts.length / 2, y: H - (p.precip / 100) * H,
-      width: W / pts.length, height: (p.precip / 100) * H,
-      fill: 'var(--color-accent)', opacity: '.13',
-    }));
-  });
+    const temp = document.createElement('div');
+    temp.className = 'num text-ink/90 text-[clamp(.6rem,1.4vmin,1rem)]';
+    temp.textContent = `${p.temp}°`;
 
-  const line = pts.map((p, i) => `${i ? 'L' : 'M'} ${x(i).toFixed(1)} ${y(p.temp).toFixed(1)}`).join(' ');
-  const grad = el('linearGradient', { id: 'tg', x1: '0', y1: '0', x2: '0', y2: '1' });
-  grad.appendChild(el('stop', { offset: '0', 'stop-color': 'var(--color-warm)', 'stop-opacity': '.38' }));
-  grad.appendChild(el('stop', { offset: '1', 'stop-color': 'var(--color-warm)', 'stop-opacity': '0' }));
-  const defs = el('defs'); defs.appendChild(grad); svg.appendChild(defs);
-
-  svg.appendChild(el('path', {
-    d: `${line} L ${W} ${H} L 0 ${H} Z`, fill: 'url(#tg)',
+    cell.append(t, ico, temp);
+    return cell;
   }));
-  svg.appendChild(el('path', {
-    d: line, fill: 'none', stroke: 'var(--color-warm)', 'stroke-width': '2',
-    'stroke-linejoin': 'round', 'stroke-linecap': 'round',
-    'vector-effect': 'non-scaling-stroke',
-  }));
-
-  // label the extremes only -- more than that is unreadable at a glance
-  [[temps.indexOf(hi), hi, -1], [temps.indexOf(lo), lo, 1]].forEach(
-    ([i, t, dir]) => {
-      svg.appendChild(el('circle', { cx: x(i), cy: y(t), r: fs * 0.22,
-        fill: 'var(--color-ink)' }));
-      const label = el('text', {
-        x: Math.min(Math.max(x(i), fs * 1.6), W - fs * 1.6),
-        y: y(t) + dir * fs * 0.9 + (dir > 0 ? fs * 0.8 : 0),
-        fill: 'var(--color-ink)', 'font-size': fs, 'text-anchor': 'middle',
-        'font-family': 'Fira Mono, monospace',
-      });
-      label.textContent = `${t}°`;
-      svg.appendChild(label);
-    });
-
-  const step = Math.max(1, Math.floor(pts.length / 6));
-  $('hourlabels').replaceChildren(...pts.filter((_, i) => i % step === 0)
-    .map((p) => {
-      const s = document.createElement('span');
-      s.textContent = hhmm(p.time);
-      return s;
-    }));
 }
 
 function renderWeek(w) {
@@ -363,24 +320,24 @@ function renderWeek(w) {
   $('week').replaceChildren(...w.daily.slice(0, 7).map((d) => {
     const isToday = d.date === today;
     const row = document.createElement('div');
-    row.className = 'flex items-center gap-[1.2vmin] py-[0.5vmin] ' +
+    row.className = 'flex items-center gap-[0.8vmin] py-[0.15vmin] ' +
       (isToday ? 'text-ink' : 'text-muted');
     const name = isToday ? 'Today'
       : new Date(d.date + 'T12:00').toLocaleDateString(undefined, { weekday: 'short' });
 
     const label = document.createElement('span');
-    label.className = 'w-[22%] tracking-wide text-[clamp(.6rem,1.4vmin,1.05rem)]' +
+    label.className = 'w-[20%] tracking-wide text-[clamp(.52rem,1.1vmin,.82rem)]' +
       (isToday ? ' font-medium' : '');
     label.textContent = name;
 
     const ico = document.createElement('span');
-    ico.className = 'w-[clamp(1.1rem,2.9vmin,2.1rem)] h-[clamp(1.1rem,2.9vmin,2.1rem)] shrink-0';
+    ico.className = 'w-[clamp(0.85rem,2vmin,1.4rem)] h-[clamp(0.85rem,2vmin,1.4rem)] shrink-0';
     ico.appendChild(weatherIcon(d.icon));
 
     const range = document.createElement('span');
-    range.className = 'num flex-1 text-right text-[clamp(.62rem,1.5vmin,1.1rem)]';
+    range.className = 'num flex-1 text-right text-[clamp(.55rem,1.2vmin,.88rem)]';
     range.innerHTML = `<span class="text-ink/90">${d.hi}°</span>` +
-      `<span class="text-faint ml-[0.9vmin]">${d.lo}°</span>`;
+      `<span class="text-faint ml-[0.7vmin]">${d.lo}°</span>`;
 
     row.append(label, ico, range);
     return row;

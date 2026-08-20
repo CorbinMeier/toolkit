@@ -58,6 +58,12 @@ WMO = {
     96: ("Thunderstorm, hail", "storm"), 99: ("Thunderstorm, hail", "storm"),
 }
 
+
+def night_adjusted(icon: str, is_day: bool) -> str:
+    """clear/partly are the only icon kinds with a distinct night variant."""
+    return f"{icon}-night" if icon in ("clear", "partly") and not is_day else icon
+
+
 _lock = threading.Lock()
 _net_prev: tuple[float, int, int] | None = None
 _last_sample_ts = 0.0
@@ -105,7 +111,7 @@ def fetch_weather(cfg: dict) -> dict:
             "temperature_2m", "apparent_temperature", "relative_humidity_2m",
             "is_day", "weather_code", "wind_speed_10m", "wind_direction_10m",
             "pressure_msl", "cloud_cover", "precipitation"]),
-        "hourly": "temperature_2m,weather_code,precipitation_probability",
+        "hourly": "temperature_2m,weather_code,precipitation_probability,is_day",
         "daily": ",".join([
             "weather_code", "temperature_2m_max", "temperature_2m_min",
             "sunrise", "sunset", "uv_index_max",
@@ -118,8 +124,7 @@ def fetch_weather(cfg: dict) -> dict:
 
     cur, daily, hourly = raw["current"], raw["daily"], raw["hourly"]
     desc, icon = WMO.get(cur["weather_code"], ("Unknown", "clear"))
-    if icon in ("clear", "partly") and not cur["is_day"]:
-        icon += "-night"
+    icon = night_adjusted(icon, cur["is_day"])
 
     now = datetime.now(UTC)
     # hourly arrays are local-time indexed; find the next 24h from now
@@ -148,12 +153,13 @@ def fetch_weather(cfg: dict) -> dict:
         "moon": moon_phase(now),
         "hourly": [
             {"time": t, "temp": round(v) if v is not None else None,
-             "code": c, "precip": p}
+             "code": c, "icon": night_adjusted(WMO.get(c, ("", "clear"))[1], bool(d)),
+             "precip": p}
             # strict: misaligned arrays would pair one hour's temperature
             # with another hour's icon. Better to raise and serve the cache.
-            for t, v, c, p in zip(
+            for t, v, c, d, p in zip(
                 times[sl], hourly["temperature_2m"][sl],
-                hourly["weather_code"][sl],
+                hourly["weather_code"][sl], hourly["is_day"][sl],
                 hourly["precipitation_probability"][sl], strict=True)
         ],
         "daily": [

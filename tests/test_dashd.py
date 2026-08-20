@@ -70,6 +70,19 @@ class TestWeatherCodes(unittest.TestCase):
             self.assertIn(icon, known, f"code {code}")
 
 
+class TestNightAdjusted(unittest.TestCase):
+    def test_clear_and_partly_get_a_night_variant(self):
+        self.assertEqual(dashd.night_adjusted("clear", False), "clear-night")
+        self.assertEqual(dashd.night_adjusted("partly", False), "partly-night")
+
+    def test_daytime_is_unchanged(self):
+        self.assertEqual(dashd.night_adjusted("clear", True), "clear")
+
+    def test_other_icons_have_no_night_variant(self):
+        for icon in ("cloudy", "fog", "drizzle", "rain", "sleet", "snow", "storm"):
+            self.assertEqual(dashd.night_adjusted(icon, False), icon)
+
+
 class TestSystemStats(unittest.TestCase):
     def test_shape(self):
         s = dashd.system_stats()

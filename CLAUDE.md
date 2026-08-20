@@ -1,9 +1,11 @@
 # Desktop Dashboard
 
-Live HTML rendered as the desktop wallpaper on COSMIC/Wayland — clock,
-weather, forecast, sun/moon, system stats. Not a wallpaper image on a timer:
-a real WebKit view with CSS animation and JS, one surface per monitor,
-sitting below the windows.
+Live HTML rendered as the desktop wallpaper on COSMIC/Wayland — date,
+weather, forecast, sun/moon, system stats (with SQLite-backed history for
+cpu/mem/net trends). Not a wallpaper image on a timer: a real WebKit view
+with CSS animation and JS, one surface per monitor, sitting below the
+windows. No digital clock -- the user's own system already shows the time
+(#5).
 
 Two processes:
 
@@ -15,13 +17,16 @@ Both run as **enabled** systemd user units (see *Current state* below).
 ## Layout
 
 ```
-bin/dashd-serve     HTTP server; /api/state merges weather + sys + extra
+bin/dashd-serve     HTTP server; /api/state merges weather+sys+extra,
+                    /api/history serves lib/metrics.py's stored samples
 bin/dashd-host      layer-shell surfaces; --list prints monitor names
+lib/metrics.py      SQLite historical-metrics store (cpu/mem/net trends)
 web/index.html      panel structure (Tailwind utility classes)
 web/app.js          all rendering; pure function of last good state
 web/vendor/         Tailwind v4 browser build, vendored (no network at runtime)
-config.json         location, units, port, display layer, per-output overrides
-data/               weather.json cache + extra.json (both gitignored)
+config.json         location, units, port, display layer, per-output overrides,
+                    metrics sample/retain interval
+data/               weather.json cache, extra.json, metrics.db (all gitignored)
 scripts/smoke.py    the "build" stage — end-to-end render assertions
 tests/test_dashd.py unittest suite (hermetic, no network)
 systemd/            the two user units
@@ -131,10 +136,17 @@ render loop.
   anything throttling or disabling animation leaves the desktop empty forever.
   `apply()` always strips the class back off after 1.6s. Visibility must never
   depend on an animation completing.
-- **`preserveAspectRatio="none"` distorts SVG text and markers**, not just the
-  path — labels stretch and dots become ellipses. The sparkline sets its
-  `viewBox` from the measured pixel box so 1 unit == 1 px, which is why a
-  `resize` listener has to re-`apply()`.
+- **`preserveAspectRatio="none"` distorts SVG text and markers**, not just
+  the path — labels stretch and dots become ellipses. The weather hourly
+  sparkline that used to warrant this note is gone (see #8, `renderHourly`
+  replaced it with a plain list), but `app.js`'s `miniSpark()` deliberately
+  uses `preserveAspectRatio="none"` anyway: it draws a bare path with no
+  text/marker children, so there's nothing for the distortion to hit, and
+  stretching it to exactly fill a fixed small box is the point for a
+  compact inline trend line. Any *new* SVG with text or markers should
+  default to measuring its real pixel box and setting `viewBox` from that
+  instead (1 unit == 1 px), same as the removed sparkline did, re-triggered
+  from the `resize` listener in `apply()`.
 - **The vendored Tailwind v4 browser build only emits an `@theme` token onto
   `:root` when its scanner sees the token's name inside an HTML class
   attribute** — a plain utility class (`text-warm`), or the bare `var(...)`
@@ -195,3 +207,7 @@ any other script can add panels without touching the server.
   `[data-layout]`, so both monitors render the same three-column grid. Looks
   right on both; just not differentiated. Likely next step is having the
   1440x900 laptop drop a column rather than shrinking the same grid.
+- `display.safe_area_top`/`safe_area_bottom` (added for #6) default to 48px
+  each, a guess at typical COSMIC top/bottom panel height -- not visually
+  confirmed against this machine's actual panels. Tune in `config.json` if
+  it's off; no code change needed.

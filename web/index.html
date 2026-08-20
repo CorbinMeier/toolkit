@@ -203,24 +203,25 @@
              pt-[1.6vmin] border-t border-[var(--color-hairline)]"></div>
       </div>
 
-      <div class="panel px-[2.2vmin] py-[2vmin] flex-1 min-h-0 flex flex-col">
+      <!-- Compact hourly strip -- no chart. A "Next 24 hours" sparkline
+           used to live here; it read as vague and cost way more vertical
+           space than the info was worth. This sizes to content, not the
+           column, so it's fine that space is left over below it. -->
+      <div class="panel px-[2.2vmin] py-[1.4vmin] flex flex-col">
         <h2 class="sec-head text-faint uppercase tracking-[0.3em]
-            text-[clamp(.55rem,1.15vmin,.8rem)] mb-[1vmin]">Next 24 hours</h2>
-        <!-- viewBox is set from the measured pixel size at render time, so
-             1 unit == 1 px. Using preserveAspectRatio="none" here instead
-             would stretch the labels and squash the markers into ellipses. -->
-        <div class="flex-1 min-h-0"><svg id="spark" class="w-full h-full"></svg></div>
-        <div id="hourlabels" class="flex justify-between text-faint num
-             text-[clamp(.5rem,1.1vmin,.8rem)] mt-[0.8vmin]"></div>
+            text-[clamp(.55rem,1.15vmin,.8rem)] mb-[0.8vmin]">Hourly</h2>
+        <div id="hourly" class="flex justify-between gap-[0.4vmin]"></div>
       </div>
     </section>
 
     <!-- ============ RIGHT: forecast + sun/moon ============ -->
     <section class="accent-crimson flex flex-col gap-[1.8vmin] min-h-0">
-      <div class="panel px-[2.2vmin] py-[2vmin] flex-1 min-h-0 flex flex-col">
+      <!-- Majorly compacted: rows pack at the top, they don't stretch to
+           fill the column -- leftover space below is fine, unfilled. -->
+      <div class="panel px-[2.2vmin] py-[1.4vmin] flex flex-col">
         <h2 class="sec-head text-faint uppercase tracking-[0.3em]
-            text-[clamp(.55rem,1.15vmin,.8rem)] mb-[1.2vmin]">Week</h2>
-        <div id="week" class="flex flex-col justify-around flex-1 min-h-0"></div>
+            text-[clamp(.55rem,1.15vmin,.8rem)] mb-[0.6vmin]">Week</h2>
+        <div id="week" class="flex flex-col"></div>
       </div>
 
       <div class="panel px-[2.2vmin] py-[2vmin]">
