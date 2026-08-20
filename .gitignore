@@ -3,3 +3,4 @@ data/extra.json
 __pycache__/
 .venv/
 node_modules/
+.impeccable/hook.cache.json

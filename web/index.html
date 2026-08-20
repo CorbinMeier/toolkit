@@ -11,19 +11,55 @@
     --color-ink:      oklch(0.96 0.01 250);
     --color-muted:    oklch(0.70 0.03 255);
     --color-faint:    oklch(0.52 0.03 258);
-    --color-accent:   oklch(0.80 0.12 195);
-    --color-warm:     oklch(0.80 0.13  65);
-    --color-panel:    oklch(0.22 0.02 260 / 0.42);
+    --color-panel:    oklch(0.19 0.015 260 / 0.88);
     --color-hairline: oklch(0.70 0.04 260 / 0.14);
+    /* Cyberpunk UIKit accent triad (ui/cyberpunk/CyberpunkUIKit) -- exact
+       hex values from the template so the two stay in visual sync. */
+    --color-accent:        #2be4ea;  /* cyan   */
+    --color-warm:          #fed33f;  /* amber  */
+    --color-crimson:       #e8615a;
+    --color-cyan-border:   #1f6a6e;
+    --color-amber-border:  #8a6a12;
+    --color-crimson-border:#9c3230;
+    --color-online:        #2bfea0;
   }
 </style>
 <style>
+  /* Tailwind's browser JIT only emits an @theme token onto :root when its
+     scanner sees the token's name inside an HTML class attribute (a plain
+     utility like `text-warm`, or the var() spelled out in `[...]`
+     arbitrary-value syntax) -- never for a var() reference buried in this
+     <style> tag or in app.js. --color-warm used to be emitted only because
+     the old offline banner happened to carry `text-warm`; removing that
+     class (recoloring the banner crimson, below) silently broke every
+     other var(--color-warm) reference app-wide -- sun icon, hot-threshold
+     bars, sparkline gradient, sun arc. Restating the palette here, as plain
+     CSS the browser parses unconditionally, decouples every var() consumer
+     (this stylesheet and app.js) from Tailwind's scanner entirely. @theme
+     keeps its own copy so text-accent/text-crimson/bg-crimson etc. still
+     generate -- the two are intentionally redundant. */
+  :root{
+    --color-ink:      oklch(0.96 0.01 250);
+    --color-muted:    oklch(0.70 0.03 255);
+    --color-faint:    oklch(0.52 0.03 258);
+    --color-panel:    oklch(0.19 0.015 260 / 0.88);
+    --color-hairline: oklch(0.70 0.04 260 / 0.14);
+    --color-accent:        #2be4ea;
+    --color-warm:          #fed33f;
+    --color-crimson:       #e8615a;
+    --color-cyan-border:   #1f6a6e;
+    --color-amber-border:  #8a6a12;
+    --color-crimson-border:#9c3230;
+    --color-online:        #2bfea0;
+  }
+
   html,body{height:100%;margin:0;overflow:hidden}
   body{
     color:var(--color-ink);
     font-family:"Fira Sans",system-ui,sans-serif;
     -webkit-font-smoothing:antialiased;
     background:
+      radial-gradient(55% 48% at 30% 8%,  rgb(70 22 22 / .45), transparent 72%),
       radial-gradient(120% 90% at 12% 0%,  oklch(0.32 0.09 265 / .55), transparent 62%),
       radial-gradient(100% 80% at 92% 8%,  oklch(0.34 0.10 200 / .40), transparent 58%),
       radial-gradient(90%  90% at 60% 108%,oklch(0.30 0.08 300 / .38), transparent 60%),
@@ -34,18 +70,60 @@
   body.transparent .panel{backdrop-filter:blur(18px) saturate(1.3)}
   body.transparent .glow{display:none}
 
+  /* Cyberpunk UIKit accent triad -- any element opts in with one of these
+     classes; .panel/.sec-head/.glowtext/.dot read the accent back via the
+     --panel-accent/--panel-border custom props they set. Mixed accents can
+     coexist on one page, same as the template's per-component `accent` prop. */
+  .accent-cyan   {--panel-accent:var(--color-accent);  --panel-border:var(--color-cyan-border)}
+  .accent-amber  {--panel-accent:var(--color-warm);    --panel-border:var(--color-amber-border)}
+  .accent-crimson{--panel-accent:var(--color-crimson); --panel-border:var(--color-crimson-border)}
+
+  /* Notched cut-corner card, ported from CyberpunkUIKit's CyberpunkPad --
+     solid dark fill, 2px accent-colored border, diagonal corner cut with a
+     glowing tab in the notch. */
   .panel{
+    position:relative;
     background:var(--color-panel);
-    border:1px solid var(--color-hairline);
-    border-radius:1.15rem;
-    backdrop-filter:blur(9px);
+    border:2px solid var(--panel-border, var(--color-hairline));
+    clip-path:polygon(0 0,100% 0,100% calc(100% - 1.15rem),calc(100% - 1.15rem) 100%,0 100%);
+    backdrop-filter:blur(6px);
   }
+  .panel::after{
+    content:"";
+    position:absolute;right:-2px;bottom:0.62rem;
+    width:1.55rem;height:3px;
+    background:var(--panel-accent, var(--color-accent));
+    box-shadow:0 0 6px var(--panel-accent, var(--color-accent));
+    transform:rotate(-45deg);transform-origin:right center;
+    pointer-events:none;
+  }
+  body.transparent .panel::after{box-shadow:none}
+
+  /* Section headers: glowing accent underline, ported from
+     CyberpunkSectionHeader's after: rule. */
+  .sec-head{position:relative;padding-bottom:0.65vmin}
+  .sec-head::after{
+    content:"";position:absolute;left:0;bottom:0;width:100%;height:1px;
+    background:var(--panel-accent, var(--color-accent));
+    box-shadow:0 0 6px var(--panel-accent, var(--color-accent));
+  }
+
+  /* Glow text, ported from CyberpunkGlowText -- reserved for the two
+     headline readouts (clock, temperature) so it reads as emphasis, not
+     noise. */
+  .glowtext{text-shadow:-6px -4px 26px var(--panel-accent, var(--color-accent))}
+
+  /* Status dot, ported from CyberpunkStatusDot. */
+  .dot{display:inline-block;width:0.55em;height:0.55em;border-radius:50%;
+       vertical-align:middle;margin-right:0.6em;flex:none}
+
   .num{font-variant-numeric:tabular-nums;font-feature-settings:"tnum"}
 
-  /* slow drifting light so a static desktop still feels alive */
+  /* slow drifting light so a static desktop still feels alive --
+     crimson/cyan, matching CyberpunkEnvironment's reddish ambient glow */
   .glow{position:fixed;border-radius:50%;filter:blur(110px);pointer-events:none;z-index:-1}
   .g1{width:44vw;height:44vw;top:-16vw;left:-8vw;
-      background:oklch(0.55 0.17 255/.30);animation:d1 42s ease-in-out infinite alternate}
+      background:oklch(0.55 0.17 25/.30);animation:d1 42s ease-in-out infinite alternate}
   .g2{width:38vw;height:38vw;bottom:-16vw;right:-6vw;
       background:oklch(0.58 0.15 195/.26);animation:d2 55s ease-in-out infinite alternate}
   @keyframes d1{to{transform:translate(9vw,7vw) scale(1.18)}}
@@ -63,21 +141,21 @@
 <body class="h-full">
   <div class="glow g1"></div><div class="glow g2"></div>
 
-  <div id="boot"><div class="text-faint text-2xl tracking-widest">STARTING…</div></div>
+  <div id="boot"><div class="glowtext text-faint text-2xl tracking-widest">STARTING…</div></div>
 
   <!-- offline / server-down banner -->
   <div id="offline" class="hidden fixed top-4 left-1/2 -translate-x-1/2 z-40
-       panel px-5 py-2 text-warm text-sm tracking-wide">
-    data feed unreachable — showing last known values
+       accent-crimson panel px-5 py-2 text-crimson text-sm tracking-wide">
+    <span class="dot bg-crimson"></span>data feed unreachable — showing last known values
   </div>
 
   <main id="root" class="h-full w-full p-[2.2vmin] gap-[1.8vmin]
         grid grid-cols-1 lg:grid-cols-[1.05fr_1.35fr_1fr] grid-rows-1">
 
     <!-- ============ LEFT: clock + system ============ -->
-    <section class="flex flex-col gap-[1.8vmin] min-h-0">
+    <section class="accent-cyan flex flex-col gap-[1.8vmin] min-h-0">
       <div class="panel px-[2.4vmin] py-[2.2vmin] flex flex-col justify-center">
-        <div id="clock" class="num font-extralight leading-[0.86] tracking-[-0.045em]
+        <div id="clock" class="glowtext num font-extralight leading-[0.86] tracking-[-0.045em]
              text-[clamp(3.5rem,11.5vmin,10rem)]">--:--</div>
         <div id="seconds" class="num text-accent text-[clamp(.8rem,1.9vmin,1.5rem)]
              tracking-[0.18em] mt-[0.9vmin]">--</div>
@@ -88,7 +166,7 @@
       </div>
 
       <div class="panel px-[2.2vmin] py-[2vmin] flex-1 min-h-0 flex flex-col gap-[1.4vmin]">
-        <h2 class="text-faint uppercase tracking-[0.3em] text-[clamp(.55rem,1.15vmin,.8rem)]">
+        <h2 class="sec-head text-faint uppercase tracking-[0.3em] text-[clamp(.55rem,1.15vmin,.8rem)]">
           System</h2>
         <div id="sys" class="flex flex-col gap-[1.15vmin] flex-1 justify-evenly"></div>
         <div id="sysfoot" class="text-faint num tracking-wide
@@ -98,14 +176,14 @@
     </section>
 
     <!-- ============ CENTER: weather ============ -->
-    <section class="flex flex-col gap-[1.8vmin] min-h-0">
+    <section class="accent-amber flex flex-col gap-[1.8vmin] min-h-0">
       <div class="panel px-[2.6vmin] py-[2.2vmin] flex flex-col justify-center">
         <div class="flex items-center gap-[2.4vmin]">
           <div id="wicon" class="shrink-0 w-[clamp(3.5rem,11vmin,9rem)]
                h-[clamp(3.5rem,11vmin,9rem)]"></div>
           <div class="min-w-0">
             <div class="flex items-start">
-              <span id="temp" class="num font-thin leading-[0.85] tracking-[-0.04em]
+              <span id="temp" class="glowtext num font-thin leading-[0.85] tracking-[-0.04em]
                     text-[clamp(3rem,11vmin,9.5rem)]">--</span>
               <span id="tempunit" class="text-muted font-light mt-[1.2vmin]
                     text-[clamp(1rem,3vmin,2.4rem)]">°</span>
@@ -121,7 +199,7 @@
       </div>
 
       <div class="panel px-[2.2vmin] py-[2vmin] flex-1 min-h-0 flex flex-col">
-        <h2 class="text-faint uppercase tracking-[0.3em]
+        <h2 class="sec-head text-faint uppercase tracking-[0.3em]
             text-[clamp(.55rem,1.15vmin,.8rem)] mb-[1vmin]">Next 24 hours</h2>
         <!-- viewBox is set from the measured pixel size at render time, so
              1 unit == 1 px. Using preserveAspectRatio="none" here instead
@@ -133,15 +211,15 @@
     </section>
 
     <!-- ============ RIGHT: forecast + sun/moon ============ -->
-    <section class="flex flex-col gap-[1.8vmin] min-h-0">
+    <section class="accent-crimson flex flex-col gap-[1.8vmin] min-h-0">
       <div class="panel px-[2.2vmin] py-[2vmin] flex-1 min-h-0 flex flex-col">
-        <h2 class="text-faint uppercase tracking-[0.3em]
+        <h2 class="sec-head text-faint uppercase tracking-[0.3em]
             text-[clamp(.55rem,1.15vmin,.8rem)] mb-[1.2vmin]">Week</h2>
         <div id="week" class="flex flex-col justify-around flex-1 min-h-0"></div>
       </div>
 
       <div class="panel px-[2.2vmin] py-[2vmin]">
-        <h2 class="text-faint uppercase tracking-[0.3em]
+        <h2 class="sec-head text-faint uppercase tracking-[0.3em]
             text-[clamp(.55rem,1.15vmin,.8rem)] mb-[1vmin]">Sun &amp; Moon</h2>
         <svg id="sunarc" viewBox="0 0 300 96" class="w-full"></svg>
         <div class="flex items-center justify-between mt-[1.2vmin]">

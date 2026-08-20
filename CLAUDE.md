@@ -135,6 +135,23 @@ render loop.
   path — labels stretch and dots become ellipses. The sparkline sets its
   `viewBox` from the measured pixel box so 1 unit == 1 px, which is why a
   `resize` listener has to re-`apply()`.
+- **The vendored Tailwind v4 browser build only emits an `@theme` token onto
+  `:root` when its scanner sees the token's name inside an HTML class
+  attribute** — a plain utility class (`text-warm`), or the bare `var(...)`
+  name spelled out inside `[...]` arbitrary-value syntax (`border-[var(--x)]`
+  counts; a `var()` reference buried in a separate `<style>` tag or in
+  `app.js` does not, since the scanner never parses those). `--color-warm`
+  was for a long time emitted only as a side effect of the offline banner
+  carrying `text-warm`; recoloring that banner (2026-08-20, cyberpunk
+  restyle) silently broke every *other* `var(--color-warm)` consumer
+  app-wide (sun icon, hot-threshold bars, sparkline gradient, sun arc) until
+  caught by a live `getComputedStyle` check. Fix/pattern: any color token
+  consumed only via plain `var()` — in this stylesheet or in `app.js` — must
+  also be restated in the plain (non-`text/tailwindcss`) `<style>` block's
+  own `:root{}` rule, which the browser parses unconditionally; `@theme`
+  keeps its own copy purely so the Tailwind utility classes that do exist in
+  the markup keep compiling. Both blocks in `web/index.html` now carry the
+  full palette for exactly this reason — don't de-duplicate them.
 - `psutil.sensors_battery()` returns `power_plugged`, not `plugged_in`.
 - `pkill -f dashd-serve` **kills the shell running it**, because the pattern
   matches that shell's own command line. Resolve PIDs with `pgrep` and skip
