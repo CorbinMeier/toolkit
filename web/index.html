@@ -51,6 +51,12 @@
     --color-amber-border:  #8a6a12;
     --color-crimson-border:#9c3230;
     --color-online:        #2bfea0;
+    /* Safe-area insets so panels don't render under the user's own
+       top/bottom bars. Real values come from config.json's
+       display.safe_area_* (applied in app.js's apply()); these are just
+       the pre-first-paint fallback. */
+    --safe-top:    0px;
+    --safe-bottom: 0px;
   }
 
   html,body{height:100%;margin:0;overflow:hidden}
@@ -149,18 +155,15 @@
     <span class="dot bg-crimson"></span>data feed unreachable — showing last known values
   </div>
 
-  <main id="root" class="h-full w-full p-[2.2vmin] gap-[1.8vmin]
+  <main id="root" class="h-full w-full px-[2.2vmin] gap-[1.8vmin]
+        pt-[calc(2.2vmin+var(--safe-top))] pb-[calc(2.2vmin+var(--safe-bottom))]
         grid grid-cols-1 lg:grid-cols-[1.05fr_1.35fr_1fr] grid-rows-1">
 
     <!-- ============ LEFT: clock + system ============ -->
     <section class="accent-cyan flex flex-col gap-[1.8vmin] min-h-0">
-      <div class="panel px-[2.4vmin] py-[2.2vmin] flex flex-col justify-center">
-        <div id="clock" class="glowtext num font-extralight leading-[0.86] tracking-[-0.045em]
-             text-[clamp(3.5rem,11.5vmin,10rem)]">--:--</div>
-        <div id="seconds" class="num text-accent text-[clamp(.8rem,1.9vmin,1.5rem)]
-             tracking-[0.18em] mt-[0.9vmin]">--</div>
-        <div id="date" class="text-muted uppercase tracking-[0.3em]
-             text-[clamp(.65rem,1.55vmin,1.1rem)] mt-[1.1vmin]">—</div>
+      <div class="panel px-[2.4vmin] py-[1.6vmin] flex flex-col justify-center">
+        <div id="date" class="glowtext text-ink uppercase tracking-[0.3em]
+             text-[clamp(.85rem,2vmin,1.4rem)]">—</div>
         <div id="loc" class="text-faint tracking-[0.22em]
              text-[clamp(.6rem,1.3vmin,.95rem)] mt-[0.5vmin]">—</div>
       </div>

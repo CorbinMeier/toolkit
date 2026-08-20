@@ -18,7 +18,9 @@
   "display": {
     "layer": "BOTTOM",
     "transparent": false,
-    "theme": "midnight"
+    "theme": "midnight",
+    "safe_area_top": 48,
+    "safe_area_bottom": 48
   },
   "refresh": {
     "weather_seconds": 600,

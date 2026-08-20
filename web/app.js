@@ -19,7 +19,6 @@ const OUTPUT = params.get('output') || 'default';
 const STATIC = params.get('static') === '1';
 
 let state = null;
-let clock24 = true;
 let failures = 0;
 
 /* ------------------------------------------------------------------ icons */
@@ -97,7 +96,6 @@ function weatherIcon(kind) {
 }
 
 /* ----------------------------------------------------------------- format */
-const pad = (n) => String(n).padStart(2, '0');
 const bytes = (b) => {
   const u = ['B', 'K', 'M', 'G', 'T']; let i = 0; b = b || 0;
   while (b >= 1024 && i < u.length - 1) { b /= 1024; i++; }
@@ -114,14 +112,10 @@ const POINTS = ['N', 'NNE', 'NE', 'ENE', 'E', 'ESE', 'SE', 'SSE',
 const compass = (deg) => POINTS[Math.round(deg / 22.5) % 16];
 
 /* ------------------------------------------------------------------ clock */
+// No digital time readout -- the user's system already shows it. Date stays,
+// since it's information the system clock doesn't surface at a glance.
 function tickClock() {
-  const n = new Date();
-  let h = n.getHours();
-  let suffix = '';
-  if (!clock24) { suffix = h >= 12 ? ' PM' : ' AM'; h = h % 12 || 12; }
-  $('clock').textContent = `${clock24 ? pad(h) : h}:${pad(n.getMinutes())}${suffix}`;
-  $('seconds').textContent = pad(n.getSeconds());
-  $('date').textContent = n.toLocaleDateString(undefined,
+  $('date').textContent = new Date().toLocaleDateString(undefined,
     { weekday: 'long', month: 'long', day: 'numeric' });
 }
 
@@ -391,13 +385,15 @@ function renderSunMoon(w) {
 /* ------------------------------------------------------------------ poll */
 function apply(s) {
   state = s;
-  clock24 = s.config.units.clock24;
   $('loc').textContent = s.config.location;
 
   const disp = s.config.display || {};
   const outCfg = (s.config.outputs || {})[OUTPUT] || (s.config.outputs || {}).default || {};
   document.body.classList.toggle('transparent', !!disp.transparent);
   document.documentElement.dataset.layout = outCfg.layout || 'auto';
+  const root = document.documentElement.style;
+  root.setProperty('--safe-top', `${disp.safe_area_top || 0}px`);
+  root.setProperty('--safe-bottom', `${disp.safe_area_bottom || 0}px`);
 
   tickClock();
   renderWeather(s.weather);

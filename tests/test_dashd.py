@@ -169,6 +169,8 @@ class TestConfig(unittest.TestCase):
         self.assertIn(cfg["units"]["temperature"], ("fahrenheit", "celsius"))
         self.assertIsInstance(cfg["units"]["clock24"], bool)
         self.assertIn(cfg["display"]["layer"], ("BACKGROUND", "BOTTOM", "TOP"))
+        self.assertGreaterEqual(cfg["display"]["safe_area_top"], 0)
+        self.assertGreaterEqual(cfg["display"]["safe_area_bottom"], 0)
 
     def test_layer_is_not_background(self):
         """BACKGROUND renders but is invisible under cosmic-bg. See CLAUDE.md."""

@@ -131,9 +131,8 @@ def main() -> int:
             m = re.search(rf'id="{el_id}"[^>]*>([^<]*)', dom, re.S)
             return (m.group(1) if m else "").strip()
 
-        check("clock rendered", re.fullmatch(r"\d{1,2}:\d{2}( [AP]M)?",
-                                             text_of("clock")) is not None,
-              repr(text_of("clock")))
+        # No digital clock -- the user's system already shows the time (see
+        # ISSUES.md #5). Date is the remaining proof this box rendered.
         check("date rendered", len(text_of("date")) > 5, repr(text_of("date")))
         check("location rendered",
               text_of("loc") == CFG["location"]["name"], repr(text_of("loc")))
