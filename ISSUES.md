@@ -2,6 +2,81 @@
 
 Newest first. No GitHub remote on this project, so this file is the tracker.
 
+## 11. System panel: table layout, icons, lsblk-sourced disk/partition list, battery CHRG indicator
+
+Status: closed
+Source: user request this session
+Date: 2026-08-20
+
+Further compress the System panel -- it's still too wide, and the bars are
+longer than they need to be. Show CPU and Memory as a single line each:
+`CPU: %00 [HISTOGRAPH]` / `MEM: %00 [HISTOGRAPH]`, no separate full-width
+progress bar. Disk should enumerate everything lsblk reports (not just
+psutil's mounted-partition view) and show each partition's utilization.
+Battery becomes `BAT: %00` plus a `CHRG` status-indicator badge: deep red
+when unplugged, glowing red only while actually charging (not just
+plugged-in-and-full). Lean on icons throughout (CPU icon before the CPU
+row, etc.), laid out in an actual `<table>` so every row's columns line up.
+
+System now renders as `<table class="sys-table">`: hand-rolled cpu/mem/
+disk/battery icon SVGs, one `<tr>` per metric via a `sysRow()` builder so
+icon/label/value/tail columns line up via `<colgroup>`. CPU and Memory
+dropped their full-width progress bar for a single line (`42%` + small
+temp/freq sub-line) with `miniSpark()` as the "[HISTOGRAPH]" -- the same
+inline sparkline function from #7, reused rather than duplicated. Per-core
+strip and the old vertical disk-bar cluster were both dropped in favor of
+the table. Disk rows now come from a new `disk_tree()` in dashd-serve that
+shells out to `lsblk -J -b -o NAME,TYPE,SIZE,FSTYPE,FSUSE%,MOUNTPOINT` and
+walks the block-device tree for every partition with a mountpoint or a
+real FSUSE% (falls back to the old psutil-only view if lsblk is missing).
+Battery gets a real `charging` flag from a new `battery_charging()`, which
+reads `/sys/class/power_supply/BAT*/status` ("Charging" vs "Full"/
+"Discharging") since `power_plugged` alone can't distinguish charging from
+plugged-in-and-full; the CHRG badge (`.chrg-badge`/`.is-charging` CSS)
+glows only in the former case.
+
+Started at: 2026-08-20T16:29:15-07:00
+Ended at: 2026-08-20T16:34:50-07:00
+Time elapsed: 5m 35s
+
+## 10. Consolidate weather/forecast/sun-moon into one panel, right half of screen
+
+Status: closed
+Source: user request this session
+Date: 2026-08-20
+
+Forecast becomes its own single panel (current conditions, hourly, week,
+then sun/moon, stacked as sub-sections of one panel) rather than three
+separate panel cards. That panel occupies the right half of the screen;
+System occupies the left half.
+
+Grid dropped from three unequal columns to `lg:grid-cols-2` (exact halves).
+Right half is one `.panel` with hairline-divided sub-sections (current
+conditions, Hourly, Week, Sun & Moon) under a single amber accent, instead
+of three separately-notched panel cards.
+
+Started at: 2026-08-20T16:29:15-07:00
+Ended at: 2026-08-20T16:34:50-07:00
+Time elapsed: 5m 35s
+
+## 9. Remove the date/location readout
+
+Status: closed
+Source: user request this session
+Date: 2026-08-20
+
+The top-left date + city panel is redundant -- the user already knows
+where they are. Remove it entirely (date text, location text, and the
+panel that held them).
+
+Removed `#date`/`#loc` and the panel that held them, plus `tickClock()`
+and its 250ms interval and the `$('loc')` assignment in `apply()` -- there
+was nothing else driving those elements once the readout was gone.
+
+Started at: 2026-08-20T16:29:15-07:00
+Ended at: 2026-08-20T16:34:50-07:00
+Time elapsed: 5m 35s
+
 ## 8. Redesign weather forecast panels — remove hourly graph, compact week
 
 Status: closed
