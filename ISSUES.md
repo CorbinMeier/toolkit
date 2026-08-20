@@ -2,6 +2,41 @@
 
 Newest first. No GitHub remote on this project, so this file is the tracker.
 
+## 4. Restyle dashboard panels with Cyberpunk UIKit visual language
+
+Status: closed
+Source: user request this session
+Date: 2026-08-20
+
+Port the visual language of the `ui/cyberpunk/CyberpunkUIKit` template
+component (crimson/cyan/amber accents, notched cut-corner cards, glowing
+accent underlines/text, status dots) into `web/index.html`'s CSS so the
+dashboard panels read as cyberpunk-themed. CSS-only: app.js already sources
+its colors from CSS custom properties, so no JS changes are needed. No
+Google Fonts (Rajdhani/VT323) — this project vendors everything and makes no
+network calls at runtime, so the kit's font fallback (font-sans/font-mono)
+is kept deliberately.
+
+One column per accent (cyan=clock/system, amber=weather, crimson=forecast/
+sun-moon), notched `.panel` cards with a glowing corner tab, glowing
+section-header underlines, glow text on the clock/temp readouts, and a
+status dot on the offline banner. Verified with an isolated worktree-local
+`dashd-serve` instance (temp port, reverted before commit) plus live
+`getComputedStyle` checks in a real browser tab, not just a screenshot.
+
+Surfaced and fixed a latent bug along the way: the vendored Tailwind v4
+browser JIT only emits an `@theme` token onto `:root` when its scanner sees
+the token's name in an HTML class attribute — never for a bare `var()`
+reference inside a separate `<style>` tag or in `app.js`. `--color-warm` had
+been emitted only as a side effect of the offline banner carrying
+`text-warm`; recoloring that banner (this change) silently broke every other
+`var(--color-warm)` consumer app-wide until caught live. Documented in
+CLAUDE.md's gotchas.
+
+Started at: 2026-08-20T15:44:07-07:00
+Ended at: 2026-08-20T15:55:56-07:00
+Time elapsed: 11m 49s
+
 ## 3. Per-output `layout` config is plumbed but has no effect
 
 Status: open
