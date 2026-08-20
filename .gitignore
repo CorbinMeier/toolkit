@@ -1,0 +1,5 @@
+data/weather.json
+data/extra.json
+__pycache__/
+.venv/
+node_modules/

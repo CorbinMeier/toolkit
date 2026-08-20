@@ -1,0 +1,334 @@
+#!/usr/bin/env python3
+"""Localhost data + static server for the desktop dashboard.
+
+Serves web/ as static files and a merged /api/state document:
+
+    weather   Open-Meteo, cached to data/weather.json (refetched on interval)
+    sun/moon  sunrise/sunset from Open-Meteo, moon phase computed locally
+    sys       live CPU/RAM/disk/net/battery via psutil
+    extra     verbatim passthrough of data/extra.json, so cron jobs or other
+              scripts can inject arbitrary panels without touching this file
+
+Binds loopback only. No auth by design -- do not expose this port.
+"""
+from __future__ import annotations
+
+import json
+import math
+import os
+import socket
+import sys
+import threading
+import time
+import urllib.error
+import urllib.parse
+import urllib.request
+from datetime import datetime, UTC
+from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
+from pathlib import Path
+
+import psutil
+
+ROOT = Path(__file__).resolve().parent.parent
+WEB = ROOT / "web"
+DATA = ROOT / "data"
+CONFIG = ROOT / "config.json"
+
+# https://open-meteo.com/en/docs -- WMO weather interpretation codes
+WMO = {
+    0: ("Clear", "clear"), 1: ("Mainly clear", "clear"),
+    2: ("Partly cloudy", "partly"), 3: ("Overcast", "cloudy"),
+    45: ("Fog", "fog"), 48: ("Rime fog", "fog"),
+    51: ("Light drizzle", "drizzle"), 53: ("Drizzle", "drizzle"),
+    55: ("Dense drizzle", "drizzle"),
+    56: ("Freezing drizzle", "sleet"), 57: ("Freezing drizzle", "sleet"),
+    61: ("Light rain", "rain"), 63: ("Rain", "rain"), 65: ("Heavy rain", "rain"),
+    66: ("Freezing rain", "sleet"), 67: ("Freezing rain", "sleet"),
+    71: ("Light snow", "snow"), 73: ("Snow", "snow"), 75: ("Heavy snow", "snow"),
+    77: ("Snow grains", "snow"),
+    80: ("Light showers", "rain"), 81: ("Showers", "rain"),
+    82: ("Violent showers", "rain"),
+    85: ("Snow showers", "snow"), 86: ("Snow showers", "snow"),
+    95: ("Thunderstorm", "storm"),
+    96: ("Thunderstorm, hail", "storm"), 99: ("Thunderstorm, hail", "storm"),
+}
+
+_lock = threading.Lock()
+_net_prev: tuple[float, int, int] | None = None
+
+
+def load_config() -> dict:
+    with CONFIG.open() as fh:
+        return json.load(fh)
+
+
+# ---------------------------------------------------------------- moon phase
+
+def moon_phase(when: datetime) -> dict:
+    """Age-of-moon from a known new moon, mean synodic month.
+
+    Accurate to well under a day, which is all a wallpaper needs.
+    """
+    synodic = 29.530588853
+    known_new = datetime(2000, 1, 6, 18, 14, tzinfo=UTC)
+    days = (when - known_new).total_seconds() / 86400.0
+    age = days % synodic
+    frac = age / synodic
+    illum = (1 - math.cos(2 * math.pi * frac)) / 2
+    names = [
+        (1.0, "New Moon"), (6.4, "Waxing Crescent"), (8.4, "First Quarter"),
+        (13.8, "Waxing Gibbous"), (15.8, "Full Moon"), (21.1, "Waning Gibbous"),
+        (23.1, "Last Quarter"), (28.5, "Waning Crescent"), (30.0, "New Moon"),
+    ]
+    name = next(n for limit, n in names if age < limit)
+    return {"age_days": round(age, 2), "phase": round(frac, 4),
+            "illumination": round(illum, 4), "name": name}
+
+
+# ------------------------------------------------------------------- weather
+
+def fetch_weather(cfg: dict) -> dict:
+    loc, units = cfg["location"], cfg["units"]
+    q = urllib.parse.urlencode({
+        "latitude": loc["latitude"], "longitude": loc["longitude"],
+        "timezone": loc["timezone"],
+        "temperature_unit": units["temperature"],
+        "wind_speed_unit": units["wind"],
+        "precipitation_unit": units["precipitation"],
+        "current": ",".join([
+            "temperature_2m", "apparent_temperature", "relative_humidity_2m",
+            "is_day", "weather_code", "wind_speed_10m", "wind_direction_10m",
+            "pressure_msl", "cloud_cover", "precipitation"]),
+        "hourly": "temperature_2m,weather_code,precipitation_probability",
+        "daily": ",".join([
+            "weather_code", "temperature_2m_max", "temperature_2m_min",
+            "sunrise", "sunset", "uv_index_max",
+            "precipitation_probability_max"]),
+        "forecast_days": 7,
+    })
+    url = f"https://api.open-meteo.com/v1/forecast?{q}"
+    with urllib.request.urlopen(url, timeout=20) as resp:
+        raw = json.load(resp)
+
+    cur, daily, hourly = raw["current"], raw["daily"], raw["hourly"]
+    desc, icon = WMO.get(cur["weather_code"], ("Unknown", "clear"))
+    if icon in ("clear", "partly") and not cur["is_day"]:
+        icon += "-night"
+
+    now = datetime.now(UTC)
+    # hourly arrays are local-time indexed; find the next 24h from now
+    times = hourly["time"]
+    local_now = datetime.now().strftime("%Y-%m-%dT%H:00")
+    start = next((i for i, t in enumerate(times) if t >= local_now), 0)
+    sl = slice(start, start + 24)
+
+    return {
+        "location": loc["name"],
+        "observed": raw["current"]["time"],
+        "temp": round(cur["temperature_2m"]),
+        "apparent": round(cur["apparent_temperature"]),
+        "humidity": cur["relative_humidity_2m"],
+        "code": cur["weather_code"], "desc": desc, "icon": icon,
+        "is_day": bool(cur["is_day"]),
+        "wind": round(cur["wind_speed_10m"]),
+        "wind_dir": cur["wind_direction_10m"],
+        "pressure": round(cur["pressure_msl"]),
+        "cloud": cur["cloud_cover"],
+        "high": round(daily["temperature_2m_max"][0]),
+        "low": round(daily["temperature_2m_min"][0]),
+        "uv": daily["uv_index_max"][0],
+        "precip_prob": daily["precipitation_probability_max"][0],
+        "sun": {"sunrise": daily["sunrise"][0], "sunset": daily["sunset"][0]},
+        "moon": moon_phase(now),
+        "hourly": [
+            {"time": t, "temp": round(v) if v is not None else None,
+             "code": c, "precip": p}
+            # strict: misaligned arrays would pair one hour's temperature
+            # with another hour's icon. Better to raise and serve the cache.
+            for t, v, c, p in zip(
+                times[sl], hourly["temperature_2m"][sl],
+                hourly["weather_code"][sl],
+                hourly["precipitation_probability"][sl], strict=True)
+        ],
+        "daily": [
+            {"date": d, "hi": round(hi), "lo": round(lo), "code": c,
+             "desc": WMO.get(c, ("Unknown", ""))[0],
+             "icon": WMO.get(c, ("", "clear"))[1], "precip": p}
+            for d, hi, lo, c, p in zip(
+                daily["time"], daily["temperature_2m_max"],
+                daily["temperature_2m_min"], daily["weather_code"],
+                daily["precipitation_probability_max"], strict=True)
+        ],
+        "units": {"temp": "°F" if units["temperature"] == "fahrenheit" else "°C",
+                  "wind": units["wind"]},
+        "fetched_at": time.time(),
+    }
+
+
+def cached_weather(cfg: dict) -> dict:
+    """Return cached weather, refetching past its TTL.
+
+    On failure the stale cache is served with stale=True rather than raising --
+    a dashboard that shows slightly old weather beats one showing an error.
+    """
+    path = DATA / "weather.json"
+    ttl = cfg["refresh"]["weather_seconds"]
+    with _lock:
+        cache = None
+        if path.exists():
+            try:
+                cache = json.loads(path.read_text())
+            except (json.JSONDecodeError, OSError):
+                cache = None
+        age = time.time() - cache["fetched_at"] if cache else 1e9
+        if age < ttl:
+            return {**cache, "stale": False, "age_seconds": round(age)}
+        try:
+            fresh = fetch_weather(cfg)
+            path.write_text(json.dumps(fresh, indent=1))
+            return {**fresh, "stale": False, "age_seconds": 0}
+        except (urllib.error.URLError, OSError, KeyError, ValueError,
+                TimeoutError) as exc:
+            if cache:
+                return {**cache, "stale": True, "age_seconds": round(age),
+                        "error": str(exc)}
+            return {"error": str(exc), "stale": True, "unavailable": True}
+
+
+# ---------------------------------------------------------------- system
+
+def system_stats() -> dict:
+    global _net_prev
+    now = time.time()
+    vm, sw = psutil.virtual_memory(), psutil.swap_memory()
+
+    io = psutil.net_io_counters()
+    up = down = 0.0
+    if _net_prev:
+        dt = max(now - _net_prev[0], 1e-6)
+        down = max(io.bytes_recv - _net_prev[1], 0) / dt
+        up = max(io.bytes_sent - _net_prev[2], 0) / dt
+    _net_prev = (now, io.bytes_recv, io.bytes_sent)
+
+    disks = []
+    for part in psutil.disk_partitions(all=False):
+        if part.fstype in ("squashfs", "overlay", ""):
+            continue
+        try:
+            u = psutil.disk_usage(part.mountpoint)
+        except (PermissionError, OSError):
+            continue
+        disks.append({"mount": part.mountpoint, "pct": u.percent,
+                      "used": u.used, "total": u.total})
+
+    batt = None
+    if (b := psutil.sensors_battery()):
+        batt = {"pct": round(b.percent), "plugged": b.power_plugged,
+                "secs_left": None if b.secsleft in
+                (psutil.POWER_TIME_UNLIMITED, psutil.POWER_TIME_UNKNOWN)
+                else b.secsleft}
+
+    temp = None
+    try:
+        for name in ("k10temp", "coretemp", "acpitz", "zenpower"):
+            if readings := psutil.sensors_temperatures().get(name):
+                temp = round(readings[0].current)
+                break
+    except (AttributeError, OSError):
+        pass
+
+    return {
+        "cpu": psutil.cpu_percent(interval=None),
+        "cpu_cores": psutil.cpu_percent(interval=None, percpu=True),
+        "cpu_freq": round(f.current) if (f := psutil.cpu_freq()) else None,
+        "load": list(os.getloadavg()),
+        "mem": {"pct": vm.percent, "used": vm.used, "total": vm.total},
+        "swap": {"pct": sw.percent, "used": sw.used, "total": sw.total},
+        "disks": sorted(disks, key=lambda d: d["mount"]),
+        "net": {"up": round(up), "down": round(down)},
+        "battery": batt,
+        "temp_c": temp,
+        "uptime": round(now - psutil.boot_time()),
+        "procs": len(psutil.pids()),
+        "host": socket.gethostname(),
+    }
+
+
+def build_state(cfg: dict) -> dict:
+    extra = {}
+    extra_path = DATA / "extra.json"
+    if extra_path.exists():
+        try:
+            extra = json.loads(extra_path.read_text())
+        except (json.JSONDecodeError, OSError) as exc:
+            extra = {"_error": str(exc)}
+    return {
+        "ts": time.time(),
+        "config": {"units": cfg["units"], "display": cfg["display"],
+                   "location": cfg["location"]["name"],
+                   "outputs": cfg.get("outputs", {}),
+                   "poll": cfg["refresh"]["state_poll_seconds"]},
+        "weather": cached_weather(cfg),
+        "sys": system_stats(),
+        "extra": extra,
+    }
+
+
+class Handler(SimpleHTTPRequestHandler):
+    def __init__(self, *a, **kw):
+        super().__init__(*a, directory=str(WEB), **kw)
+
+    def _json(self, payload: dict, code: int = 200) -> None:
+        body = json.dumps(payload).encode()
+        self.send_response(code)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(body)))
+        self.send_header("Cache-Control", "no-store")
+        self.end_headers()
+        self.wfile.write(body)
+
+    def do_GET(self) -> None:  # noqa: N802
+        route = urllib.parse.urlparse(self.path).path
+        if route == "/api/state":
+            try:
+                self._json(build_state(load_config()))
+            except Exception as exc:  # noqa: BLE001 - never kill the server
+                self._json({"error": repr(exc)}, 500)
+            return
+        if route == "/api/health":
+            self._json({"ok": True, "ts": time.time()})
+            return
+        super().do_GET()
+
+    def end_headers(self) -> None:
+        if self.path.endswith((".js", ".html", ".css")):
+            self.send_header("Cache-Control", "no-cache")
+        super().end_headers()
+
+    def log_message(self, fmt, *args):  # quiet; systemd journal does the rest
+        if os.environ.get("DASHD_VERBOSE"):
+            sys.stderr.write(f"{self.address_string()} {fmt % args}\n")
+
+
+def main() -> int:
+    cfg = load_config()
+    DATA.mkdir(exist_ok=True)
+    host, port = cfg["server"]["host"], cfg["server"]["port"]
+    psutil.cpu_percent(interval=None)  # prime the CPU delta
+
+    if "--once" in sys.argv:  # smoke test: print one state document and exit
+        print(json.dumps(build_state(cfg), indent=2))
+        return 0
+
+    srv = ThreadingHTTPServer((host, port), Handler)
+    srv.daemon_threads = True
+    print(f"dashd-serve  http://{host}:{port}  root={WEB}", flush=True)
+    try:
+        srv.serve_forever()
+    except KeyboardInterrupt:
+        print("bye", flush=True)
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

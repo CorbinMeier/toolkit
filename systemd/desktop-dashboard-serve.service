@@ -1,0 +1,19 @@
+[Unit]
+Description=Desktop dashboard data server (loopback)
+Documentation=file:%h/Code/Dashboards/desktop/README.md
+PartOf=graphical-session.target
+After=graphical-session.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/python3 %h/Code/Dashboards/desktop/bin/dashd-serve
+Restart=on-failure
+RestartSec=3
+# Binds 127.0.0.1 only and reads /proc; needs no elevated access.
+PrivateDevices=yes
+ProtectHome=read-only
+ReadWritePaths=%h/Code/Dashboards/desktop/data
+NoNewPrivileges=yes
+
+[Install]
+WantedBy=graphical-session.target

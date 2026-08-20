@@ -1,0 +1,32 @@
+{
+  "location": {
+    "name": "Chico, CA",
+    "latitude": 39.72849,
+    "longitude": -121.83748,
+    "timezone": "America/Los_Angeles"
+  },
+  "units": {
+    "temperature": "fahrenheit",
+    "wind": "mph",
+    "precipitation": "inch",
+    "clock24": true
+  },
+  "server": {
+    "host": "127.0.0.1",
+    "port": 4320
+  },
+  "display": {
+    "layer": "BOTTOM",
+    "transparent": false,
+    "theme": "midnight"
+  },
+  "refresh": {
+    "weather_seconds": 600,
+    "state_poll_seconds": 5
+  },
+  "outputs": {
+    "_comment": "Per-output layout overrides. Key = monitor model or connector as reported by the host (see `dashd-host --list`). 'layout' picks a top-level layout in web/app.js; omit an output to use 'auto'.",
+    "DELL U2913WM": { "layout": "wide", "scale": 1.0 },
+    "default": { "layout": "auto", "scale": 1.0 }
+  }
+}
