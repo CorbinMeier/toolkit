@@ -1,9 +1,11 @@
 /* Desktop dashboard renderer.
  *
- * Clock ticks locally every 250ms (never waits on the network); everything
- * else redraws from /api/state on a poll. Render is a pure function of the
- * last good state, so a failed poll just keeps the previous frame up and
- * raises the offline banner instead of blanking the wallpaper.
+ * Date ticks locally every 250ms (never waits on the network); everything
+ * else redraws from /api/state on a poll, plus a slower, independent poll
+ * of /api/history for the compact trend sparklines. Render is a pure
+ * function of the last good state, so a failed poll just keeps the
+ * previous frame up and raises the offline banner instead of blanking the
+ * wallpaper.
  */
 'use strict';
 
@@ -20,6 +22,10 @@ const STATIC = params.get('static') === '1';
 
 let state = null;
 let failures = 0;
+// Recent cpu_pct/mem_pct trend, from a separate slow poll of /api/history --
+// independent of the 5s state poll since sample resolution there is ~30s.
+// Named `trend`, not `history` -- that's a reserved browser global (Window.history).
+let trend = { cpu_pct: [], mem_pct: [] };
 
 /* ------------------------------------------------------------------ icons */
 /* Hand-rolled so there is zero external asset dependency. */
@@ -120,19 +126,45 @@ function tickClock() {
 }
 
 /* ------------------------------------------------------------ sys panel */
-function bar(label, pct, detail, tone = 'var(--color-accent)') {
+/* Tiny inline trend line -- deliberately preserveAspectRatio="none": unlike
+ * the big weather sparkline (CLAUDE.md), this one has no text or marker
+ * children to distort, just a path, so stretching it to exactly fill a
+ * fixed-size box is what's wanted for a compact inline indicator. */
+function miniSpark(values, tone = 'var(--color-accent)') {
+  const svg = el('svg', { viewBox: '0 0 100 30', preserveAspectRatio: 'none',
+    class: 'w-[clamp(2.8rem,7vmin,4.6rem)] h-[clamp(0.85rem,2vmin,1.15rem)] shrink-0' });
+  if (values.length < 2) return svg;
+  const lo = Math.min(...values), hi = Math.max(...values);
+  const span = Math.max(hi - lo, 1);
+  const x = (i) => (i / (values.length - 1)) * 100;
+  const y = (v) => 28 - ((v - lo) / span) * 26;
+  const line = values.map((v, i) => `${i ? 'L' : 'M'} ${x(i).toFixed(1)} ${y(v).toFixed(1)}`).join(' ');
+  svg.appendChild(el('path', { d: line, fill: 'none', stroke: tone,
+    'stroke-width': 2.5, 'stroke-linecap': 'round', 'stroke-linejoin': 'round',
+    'vector-effect': 'non-scaling-stroke', opacity: '.8' }));
+  return svg;
+}
+
+// points: optional recent-values array (oldest -> newest) for an inline
+// trend sparkline next to the bar -- see history/pollHistory().
+function bar(label, pct, detail, tone = 'var(--color-accent)', points = null) {
   const wrap = document.createElement('div');
   wrap.innerHTML = `
-    <div class="flex justify-between items-baseline mb-[0.45vmin]">
-      <span class="text-muted tracking-[0.16em] uppercase
-            text-[clamp(.52rem,1.1vmin,.78rem)]">${label}</span>
-      <span class="num text-ink/90 text-[clamp(.55rem,1.2vmin,.85rem)]">${detail}</span>
+    <div class="flex justify-between items-baseline mb-[0.2vmin]">
+      <span class="text-muted tracking-[0.14em] uppercase
+            text-[clamp(.46rem,.95vmin,.68rem)]">${label}</span>
+      <span class="num text-ink/90 text-[clamp(.48rem,1.02vmin,.74rem)]">${detail}</span>
     </div>
-    <div class="h-[0.85vmin] min-h-[3px] rounded-full overflow-hidden"
-         style="background:oklch(0.5 0.02 260/.22)">
-      <div style="width:${Math.min(100, pct)}%;background:${tone};height:100%;
-                  border-radius:inherit;transition:width .6s ease"></div>
+    <div class="flex items-center gap-[0.7vmin]">
+      <div class="flex-1 h-[0.55vmin] min-h-[3px] rounded-full overflow-hidden"
+           style="background:oklch(0.5 0.02 260/.22)">
+        <div style="width:${Math.min(100, pct)}%;background:${tone};height:100%;
+                    border-radius:inherit;transition:width .6s ease"></div>
+      </div>
     </div>`;
+  if (points && points.length >= 2) {
+    wrap.querySelector('.flex.items-center').appendChild(miniSpark(points, tone));
+  }
   return wrap;
 }
 
@@ -140,7 +172,7 @@ function bar(label, pct, detail, tone = 'var(--color-accent)') {
  * glance, and distinguishes "one pinned core" from "everything busy". */
 function coreStrip(cores) {
   const wrap = document.createElement('div');
-  wrap.className = 'flex items-end gap-[0.28vmin] h-[3.2vmin] min-h-[12px] mt-[0.3vmin]';
+  wrap.className = 'flex items-end gap-[0.22vmin] h-[1.9vmin] min-h-[9px] mt-[0.2vmin]';
   cores.forEach((p) => {
     const b = document.createElement('div');
     b.className = 'flex-1 rounded-sm';
@@ -153,6 +185,37 @@ function coreStrip(cores) {
   return wrap;
 }
 
+/* Disk usage as a compact vertical-bar cluster (same texture as coreStrip)
+ * instead of one full-width horizontal bar per mount -- the difference from
+ * coreStrip is disks aren't interchangeable, so each bar keeps a short
+ * label + free space underneath rather than being anonymous texture. */
+function diskStrip(disks) {
+  const wrap = document.createElement('div');
+  wrap.className = 'flex flex-col gap-[0.25vmin]';
+  const bars = document.createElement('div');
+  bars.className = 'flex items-end gap-[0.7vmin] h-[3.6vmin] min-h-[18px]';
+  const labels = document.createElement('div');
+  labels.className = 'flex gap-[0.7vmin]';
+  disks.forEach((d) => {
+    const tone = d.pct > 88 ? 'var(--color-warm)' : 'var(--color-accent)';
+    const b = document.createElement('div');
+    b.className = 'flex-1 rounded-sm';
+    b.style.cssText =
+      `height:${Math.max(8, d.pct)}%;background:${tone};` +
+      `opacity:${0.35 + (d.pct / 100) * 0.65};transition:height .5s ease`;
+    bars.appendChild(b);
+
+    const lab = document.createElement('div');
+    lab.className = 'flex-1 min-w-0 text-faint num text-[clamp(.42rem,.85vmin,.58rem)] ' +
+      'leading-tight text-center truncate';
+    const name = d.mount === '/' ? '/' : d.mount.split('/').filter(Boolean).pop();
+    lab.textContent = `${name} ${bytes(d.total - d.used)}`;
+    labels.appendChild(lab);
+  });
+  wrap.append(bars, labels);
+  return wrap;
+}
+
 function renderSys(s) {
   const box = $('sys');
   box.replaceChildren();
@@ -161,20 +224,18 @@ function renderSys(s) {
   box.appendChild(bar('CPU', s.cpu,
     `${s.cpu.toFixed(0)}%${s.temp_c ? ` · ${s.temp_c}°C` : ''}` +
     `${s.cpu_freq ? ` · ${(s.cpu_freq / 1000).toFixed(1)}GHz` : ''}`,
-    hot(s.cpu)));
+    hot(s.cpu), trend.cpu_pct));
   if (s.cpu_cores?.length) box.appendChild(coreStrip(s.cpu_cores));
 
   box.appendChild(bar('Memory', s.mem.pct,
-    `${bytes(s.mem.used)} / ${bytes(s.mem.total)}`, hot(s.mem.pct)));
+    `${bytes(s.mem.used)} / ${bytes(s.mem.total)}`, hot(s.mem.pct), trend.mem_pct));
   if (s.swap.total > 0 && s.swap.pct > 1) box.appendChild(
     bar('Swap', s.swap.pct, `${bytes(s.swap.used)}`, hot(s.swap.pct)));
 
   // Every real mount, not just / -- this box has the room and the extra
   // volumes are the ones that silently fill up.
-  s.disks.filter((d) => !d.mount.startsWith('/boot'))
-    .forEach((d) => box.appendChild(bar(
-      d.mount === '/' ? 'Disk /' : d.mount,
-      d.pct, `${bytes(d.total - d.used)} free`, hot(d.pct))));
+  const disks = s.disks.filter((d) => !d.mount.startsWith('/boot'));
+  if (disks.length) box.appendChild(diskStrip(disks));
 
   if (s.battery) box.appendChild(bar('Battery', s.battery.pct,
     `${s.battery.pct}%${s.battery.plugged ? ' · AC' :
@@ -188,7 +249,7 @@ function renderSys(s) {
        <span>↓${bytes(s.net.down)}/s&nbsp;&nbsp;↑${bytes(s.net.up)}/s</span>
        <span>load ${load}</span>
      </div>
-     <div class="flex justify-between gap-[1vmin] mt-[0.4vmin] opacity-70">
+     <div class="flex justify-between gap-[1vmin] mt-[0.3vmin] opacity-70">
        <span>up ${dur(s.uptime)} · ${s.procs} procs</span>
        <span>${s.host}</span>
      </div>`;
@@ -441,6 +502,26 @@ async function poll() {
   }
 }
 
+// Separate, slower poll for the sparkline trend data -- history.db samples
+// every ~30s (config.refresh.metrics_sample_seconds), so polling it on the
+// same 5s cadence as /api/state would be pure waste. Failure just keeps
+// showing the last-known trend, same philosophy as the main poll.
+const HISTORY_HOURS = 2;
+const HISTORY_POLL_MS = 60_000;
+async function pollHistory() {
+  try {
+    const r = await fetch(`/api/history?hours=${HISTORY_HOURS}`, { cache: 'no-store' });
+    if (r.ok) {
+      const { samples } = await r.json();
+      trend = {
+        cpu_pct: samples.map((s) => s.cpu_pct).filter((v) => v != null),
+        mem_pct: samples.map((s) => s.mem_pct).filter((v) => v != null),
+      };
+    }
+  } catch { /* keep the last-known trend */ }
+  finally { setTimeout(pollHistory, HISTORY_POLL_MS); }
+}
+
 // SVG geometry is computed from measured pixel sizes, so a monitor change or
 // layout reflow has to redraw rather than just rescale.
 let resizeTimer;
@@ -452,3 +533,4 @@ addEventListener('resize', () => {
 setInterval(tickClock, 250);
 tickClock();
 poll();
+pollHistory();

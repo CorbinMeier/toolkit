@@ -1,5 +1,8 @@
 data/weather.json
 data/extra.json
+data/metrics.db
+data/metrics.db-wal
+data/metrics.db-shm
 __pycache__/
 .venv/
 node_modules/

@@ -168,12 +168,14 @@
              text-[clamp(.6rem,1.3vmin,.95rem)] mt-[0.5vmin]">—</div>
       </div>
 
-      <div class="panel px-[2.2vmin] py-[2vmin] flex-1 min-h-0 flex flex-col gap-[1.4vmin]">
+      <div class="panel px-[2.2vmin] py-[1.6vmin] flex-1 min-h-0 flex flex-col gap-[0.9vmin]">
         <h2 class="sec-head text-faint uppercase tracking-[0.3em] text-[clamp(.55rem,1.15vmin,.8rem)]">
           System</h2>
-        <div id="sys" class="flex flex-col gap-[1.15vmin] flex-1 justify-evenly"></div>
+        <!-- Heavily compact: rows pack at the top rather than stretching to
+             fill the column -- the empty space below is fine, unfilled. -->
+        <div id="sys" class="flex flex-col gap-[0.65vmin]"></div>
         <div id="sysfoot" class="text-faint num tracking-wide
-             text-[clamp(.55rem,1.15vmin,.82rem)] pt-[1vmin]
+             text-[clamp(.5rem,1.05vmin,.76rem)] pt-[0.7vmin]
              border-t border-[var(--color-hairline)]">—</div>
       </div>
     </section>

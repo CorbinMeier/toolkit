@@ -92,6 +92,10 @@ def main() -> int:
             check("moon illumination in range",
                   0 <= w["moon"]["illumination"] <= 1)
 
+        history = json.loads(get("/api/history?hours=1"))
+        check("history endpoint returns a samples list",
+              isinstance(history.get("samples"), list), history)
+
         s = state["sys"]
         check("cpu percent sane", 0 <= s["cpu"] <= 100, str(s["cpu"]))
         check("memory reported", s["mem"]["total"] > 0)

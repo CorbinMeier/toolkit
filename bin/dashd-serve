@@ -13,10 +13,12 @@ Binds loopback only. No auth by design -- do not expose this port.
 """
 from __future__ import annotations
 
+import contextlib
 import json
 import math
 import os
 import socket
+import sqlite3
 import sys
 import threading
 import time
@@ -33,6 +35,9 @@ ROOT = Path(__file__).resolve().parent.parent
 WEB = ROOT / "web"
 DATA = ROOT / "data"
 CONFIG = ROOT / "config.json"
+
+sys.path.insert(0, str(ROOT / "lib"))
+import metrics  # noqa: E402 -- needs ROOT on sys.path first
 
 # https://open-meteo.com/en/docs -- WMO weather interpretation codes
 WMO = {
@@ -55,6 +60,7 @@ WMO = {
 
 _lock = threading.Lock()
 _net_prev: tuple[float, int, int] | None = None
+_last_sample_ts = 0.0
 
 
 def load_config() -> dict:
@@ -254,6 +260,42 @@ def system_stats() -> dict:
     }
 
 
+def maybe_sample_metrics(cfg: dict, sys_stats: dict) -> None:
+    """Opportunistically persist one historical-metrics row, at most once
+    per `refresh.metrics_sample_seconds`.
+
+    Piggybacks on the existing /api/state poll rather than running its own
+    timer thread: the dashboard is continuously polled while any view is
+    open, and this reuses stats the caller already computed instead of
+    calling psutil a second time on an independent schedule.
+    psutil.cpu_percent(interval=None) and this file's own _net_prev both
+    measure "since the last call, by anyone in this process" -- a second,
+    independently-timed caller of system_stats() would fight the request
+    handler over that shared baseline and corrupt both readings.
+    """
+    global _last_sample_ts
+    refresh = cfg.get("refresh", {})
+    interval = refresh.get("metrics_sample_seconds", 30)
+    retain_hours = refresh.get("metrics_retain_hours", 24)
+    now = time.time()
+    with _lock:
+        if now - _last_sample_ts < interval:
+            return
+        _last_sample_ts = now
+    sample = {
+        "cpu_pct": sys_stats.get("cpu"),
+        "cpu_temp_c": sys_stats.get("temp_c"),
+        "cpu_freq_mhz": sys_stats.get("cpu_freq"),
+        "mem_pct": sys_stats.get("mem", {}).get("pct"),
+        "net_down": sys_stats.get("net", {}).get("down"),
+        "net_up": sys_stats.get("net", {}).get("up"),
+    }
+    # historical metrics are a bonus -- never break /api/state over them
+    with contextlib.suppress(sqlite3.Error, OSError):
+        metrics.insert_sample(DATA / "metrics.db", sample,
+                               retain_seconds=retain_hours * 3600)
+
+
 def build_state(cfg: dict) -> dict:
     extra = {}
     extra_path = DATA / "extra.json"
@@ -262,6 +304,8 @@ def build_state(cfg: dict) -> dict:
             extra = json.loads(extra_path.read_text())
         except (json.JSONDecodeError, OSError) as exc:
             extra = {"_error": str(exc)}
+    sys_stats = system_stats()
+    maybe_sample_metrics(cfg, sys_stats)
     return {
         "ts": time.time(),
         "config": {"units": cfg["units"], "display": cfg["display"],
@@ -269,7 +313,7 @@ def build_state(cfg: dict) -> dict:
                    "outputs": cfg.get("outputs", {}),
                    "poll": cfg["refresh"]["state_poll_seconds"]},
         "weather": cached_weather(cfg),
-        "sys": system_stats(),
+        "sys": sys_stats,
         "extra": extra,
     }
 
@@ -297,6 +341,19 @@ class Handler(SimpleHTTPRequestHandler):
             return
         if route == "/api/health":
             self._json({"ok": True, "ts": time.time()})
+            return
+        if route == "/api/history":
+            try:
+                cfg = load_config()
+                retain_hours = cfg.get("refresh", {}).get("metrics_retain_hours", 24)
+                qs = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
+                hours = float(qs.get("hours", [str(retain_hours)])[0])
+                hours = max(0.0, min(hours, retain_hours))
+                samples = metrics.query_history(
+                    DATA / "metrics.db", since_seconds=hours * 3600)
+                self._json({"samples": samples})
+            except Exception as exc:  # noqa: BLE001 - never kill the server
+                self._json({"error": repr(exc)}, 500)
             return
         super().do_GET()
 

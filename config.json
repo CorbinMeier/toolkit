@@ -24,7 +24,9 @@
   },
   "refresh": {
     "weather_seconds": 600,
-    "state_poll_seconds": 5
+    "state_poll_seconds": 5,
+    "metrics_sample_seconds": 30,
+    "metrics_retain_hours": 24
   },
   "outputs": {
     "_comment": "Per-output layout overrides. Key = monitor model or connector as reported by the host (see `dashd-host --list`). 'layout' picks a top-level layout in web/app.js; omit an output to use 'auto'.",

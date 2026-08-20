@@ -11,7 +11,9 @@ from __future__ import annotations
 import importlib.machinery
 import importlib.util
 import json
+import sqlite3
 import tempfile
+import time
 import unittest
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -147,6 +149,17 @@ class TestWeatherCache(unittest.TestCase):
 
 
 class TestBuildState(unittest.TestCase):
+    def setUp(self):
+        # build_state() now opportunistically writes a metrics sample --
+        # keep that out of the real data/ dir, same as TestWeatherCache.
+        self._tmp = tempfile.TemporaryDirectory()
+        self._orig_data = dashd.DATA
+        dashd.DATA = Path(self._tmp.name)
+
+    def tearDown(self):
+        dashd.DATA = self._orig_data
+        self._tmp.cleanup()
+
     def test_contains_the_keys_the_page_reads(self):
         cfg = dashd.load_config()
         orig = dashd.cached_weather
@@ -159,6 +172,91 @@ class TestBuildState(unittest.TestCase):
             self.assertIn(key, st)
         for key in ("units", "display", "location", "poll"):
             self.assertIn(key, st["config"])
+
+
+class TestMetricsStore(unittest.TestCase):
+    """lib/metrics.py, reached as dashd.metrics since dashd-serve imports it."""
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.db = Path(self._tmp.name) / "metrics.db"
+
+    def tearDown(self):
+        self._tmp.cleanup()
+
+    def test_query_on_missing_db_returns_empty(self):
+        self.assertEqual(dashd.metrics.query_history(self.db, since_seconds=3600), [])
+
+    def test_insert_then_query_round_trips(self):
+        dashd.metrics.insert_sample(
+            self.db, {"cpu_pct": 12.5, "mem_pct": 40.0}, retain_seconds=3600)
+        rows = dashd.metrics.query_history(self.db, since_seconds=3600)
+        self.assertEqual(len(rows), 1)
+        self.assertAlmostEqual(rows[0]["cpu_pct"], 12.5)
+        self.assertAlmostEqual(rows[0]["mem_pct"], 40.0)
+        self.assertIsNone(rows[0]["cpu_temp_c"])  # omitted key -> NULL
+
+    def test_query_window_excludes_rows_outside_it(self):
+        dashd.metrics.insert_sample(self.db, {"cpu_pct": 1}, retain_seconds=3600)
+        # a negative window can't include anything just inserted at "now"
+        self.assertEqual(dashd.metrics.query_history(self.db, since_seconds=-1), [])
+
+    def test_retention_prunes_rows_older_than_retain_seconds(self):
+        conn = sqlite3.connect(self.db)
+        conn.execute(
+            "CREATE TABLE IF NOT EXISTS samples (ts REAL NOT NULL, "
+            + ", ".join(f"{c} REAL" for c in dashd.metrics.COLUMNS) + ")")
+        conn.execute("INSERT INTO samples (ts, cpu_pct) VALUES (?, ?)",
+                     (time.time() - 999_999, 5.0))
+        conn.commit()
+        conn.close()
+
+        dashd.metrics.insert_sample(self.db, {"cpu_pct": 99}, retain_seconds=10)
+        rows = dashd.metrics.query_history(self.db, since_seconds=999_999_999)
+        self.assertEqual(len(rows), 1, rows)
+        self.assertAlmostEqual(rows[0]["cpu_pct"], 99)
+
+
+class TestMaybeSampleMetrics(unittest.TestCase):
+    """dashd-serve's piggyback-on-the-poll sampler."""
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self._orig_data = dashd.DATA
+        dashd.DATA = Path(self._tmp.name)
+        self._orig_last = dashd._last_sample_ts
+        dashd._last_sample_ts = 0.0
+
+    def tearDown(self):
+        dashd.DATA = self._orig_data
+        dashd._last_sample_ts = self._orig_last
+        self._tmp.cleanup()
+
+    @staticmethod
+    def _cfg(interval=30, retain_hours=24):
+        return {"refresh": {"metrics_sample_seconds": interval,
+                             "metrics_retain_hours": retain_hours}}
+
+    @staticmethod
+    def _sys_stats():
+        return {"cpu": 10.0, "temp_c": 50, "cpu_freq": 2600,
+                "mem": {"pct": 33.0}, "net": {"down": 1.0, "up": 2.0}}
+
+    def test_first_call_writes_a_sample(self):
+        dashd.maybe_sample_metrics(self._cfg(), self._sys_stats())
+        rows = dashd.metrics.query_history(
+            dashd.DATA / "metrics.db", since_seconds=3600)
+        self.assertEqual(len(rows), 1)
+        self.assertAlmostEqual(rows[0]["cpu_pct"], 10.0)
+        self.assertAlmostEqual(rows[0]["mem_pct"], 33.0)
+
+    def test_second_call_within_interval_is_skipped(self):
+        cfg = self._cfg(interval=9999)
+        dashd.maybe_sample_metrics(cfg, self._sys_stats())
+        dashd.maybe_sample_metrics(cfg, self._sys_stats())
+        rows = dashd.metrics.query_history(
+            dashd.DATA / "metrics.db", since_seconds=3600)
+        self.assertEqual(len(rows), 1, rows)
 
 
 class TestConfig(unittest.TestCase):
