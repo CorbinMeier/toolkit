@@ -135,15 +135,15 @@ def main() -> int:
             m = re.search(rf'id="{el_id}"[^>]*>([^<]*)', dom, re.S)
             return (m.group(1) if m else "").strip()
 
-        # No digital clock -- the user's system already shows the time (see
-        # ISSUES.md #5). Date is the remaining proof this box rendered.
-        check("date rendered", len(text_of("date")) > 5, repr(text_of("date")))
-        check("location rendered",
-              text_of("loc") == CFG["location"]["name"], repr(text_of("loc")))
+        # No date/clock/location readout -- the user's own system already
+        # shows all three (see ISSUES.md #5, #9). Temperature is the
+        # remaining proof the forecast panel rendered.
         if not w.get("unavailable"):
             check("temperature rendered", text_of("temp").lstrip("-").isdigit(),
                   repr(text_of("temp")))
-        check("system bars rendered", dom.count("Memory") >= 1)
+        check("system table rendered", dom.count(">MEM<") >= 1, dom.count(">MEM<"))
+        check("disk rows rendered", dom.count("sysicon") >= 3,
+              "expected cpu+mem+>=1 disk row")
         check("tailwind compiled utilities",
               "--color-ink" in dom and ".text-faint" in dom,
               "vendor bundle may not have run")

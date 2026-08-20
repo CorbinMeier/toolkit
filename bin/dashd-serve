@@ -19,6 +19,7 @@ import math
 import os
 import socket
 import sqlite3
+import subprocess
 import sys
 import threading
 import time
@@ -209,6 +210,76 @@ def cached_weather(cfg: dict) -> dict:
 
 # ---------------------------------------------------------------- system
 
+def _disk_tree_from_psutil() -> list[dict]:
+    """Fallback disk_tree() for when lsblk is missing -- mounted view only."""
+    rows = []
+    for part in psutil.disk_partitions(all=False):
+        if part.fstype in ("squashfs", "overlay", ""):
+            continue
+        try:
+            u = psutil.disk_usage(part.mountpoint)
+        except (PermissionError, OSError):
+            continue
+        rows.append({"name": part.device.rsplit("/", 1)[-1], "fstype": part.fstype,
+                     "size": u.total, "pct": u.percent, "mount": part.mountpoint})
+    return rows
+
+
+def disk_tree() -> list[dict]:
+    """Every partition lsblk knows about, with its current utilization.
+
+    psutil.disk_partitions() only sees mounted filesystems -- an unmounted
+    EFI/recovery/swap partition is invisible to it. lsblk walks the whole
+    block-device tree instead. Whole-disk rows (type "disk") and non-"part"
+    children (loop devices, LUKS/crypt mappings) are skipped -- they don't
+    carry a meaningful utilization figure of their own; a partition with
+    neither a mountpoint nor FSUSE% (e.g. a raw swap slot whose real usage
+    lives on its crypt child) is skipped too rather than shown as a bare,
+    dataless row. Falls back to the psutil-only view if lsblk is missing or
+    fails, so a minimal/container environment still gets *something*.
+    """
+    try:
+        out = subprocess.run(
+            ["lsblk", "-J", "-b", "-o", "NAME,TYPE,SIZE,FSTYPE,FSUSE%,MOUNTPOINT"],
+            capture_output=True, text=True, timeout=5, check=True)
+        tree = json.loads(out.stdout)
+    except (OSError, subprocess.SubprocessError, json.JSONDecodeError):
+        return _disk_tree_from_psutil()
+
+    rows: list[dict] = []
+
+    def walk(devices: list[dict]) -> None:
+        for d in devices:
+            use, mount = d.get("fsuse%"), d.get("mountpoint")
+            if d.get("type") == "part" and (use or mount):
+                rows.append({
+                    "name": d["name"], "fstype": d.get("fstype"),
+                    "size": d.get("size") or 0,
+                    "pct": float(use.rstrip("%")) if use else None,
+                    "mount": mount,
+                })
+            walk(d.get("children") or [])
+
+    walk(tree.get("blockdevices", []))
+    return rows
+
+
+def battery_charging(plugged: bool,
+                      power_supply_dir: Path = Path("/sys/class/power_supply")) -> bool:
+    """True only while the battery is *actually* charging, not merely
+    plugged in -- psutil's power_plugged is AC-present, not charge state
+    (see CLAUDE.md). /sys/class/power_supply/BAT*/status
+    ("Charging"/"Discharging"/"Full"/"Not charging") is the real signal;
+    fall back to `plugged` if no BAT node is exposed at all.
+    """
+    for status_path in sorted(power_supply_dir.glob("BAT*/status")):
+        try:
+            return status_path.read_text().strip() == "Charging"
+        except OSError:
+            continue
+    return plugged
+
+
 def system_stats() -> dict:
     global _net_prev
     now = time.time()
@@ -222,20 +293,10 @@ def system_stats() -> dict:
         up = max(io.bytes_sent - _net_prev[2], 0) / dt
     _net_prev = (now, io.bytes_recv, io.bytes_sent)
 
-    disks = []
-    for part in psutil.disk_partitions(all=False):
-        if part.fstype in ("squashfs", "overlay", ""):
-            continue
-        try:
-            u = psutil.disk_usage(part.mountpoint)
-        except (PermissionError, OSError):
-            continue
-        disks.append({"mount": part.mountpoint, "pct": u.percent,
-                      "used": u.used, "total": u.total})
-
     batt = None
     if (b := psutil.sensors_battery()):
         batt = {"pct": round(b.percent), "plugged": b.power_plugged,
+                "charging": battery_charging(b.power_plugged),
                 "secs_left": None if b.secsleft in
                 (psutil.POWER_TIME_UNLIMITED, psutil.POWER_TIME_UNKNOWN)
                 else b.secsleft}
@@ -256,7 +317,7 @@ def system_stats() -> dict:
         "load": list(os.getloadavg()),
         "mem": {"pct": vm.percent, "used": vm.used, "total": vm.total},
         "swap": {"pct": sw.percent, "used": sw.used, "total": sw.total},
-        "disks": sorted(disks, key=lambda d: d["mount"]),
+        "disks": sorted(disk_tree(), key=lambda d: d["name"]),
         "net": {"up": round(up), "down": round(down)},
         "battery": batt,
         "temp_c": temp,

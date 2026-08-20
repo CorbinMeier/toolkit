@@ -17,6 +17,7 @@ import time
 import unittest
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from unittest.mock import patch
 
 BIN = Path(__file__).resolve().parent.parent / "bin" / "dashd-serve"
 
@@ -90,12 +91,62 @@ class TestSystemStats(unittest.TestCase):
             self.assertIn(key, s)
         self.assertGreaterEqual(s["mem"]["pct"], 0)
         self.assertIsInstance(s["disks"], list)
+        for d in s["disks"]:
+            for key in ("name", "fstype", "size", "pct", "mount"):
+                self.assertIn(key, d)
 
     def test_net_rates_are_non_negative(self):
         dashd.system_stats()
         s = dashd.system_stats()
         self.assertGreaterEqual(s["net"]["up"], 0)
         self.assertGreaterEqual(s["net"]["down"], 0)
+
+
+class TestDiskTree(unittest.TestCase):
+    """Real lsblk on this machine -- same "hits the real system, no network"
+    precedent as TestSystemStats. The fallback path is exercised in
+    isolation below by forcing subprocess.run to fail."""
+
+    def test_returns_partitions_with_utilization_shape(self):
+        rows = dashd.disk_tree()
+        self.assertIsInstance(rows, list)
+        for row in rows:
+            for key in ("name", "fstype", "size", "pct", "mount"):
+                self.assertIn(key, row)
+            # every row was filtered to have *something* to show
+            self.assertTrue(row["pct"] is not None or row["mount"])
+
+    def test_falls_back_to_psutil_view_when_lsblk_unavailable(self):
+        with patch.object(dashd.subprocess, "run",
+                           side_effect=FileNotFoundError("no lsblk")):
+            rows = dashd.disk_tree()
+        self.assertEqual(rows, dashd._disk_tree_from_psutil())
+
+
+class TestBatteryCharging(unittest.TestCase):
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.base = Path(self._tmp.name)
+
+    def tearDown(self):
+        self._tmp.cleanup()
+
+    def _bat(self, status):
+        d = self.base / "BAT0"
+        d.mkdir()
+        (d / "status").write_text(status + "\n")
+
+    def test_charging_status_is_true(self):
+        self._bat("Charging")
+        self.assertTrue(dashd.battery_charging(True, self.base))
+
+    def test_full_status_is_not_charging_even_when_plugged(self):
+        self._bat("Full")
+        self.assertFalse(dashd.battery_charging(True, self.base))
+
+    def test_no_battery_node_falls_back_to_plugged(self):
+        self.assertTrue(dashd.battery_charging(True, self.base))
+        self.assertFalse(dashd.battery_charging(False, self.base))
 
 
 class TestWeatherCache(unittest.TestCase):

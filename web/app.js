@@ -1,11 +1,11 @@
 /* Desktop dashboard renderer.
  *
- * Date ticks locally every 250ms (never waits on the network); everything
- * else redraws from /api/state on a poll, plus a slower, independent poll
- * of /api/history for the compact trend sparklines. Render is a pure
- * function of the last good state, so a failed poll just keeps the
- * previous frame up and raises the offline banner instead of blanking the
- * wallpaper.
+ * No date/clock/location readout -- the user's own system already shows
+ * all three (see ISSUES.md #5, #9). Everything redraws from /api/state on
+ * a poll, plus a slower, independent poll of /api/history for the compact
+ * trend sparklines. Render is a pure function of the last good state, so a
+ * failed poll just keeps the previous frame up and raises the offline
+ * banner instead of blanking the wallpaper.
  */
 'use strict';
 
@@ -117,22 +117,54 @@ const POINTS = ['N', 'NNE', 'NE', 'ENE', 'E', 'ESE', 'SE', 'SSE',
   'S', 'SSW', 'SW', 'WSW', 'W', 'WNW', 'NW', 'NNW'];
 const compass = (deg) => POINTS[Math.round(deg / 22.5) % 16];
 
-/* ------------------------------------------------------------------ clock */
-// No digital time readout -- the user's system already shows it. Date stays,
-// since it's information the system clock doesn't surface at a glance.
-function tickClock() {
-  $('date').textContent = new Date().toLocaleDateString(undefined,
-    { weekday: 'long', month: 'long', day: 'numeric' });
+/* ------------------------------------------------------------ sys panel */
+/* Hand-rolled system-metric icons -- same zero-dependency philosophy as
+ * weatherIcon(). stroke/fill are set once on the root <svg> and inherit
+ * down through SVG's normal property cascade; individual shapes only
+ * override fill where they're meant to read as solid, not outlined. */
+function sysIcon(kind, tone = 'currentColor') {
+  const g = el('svg', { viewBox: '0 0 24 24', class: 'sysicon',
+    fill: 'none', stroke: tone, 'stroke-width': 1.6,
+    'stroke-linecap': 'round', 'stroke-linejoin': 'round' });
+  switch (kind) {
+    case 'cpu':
+      g.appendChild(el('rect', { x: 6, y: 6, width: 12, height: 12, rx: 1.2 }));
+      g.appendChild(el('rect', { x: 9.5, y: 9.5, width: 5, height: 5, rx: 0.6 }));
+      [9, 12, 15].forEach((p) => {
+        g.appendChild(el('line', { x1: p, y1: 1.5, x2: p, y2: 6 }));
+        g.appendChild(el('line', { x1: p, y1: 18, x2: p, y2: 22.5 }));
+        g.appendChild(el('line', { x1: 1.5, y1: p, x2: 6, y2: p }));
+        g.appendChild(el('line', { x1: 18, y1: p, x2: 22.5, y2: p }));
+      });
+      break;
+    case 'mem':
+      g.appendChild(el('rect', { x: 2.5, y: 7, width: 19, height: 9, rx: 1 }));
+      [6, 9.5, 13, 16.5, 20].forEach((x) => {
+        g.appendChild(el('line', { x1: x, y1: 16, x2: x, y2: 19.5 }));
+      });
+      break;
+    case 'disk':
+      g.appendChild(el('circle', { cx: 12, cy: 12, r: 9 }));
+      g.appendChild(el('circle', { cx: 12, cy: 12, r: 2.2, fill: tone }));
+      g.appendChild(el('line', { x1: 12, y1: 3, x2: 12, y2: 6 }));
+      break;
+    case 'battery':
+      g.appendChild(el('rect', { x: 1.5, y: 7, width: 17, height: 10, rx: 1.5 }));
+      g.appendChild(el('rect', { x: 19.5, y: 10, width: 2.2, height: 4, rx: 0.6, fill: tone }));
+      break;
+    default: break;
+  }
+  return g;
 }
 
-/* ------------------------------------------------------------ sys panel */
 /* Tiny inline trend line -- deliberately preserveAspectRatio="none": unlike
  * the big weather sparkline (CLAUDE.md), this one has no text or marker
  * children to distort, just a path, so stretching it to exactly fill a
- * fixed-size box is what's wanted for a compact inline indicator. */
+ * fixed-size box is what's wanted for a compact inline indicator. This is
+ * the "[HISTOGRAPH]" the CPU/Memory rows show next to their percentage. */
 function miniSpark(values, tone = 'var(--color-accent)') {
   const svg = el('svg', { viewBox: '0 0 100 30', preserveAspectRatio: 'none',
-    class: 'w-[clamp(2.8rem,7vmin,4.6rem)] h-[clamp(0.85rem,2vmin,1.15rem)] shrink-0' });
+    class: 'w-[clamp(2.6rem,6.5vmin,4.2rem)] h-[clamp(0.8rem,1.8vmin,1.05rem)] shrink-0 ml-auto' });
   if (values.length < 2) return svg;
   const lo = Math.min(...values), hi = Math.max(...values);
   const span = Math.max(hi - lo, 1);
@@ -145,75 +177,48 @@ function miniSpark(values, tone = 'var(--color-accent)') {
   return svg;
 }
 
-// points: optional recent-values array (oldest -> newest) for an inline
-// trend sparkline next to the bar -- see history/pollHistory().
-function bar(label, pct, detail, tone = 'var(--color-accent)', points = null) {
+/* Short, fixed-width fill bar for a disk row -- deliberately not a
+ * full-width bar (the previous design): a partition's percentage reads
+ * fine as a small swatch next to its number. */
+function miniBar(pct, tone = 'var(--color-accent)') {
   const wrap = document.createElement('div');
-  wrap.innerHTML = `
-    <div class="flex justify-between items-baseline mb-[0.2vmin]">
-      <span class="text-muted tracking-[0.14em] uppercase
-            text-[clamp(.46rem,.95vmin,.68rem)]">${label}</span>
-      <span class="num text-ink/90 text-[clamp(.48rem,1.02vmin,.74rem)]">${detail}</span>
-    </div>
-    <div class="flex items-center gap-[0.7vmin]">
-      <div class="flex-1 h-[0.55vmin] min-h-[3px] rounded-full overflow-hidden"
-           style="background:oklch(0.5 0.02 260/.22)">
-        <div style="width:${Math.min(100, pct)}%;background:${tone};height:100%;
-                    border-radius:inherit;transition:width .6s ease"></div>
-      </div>
-    </div>`;
-  if (points && points.length >= 2) {
-    wrap.querySelector('.flex.items-center').appendChild(miniSpark(points, tone));
-  }
+  wrap.className = 'w-[clamp(2.6rem,6.5vmin,4.2rem)] h-[0.5vmin] min-h-[3px] ' +
+    'rounded-full overflow-hidden ml-auto';
+  wrap.style.background = 'oklch(0.5 0.02 260/.22)';
+  const fill = document.createElement('div');
+  fill.style.cssText = `width:${Math.min(100, pct ?? 0)}%;background:${tone};` +
+    'height:100%;border-radius:inherit;transition:width .6s ease';
+  wrap.appendChild(fill);
   return wrap;
 }
 
-/* Per-core load as a row of vertical bars -- reads as one texture at a
- * glance, and distinguishes "one pinned core" from "everything busy". */
-function coreStrip(cores) {
-  const wrap = document.createElement('div');
-  wrap.className = 'flex items-end gap-[0.22vmin] h-[1.9vmin] min-h-[9px] mt-[0.2vmin]';
-  cores.forEach((p) => {
-    const b = document.createElement('div');
-    b.className = 'flex-1 rounded-sm';
-    b.style.cssText =
-      `height:${Math.max(8, p)}%;` +
-      `background:${p > 85 ? 'var(--color-warm)' : 'var(--color-accent)'};` +
-      `opacity:${0.30 + (p / 100) * 0.7};transition:height .5s ease`;
-    wrap.appendChild(b);
-  });
-  return wrap;
-}
+// One <tr>: icon | label | value (+ optional smaller sub-line) | tail node
+// (histograph, mini bar, or a badge like CHRG). This is what keeps every
+// row's columns aligned -- a real <table>, not independently-sized rows.
+function sysRow({ icon, label, value, sub = '', tail = null, tone = 'var(--color-accent)' }) {
+  const tr = document.createElement('tr');
 
-/* Disk usage as a compact vertical-bar cluster (same texture as coreStrip)
- * instead of one full-width horizontal bar per mount -- the difference from
- * coreStrip is disks aren't interchangeable, so each bar keeps a short
- * label + free space underneath rather than being anonymous texture. */
-function diskStrip(disks) {
-  const wrap = document.createElement('div');
-  wrap.className = 'flex flex-col gap-[0.25vmin]';
-  const bars = document.createElement('div');
-  bars.className = 'flex items-end gap-[0.7vmin] h-[3.6vmin] min-h-[18px]';
-  const labels = document.createElement('div');
-  labels.className = 'flex gap-[0.7vmin]';
-  disks.forEach((d) => {
-    const tone = d.pct > 88 ? 'var(--color-warm)' : 'var(--color-accent)';
-    const b = document.createElement('div');
-    b.className = 'flex-1 rounded-sm';
-    b.style.cssText =
-      `height:${Math.max(8, d.pct)}%;background:${tone};` +
-      `opacity:${0.35 + (d.pct / 100) * 0.65};transition:height .5s ease`;
-    bars.appendChild(b);
+  const iconTd = document.createElement('td');
+  iconTd.style.color = tone;
+  iconTd.appendChild(sysIcon(icon, tone));
 
-    const lab = document.createElement('div');
-    lab.className = 'flex-1 min-w-0 text-faint num text-[clamp(.42rem,.85vmin,.58rem)] ' +
-      'leading-tight text-center truncate';
-    const name = d.mount === '/' ? '/' : d.mount.split('/').filter(Boolean).pop();
-    lab.textContent = `${name} ${bytes(d.total - d.used)}`;
-    labels.appendChild(lab);
-  });
-  wrap.append(bars, labels);
-  return wrap;
+  const labelTd = document.createElement('td');
+  labelTd.className = 'text-muted tracking-[0.1em] uppercase pl-[0.6vmin] ' +
+    'text-[clamp(.44rem,.92vmin,.66rem)] truncate';
+  labelTd.textContent = label;
+
+  const valueTd = document.createElement('td');
+  valueTd.className = 'num text-right text-ink/90 text-[clamp(.48rem,1.02vmin,.74rem)]';
+  valueTd.innerHTML = sub
+    ? `${value}<div class="text-faint text-[clamp(.4rem,.82vmin,.58rem)] leading-tight">${sub}</div>`
+    : value;
+
+  const tailTd = document.createElement('td');
+  tailTd.className = 'pl-[0.6vmin]';
+  if (tail) tailTd.appendChild(tail);
+
+  tr.append(iconTd, labelTd, valueTd, tailTd);
+  return tr;
 }
 
 function renderSys(s) {
@@ -221,27 +226,45 @@ function renderSys(s) {
   box.replaceChildren();
   const hot = (p) => p > 88 ? 'var(--color-warm)' : 'var(--color-accent)';
 
-  box.appendChild(bar('CPU', s.cpu,
-    `${s.cpu.toFixed(0)}%${s.temp_c ? ` · ${s.temp_c}°C` : ''}` +
-    `${s.cpu_freq ? ` · ${(s.cpu_freq / 1000).toFixed(1)}GHz` : ''}`,
-    hot(s.cpu), trend.cpu_pct));
-  if (s.cpu_cores?.length) box.appendChild(coreStrip(s.cpu_cores));
+  box.appendChild(sysRow({
+    icon: 'cpu', label: 'CPU', tone: hot(s.cpu),
+    value: `${s.cpu.toFixed(0)}%`,
+    sub: [s.temp_c ? `${s.temp_c}°C` : null,
+      s.cpu_freq ? `${(s.cpu_freq / 1000).toFixed(1)}GHz` : null].filter(Boolean).join(' · '),
+    tail: miniSpark(trend.cpu_pct, hot(s.cpu)),
+  }));
 
-  box.appendChild(bar('Memory', s.mem.pct,
-    `${bytes(s.mem.used)} / ${bytes(s.mem.total)}`, hot(s.mem.pct), trend.mem_pct));
-  if (s.swap.total > 0 && s.swap.pct > 1) box.appendChild(
-    bar('Swap', s.swap.pct, `${bytes(s.swap.used)}`, hot(s.swap.pct)));
+  box.appendChild(sysRow({
+    icon: 'mem', label: 'MEM', tone: hot(s.mem.pct),
+    value: `${s.mem.pct.toFixed(0)}%`,
+    sub: `${bytes(s.mem.used)} / ${bytes(s.mem.total)}`,
+    tail: miniSpark(trend.mem_pct, hot(s.mem.pct)),
+  }));
 
-  // Every real mount, not just / -- this box has the room and the extra
-  // volumes are the ones that silently fill up.
-  const disks = s.disks.filter((d) => !d.mount.startsWith('/boot'));
-  if (disks.length) box.appendChild(diskStrip(disks));
+  // Every partition lsblk reports a real utilization for, not just
+  // psutil's mounted view -- see dashd-serve's disk_tree().
+  s.disks.forEach((d) => {
+    const label = d.mount && d.mount !== '[SWAP]'
+      ? (d.mount.split('/').filter(Boolean).pop() || '/') : d.name;
+    box.appendChild(sysRow({
+      icon: 'disk', label: label.toUpperCase(), tone: hot(d.pct ?? 0),
+      value: d.pct != null ? `${d.pct.toFixed(0)}%` : bytes(d.size),
+      tail: miniBar(d.pct, hot(d.pct ?? 0)),
+    }));
+  });
 
-  if (s.battery) box.appendChild(bar('Battery', s.battery.pct,
-    `${s.battery.pct}%${s.battery.plugged ? ' · AC' :
-      s.battery.secs_left ? ` · ${dur(s.battery.secs_left)}` : ''}`,
-    s.battery.pct < 20 && !s.battery.plugged
-      ? 'var(--color-warm)' : 'var(--color-accent)'));
+  if (s.battery) {
+    const chrg = document.createElement('span');
+    chrg.className = `chrg-badge${s.battery.charging ? ' is-charging' : ''}`;
+    chrg.textContent = 'CHRG';
+    box.appendChild(sysRow({
+      icon: 'battery', label: 'BAT',
+      tone: s.battery.pct < 20 && !s.battery.plugged ? 'var(--color-warm)' : 'var(--color-accent)',
+      value: `${s.battery.pct}%`,
+      sub: !s.battery.plugged && s.battery.secs_left ? dur(s.battery.secs_left) : '',
+      tail: chrg,
+    }));
+  }
 
   const load = s.load.map((n) => n.toFixed(2)).join('  ');
   $('sysfoot').innerHTML =
@@ -403,7 +426,6 @@ function renderSunMoon(w) {
 /* ------------------------------------------------------------------ poll */
 function apply(s) {
   state = s;
-  $('loc').textContent = s.config.location;
 
   const disp = s.config.display || {};
   const outCfg = (s.config.outputs || {})[OUTPUT] || (s.config.outputs || {}).default || {};
@@ -413,7 +435,6 @@ function apply(s) {
   root.setProperty('--safe-top', `${disp.safe_area_top || 0}px`);
   root.setProperty('--safe-bottom', `${disp.safe_area_bottom || 0}px`);
 
-  tickClock();
   renderWeather(s.weather);
   renderSys(s.sys);
 
@@ -487,7 +508,5 @@ addEventListener('resize', () => {
   resizeTimer = setTimeout(() => { if (state) apply(state); }, 200);
 });
 
-setInterval(tickClock, 250);
-tickClock();
 poll();
 pollHistory();

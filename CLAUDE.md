@@ -1,11 +1,12 @@
 # Desktop Dashboard
 
-Live HTML rendered as the desktop wallpaper on COSMIC/Wayland — date,
-weather, forecast, sun/moon, system stats (with SQLite-backed history for
-cpu/mem/net trends). Not a wallpaper image on a timer: a real WebKit view
-with CSS animation and JS, one surface per monitor, sitting below the
-windows. No digital clock -- the user's own system already shows the time
-(#5).
+Live HTML rendered as the desktop wallpaper on COSMIC/Wayland — weather,
+forecast, sun/moon, system stats (with SQLite-backed history for cpu/mem
+trends). Not a wallpaper image on a timer: a real WebKit view with CSS
+animation and JS, one surface per monitor, sitting below the windows. No
+digital clock, date, or location readout -- the user's own system already
+shows all three (#5, #9). Two halves: System (left) | Forecast — current
+conditions, hourly, week, sun/moon, all one panel (right, #10).
 
 Two processes:
 
@@ -18,10 +19,14 @@ Both run as **enabled** systemd user units (see *Current state* below).
 
 ```
 bin/dashd-serve     HTTP server; /api/state merges weather+sys+extra,
-                    /api/history serves lib/metrics.py's stored samples
+                    /api/history serves lib/metrics.py's stored samples.
+                    sys.disks comes from lsblk (disk_tree()), not just
+                    psutil's mounted-partition view; battery gets a real
+                    charging flag from /sys/class/power_supply (see gotchas)
 bin/dashd-host      layer-shell surfaces; --list prints monitor names
-lib/metrics.py      SQLite historical-metrics store (cpu/mem/net trends)
-web/index.html      panel structure (Tailwind utility classes)
+lib/metrics.py      SQLite historical-metrics store (cpu/mem trends)
+web/index.html      panel structure (Tailwind utility classes); System
+                    renders as a <table> (icon|label|value|histograph/badge)
 web/app.js          all rendering; pure function of last good state
 web/vendor/         Tailwind v4 browser build, vendored (no network at runtime)
 config.json         location, units, port, display layer, per-output overrides,
@@ -164,7 +169,20 @@ render loop.
   keeps its own copy purely so the Tailwind utility classes that do exist in
   the markup keep compiling. Both blocks in `web/index.html` now carry the
   full palette for exactly this reason — don't de-duplicate them.
-- `psutil.sensors_battery()` returns `power_plugged`, not `plugged_in`.
+- `psutil.sensors_battery()` returns `power_plugged`, not `plugged_in`, and
+  it's AC-present, not charge state — a full battery still left plugged in
+  reports `power_plugged: True` with no current flowing. The CHRG indicator
+  needs the real thing, so `battery_charging()` reads
+  `/sys/class/power_supply/BAT*/status` (`"Charging"` vs `"Full"` /
+  `"Discharging"` / `"Not charging"`) and only falls back to
+  `power_plugged` when no `BAT*` node exists at all.
+- **`lsblk -J` keys are lowercased column names, including the `%`**:
+  `FSUSE%` becomes JSON key `"fsuse%"`, not `"FSUSE%"` or `"fsuse_pct"`.
+  Whole-disk rows (`type: "disk"`) and swap's `type: "crypt"` child carry no
+  usable `FSUSE%`; `disk_tree()` only emits `type: "part"` rows that have a
+  mountpoint or an `FSUSE%`, which is what keeps a bare, dataless swap slot
+  (`nvme0n1p4` on this machine — the actual swap usage lives on its `crypt`
+  child, not the partition itself) from showing up as a noise row.
 - `pkill -f dashd-serve` **kills the shell running it**, because the pattern
   matches that shell's own command line. Resolve PIDs with `pgrep` and skip
   `$$`, or use `systemctl --user stop`.
@@ -204,10 +222,16 @@ any other script can add panels without touching the server.
   in `config.json` plus a host restart if revisited against calmer imagery.
 - Open: `ISSUES.md` #3 — `outputs.<name>.layout` reaches
   `document.documentElement.dataset.layout` but no CSS keys off
-  `[data-layout]`, so both monitors render the same three-column grid. Looks
-  right on both; just not differentiated. Likely next step is having the
-  1440x900 laptop drop a column rather than shrinking the same grid.
+  `[data-layout]`, so both monitors render the same two-column grid (System |
+  Forecast, since #10). Looks right on both; just not differentiated.
 - `display.safe_area_top`/`safe_area_bottom` (added for #6) default to 48px
   each, a guess at typical COSMIC top/bottom panel height -- not visually
   confirmed against this machine's actual panels. Tune in `config.json` if
   it's off; no code change needed.
+- #9-#11 (2026-08-20): removed the date/location readout, consolidated
+  weather/hourly/week/sun-moon into one right-half "Forecast" panel, and
+  rebuilt System as an actual `<table>` (icon | label | value | histograph)
+  with lsblk-sourced per-partition disk rows and a CHRG battery indicator.
+  Verified functionally (smoke stage against an isolated worktree-local
+  server) but not visually — per the user's "no more verifying (I can do
+  that)" instruction, this round is theirs to eyeball on the live desktop.
