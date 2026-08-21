@@ -40,14 +40,13 @@ let trendHistory = [];
 // them). Capped by wall-clock age, not point count, so it self-adjusts to
 // whatever the configured poll interval actually is.
 const RING_WINDOW_MS = 5 * 60 * 1000;
-let ring = { t: [], cpu: [], mem: [], down: [], up: [] };
+let ring = { t: [], down: [], up: [] };
 function pushRing(s) {
   const now = Date.now();
-  ring.t.push(now); ring.cpu.push(s.cpu); ring.mem.push(s.mem.pct);
-  ring.down.push(s.net.down); ring.up.push(s.net.up);
+  ring.t.push(now); ring.down.push(s.net.down); ring.up.push(s.net.up);
   const cutoff = now - RING_WINDOW_MS;
   while (ring.t.length && ring.t[0] < cutoff) {
-    ring.t.shift(); ring.cpu.shift(); ring.mem.shift(); ring.down.shift(); ring.up.shift();
+    ring.t.shift(); ring.down.shift(); ring.up.shift();
   }
 }
 function ringSince(key, ms) {
@@ -259,12 +258,18 @@ function metricLed({ pct = null, ringState = null } = {}) {
  * line: each sample holds its value until the next one arrives (a
  * staircase), which reads truer for a polled metric than interpolating
  * between two readings that were never actually in between. Accepts one
- * or more {values, tone} series sharing one x/y scale, so the Network
- * chart can plot download and upload as two lines without them fighting
- * over independent scales. Deliberately preserveAspectRatio="none": these
- * are bare paths with no text/marker children to distort (see CLAUDE.md's
- * gotcha on that attribute), so stretching to exactly fill a fixed small
- * box is exactly what's wanted here. */
+ * or more {values, tone, fill} series sharing one x/y scale, so the
+ * Network chart can plot download and upload as two lines without them
+ * fighting over independent scales. `fill: true` (used by graphCell() for
+ * CPU/MEM, ISSUES.md #17 revised) additionally fills the area under the
+ * step line with a gradient fading to transparent -- more visual presence
+ * at wallpaper viewing distance than a bare stroke, without adding any
+ * more information than the line already carries. Deliberately
+ * preserveAspectRatio="none": these are bare paths with no text/marker
+ * children to distort (see CLAUDE.md's gotcha on that attribute), so
+ * stretching to exactly fill a fixed small box is exactly what's wanted
+ * here. */
+let gradientSeq = 0;
 function stepChart(series, cls) {
   const svg = el('svg', { viewBox: '0 0 100 30', preserveAspectRatio: 'none',
     class: cls || 'w-[clamp(3.4rem,9vmin,6.4rem)] h-[clamp(0.8rem,1.8vmin,1.05rem)] shrink-0 ml-auto' });
@@ -273,8 +278,9 @@ function stepChart(series, cls) {
   const lo = Math.min(...all), hi = Math.max(...all);
   const span = Math.max(hi - lo, 1);
   const pad = 2;
+  const baseline = 30;
   const y = (v) => (30 - pad) - ((v - lo) / span) * (30 - pad * 2);
-  series.forEach(({ values, tone }) => {
+  series.forEach(({ values, tone, fill }) => {
     if (values.length < 2) return;
     const x = (i) => (i / (values.length - 1)) * 100;
     let d = `M ${x(0).toFixed(1)} ${y(values[0]).toFixed(1)}`;
@@ -282,6 +288,21 @@ function stepChart(series, cls) {
       // hold the previous value flat to this sample's x, then step to it
       d += ` L ${x(i).toFixed(1)} ${y(values[i - 1]).toFixed(1)}`;
       d += ` L ${x(i).toFixed(1)} ${y(values[i]).toFixed(1)}`;
+    }
+    if (fill) {
+      // Gradient id is page-unique (not per-metric) since the whole box
+      // is torn down and rebuilt every render -- a counter avoids ever
+      // reusing an id an old, still-fading-out node might reference.
+      const id = `graph-fill-${gradientSeq++}`;
+      const defs = el('defs');
+      const grad = el('linearGradient', { id, x1: '0', y1: '0', x2: '0', y2: '1' });
+      grad.appendChild(el('stop', { offset: '0%', 'stop-color': tone, 'stop-opacity': '0.35' }));
+      grad.appendChild(el('stop', { offset: '100%', 'stop-color': tone, 'stop-opacity': '0' }));
+      defs.appendChild(grad);
+      svg.appendChild(defs);
+      const last = x(values.length - 1).toFixed(1);
+      const areaD = `${d} L ${last} ${baseline} L ${x(0).toFixed(1)} ${baseline} Z`;
+      svg.appendChild(el('path', { d: areaD, fill: `url(#${id})`, stroke: 'none' }));
     }
     svg.appendChild(el('path', { d, fill: 'none', stroke: tone,
       'stroke-width': 2, 'stroke-linecap': 'round', 'stroke-linejoin': 'round',
@@ -352,9 +373,11 @@ function sysRow({ icon, label, value, sub = '', tail = null, tone = 'var(--color
   return tr;
 }
 
-// One small trend graph: tier label top-left, its value range top-right --
-// decodes the step chart's otherwise-unlabeled auto-scaled y-axis, so the
-// standalone label column the old sysTierRow() used isn't needed per tier.
+// One trend graph: window label top-left, its value range top-right --
+// decodes the step chart's otherwise-unlabeled auto-scaled y-axis, so a
+// standalone label column isn't needed. Filled (ISSUES.md #17 revised,
+// replacing the earlier three-tier row) so the trend reads with more
+// visual presence at a glance than a bare line.
 function graphCell(label, values, tone) {
   const wrap = document.createElement('div');
   wrap.className = 'graph-cell';
@@ -369,16 +392,19 @@ function graphCell(label, values, tone) {
       ? `${Math.round(lo)}` : `${Math.round(lo)}–${Math.round(hi)}`;
   }
   labels.append(left, right);
-  wrap.append(labels, stepChart([{ values, tone }], 'graph-cell__chart'));
+  wrap.append(labels, stepChart([{ values, tone, fill: true }], 'graph-cell__chart'));
   return wrap;
 }
 
-// Compact tier-graph row for CPU/MEM (ISSUES.md #17): the three time-tier
-// step charts sit side by side in one row instead of three stacked
-// full-width rows. Spans under the label+value columns (colspan 2 each) --
-// the LED+icon columns stay empty, same indent as where the metric's own
-// icon sits in the row above.
-function metricGraphRow(tiers, tone) {
+// One full-width trend graph beneath a CPU/MEM row (ISSUES.md #17 revised
+// -- was three side-by-side 30S/5M/30M tiers, collapsed to a single
+// 30-minute window per user feedback: three independently-auto-scaled
+// mini charts made magnitude impossible to compare across tiers and the
+// 30S tier was near-flat dead space at this size). Spans under the
+// label+value columns (colspan 2 each) -- the LED+icon columns stay
+// empty, same indent as where the metric's own icon sits in the row
+// above.
+function metricGraphRow(label, values, tone) {
   const tr = document.createElement('tr');
   const spacer = document.createElement('td');
   spacer.colSpan = 2;
@@ -386,17 +412,18 @@ function metricGraphRow(tiers, tone) {
   cell.colSpan = 2;
   const row = document.createElement('div');
   row.className = 'graph-row';
-  tiers.forEach(({ label, values }) => row.appendChild(graphCell(label, values, tone)));
+  row.appendChild(graphCell(label, values, tone));
   cell.appendChild(row);
   tr.append(spacer, cell);
   return tr;
 }
 
-// CPU/Memory: 30 seconds (ring buffer -- DB resolution is ~30s, too coarse
-// for this window), 5 minutes and 30 minutes (SQLite-backed /api/history,
-// which survives a page reload), collapsed into one compact graph row each
-// (ISSUES.md #17). Battery has no graphs at all (#17 -- not needed); its
-// LED-driven charge state is signal enough.
+// CPU/Memory: one filled trend graph each, the last 30 minutes
+// (SQLite-backed /api/history, which survives a page reload) -- revised
+// from #17's original 30S/5M/30M three-tier row per user feedback (the
+// tiers weren't independently comparable and 30S was near-flat dead
+// space at this size). Battery has no graph at all (#17 -- not needed);
+// its LED-driven charge state is signal enough.
 function renderCpuMemBat(s) {
   const box = $('sys');
   box.replaceChildren();
@@ -410,11 +437,7 @@ function renderCpuMemBat(s) {
       s.cpu_freq ? `${(s.cpu_freq / 1000).toFixed(1)}GHz` : null].filter(Boolean).join(' · '),
     led: { pct: s.cpu },
   }));
-  box.appendChild(metricGraphRow([
-    { label: '30S', values: ringSince('cpu', 30_000) },
-    { label: '5M', values: historySince('cpu_pct', 5 * 60_000) },
-    { label: '30M', values: historySince('cpu_pct', 30 * 60_000) },
-  ], cpuTone));
+  box.appendChild(metricGraphRow('30M', historySince('cpu_pct', 30 * 60_000), cpuTone));
 
   const memTone = hot(s.mem.pct);
   box.appendChild(sysRow({
@@ -423,21 +446,20 @@ function renderCpuMemBat(s) {
     sub: `${bytes(s.mem.used)} / ${bytes(s.mem.total)}`,
     led: { pct: s.mem.pct },
   }));
-  box.appendChild(metricGraphRow([
-    { label: '30S', values: ringSince('mem', 30_000) },
-    { label: '5M', values: historySince('mem_pct', 5 * 60_000) },
-    { label: '30M', values: historySince('mem_pct', 30 * 60_000) },
-  ], memTone));
+  box.appendChild(metricGraphRow('30M', historySince('mem_pct', 30 * 60_000), memTone));
 
   if (s.battery) {
-    const battTone = s.battery.pct < 20 && !s.battery.plugged
+    const battTone = s.battery.pct <= 35 && !s.battery.plugged
       ? 'var(--color-warm)' : 'var(--color-accent)';
     // Battery's LED ignores pct and reflects a discrete charge state
     // instead -- "charging" isn't a glow level. Priority: actually
     // charging beats a low-battery warning (a low battery that's plugged
     // in and recovering isn't the emergency a flashing light implies).
+    // charging/dim both read as green (on mains vs. running fine on its
+    // own); low is the one state that stays red and flashes (ISSUES.md
+    // #18 -- red used to mean "plugged in", which read backwards).
     const ringState = s.battery.charging ? 'charging'
-      : s.battery.pct < 20 ? 'low' : 'dim';
+      : s.battery.pct <= 35 ? 'low' : 'dim';
     box.appendChild(sysRow({
       icon: 'battery', label: 'BAT', tone: battTone,
       value: `${s.battery.pct}%`,

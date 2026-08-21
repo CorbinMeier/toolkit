@@ -167,7 +167,7 @@ Every surface in this system is read-only — there are no buttons, form inputs,
 ### Metric Row (System Table Row)
 - **Shape:** one `<tr>`. Storage/Network: icon cell, uppercase label cell, right-aligned tabular-nums value cell (with an optional smaller Recessed-Grey sub-line), chart/badge cell. CPU/MEM/BAT diverges (ISSUES.md #17): LED cell leads, then icon, label, value — the LED is the row's most immediate signal, so it reads first.
 - **Icon:** a hand-rolled 24×24 stroke-only SVG (`stroke-width: 1.6`, `currentColor`-driven), colored by the row's status tone (Signal Teal nominal, Ember Gold once past threshold). Storage icons are a floppy disk glyph (ISSUES.md #17) — a cut top-right corner, metal shutter, and label area, reading as storage media at a glance.
-- **Tier graph row:** CPU and Memory each get one additional compact row directly beneath their value row, holding three small side-by-side trend graphs (see Compact Tier Graph, below) rather than three stacked full-width rows. Battery has no graph row at all (ISSUES.md #17 — not needed; its LED-driven charge state is signal enough).
+- **Trend graph row:** CPU and Memory each get one additional compact row directly beneath their value row, holding one full-width filled trend graph (see Trend Graph, below) covering the last 30 minutes. Battery has no graph row at all (ISSUES.md #17 — not needed; its LED-driven charge state is signal enough).
 
 ### Utilization LED
 - **Shape:** a `0.85em` circle leading the CPU/MEM/BAT row, before the icon (ISSUES.md #16, #17 — it started as a large ring behind the icon, then moved to trail the label, then led the row entirely once it was clear the status signal should read first). Close to the row text's own cap-height, so it reads as part of the line rather than a floating shape.
@@ -176,15 +176,16 @@ Every surface in this system is read-only — there are no buttons, form inputs,
 - **Fill — Battery:** ignores percentage and reflects a discrete charge state instead — solid + fully glowing Distress Red while genuinely charging (not merely plugged in; see `sysinfo.battery_charging()`), dim at rest, and the same hard flash as CPU/MEM's danger band when below 20% and not charging. Charging always wins over the low-battery flash. Respects `prefers-reduced-motion` (flash becomes a steady dim-ish state).
 - Not interactive — a read-only status indicator, same as everything else in this system.
 
-### Compact Tier Graph
-- **Shape:** three `graph-cell`s side by side in one row (flex, equal share, `3.2rem` minimum each) beneath CPU/MEM's value row — collapses what used to be three stacked full-width tier rows into one (ISSUES.md #17).
-- **Corner labels:** each graph carries its own pair of tiny labels above the chart — tier name (`30S`/`5M`/`30M`) top-left, that tier's value range (e.g. `41–58`) top-right. The range decodes the step chart's otherwise-unlabeled auto-scaled y-axis, so a standalone label column per tier isn't needed the way the old design used one.
+### Trend Graph
+- **Shape:** one `graph-cell` spanning the row's full width beneath CPU/MEM's value row — revised from the original three side-by-side 30S/5M/30M tiers (ISSUES.md #17) to a single 30-minute window (ISSUES.md #17 revision, user feedback: three independently-auto-scaled mini charts couldn't be compared to each other by eye, and the 30S tier read as near-flat dead space at that size).
+- **Corner labels:** window length (`30M`) top-left, its value range (e.g. `41–58`) top-right. The range decodes the step chart's otherwise-unlabeled auto-scaled y-axis, so a standalone label column isn't needed.
 - Plain HTML text, not SVG — kept outside the chart's own `viewBox` so `preserveAspectRatio="none"` (see the Step-Line Chart below) never distorts it, the same reasoning CLAUDE.md documents for why `miniSpark()`-style bare-path SVGs get that attribute but a labeled chart shouldn't.
 
 ### Step-Line Chart
 - **Style:** a "staircase" (step-after) SVG path, `stroke-width: 2`, rounded caps/joins, `preserveAspectRatio="none"` so it fills its cell exactly — deliberately not a smoothed/interpolated line, since the underlying data is polled samples, not a continuous signal.
+- **Fill:** CPU/MEM's Trend Graph fills the area under the line with a vertical gradient in the row's own tone (`.35` opacity at the line, fading to `0` at the baseline) for more visual presence at wallpaper viewing distance, without implying any precision the bare line didn't already have. The Network chart stays unfilled — two overlapping fills (download/upload) would muddy against each other.
 - **Multi-series:** the Network chart plots two step lines (download in Signal Teal, upload in Ember Gold) on one shared scale, rather than two independently-scaled charts.
-- **Sizing:** small enough to sit on one text line next to its tier label — this is the system's answer to "a chart, but compact."
+- **Sizing:** small enough to sit on one text line next to its tier label on Network; CPU/MEM's Trend Graph runs taller (`clamp(1.1rem, 2.4vmin, 1.6rem)`) now that it isn't sharing row width with two other cells.
 
 ### Section Header
 - **Style:** Recessed Grey, uppercase, `0.3em` letter-spacing, with a full-width `1px` accent-colored underline that glows (`box-shadow: 0 0 6px`) — the same accent-glow language as the panel corner tab, applied to text instead of a shape.

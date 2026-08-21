@@ -153,10 +153,8 @@ def main() -> int:
         check("storage section rendered", ">Storage<" in dom, "missing Storage header")
         check("network section rendered", ">Network<" in dom and ">NET<" in dom,
               "missing Network header/row")
-        tiers_ok = (dom.count(">30S<") >= 2 and dom.count(">5M<") >= 2
-                    and dom.count(">30M<") >= 2)
-        check("cpu/mem step-chart tiers rendered", tiers_ok,
-              "expected 30S/5M/30M tier rows for both cpu and mem")
+        check("cpu/mem trend graphs rendered", dom.count(">30M<") >= 2,
+              "expected a 30M trend graph for both cpu and mem")
         check("tailwind compiled utilities",
               "--color-ink" in dom and ".text-faint" in dom,
               "vendor bundle may not have run")

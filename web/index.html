@@ -189,10 +189,10 @@
     .icon-led--flash .icon-led__fill{animation:none;opacity:.7}
   }
 
-  /* Compact tier-graph row (ISSUES.md #17): three small step charts side
-     by side instead of three stacked full-width rows, each carrying its
-     own corner labels (tier name left, value range right) so a standalone
-     label column per tier isn't needed. */
+  /* Trend graph row beneath a CPU/MEM row (ISSUES.md #17, revised): one
+     full-width filled step chart with its own corner labels (window
+     length left, value range right) -- was three side-by-side 30S/5M/30M
+     tiers, collapsed to a single 30-minute window per user feedback. */
   .graph-row{display:flex;gap:1vmin;padding:0.2vmin 0 0.3vmin}
   .graph-cell{position:relative;flex:1 1 0;min-width:3.2rem;display:flex;
     flex-direction:column;gap:0.15em}
@@ -200,7 +200,7 @@
     color:var(--color-faint);letter-spacing:0.04em;line-height:1;
     font-size:clamp(.38rem,.72vmin,.5rem);font-variant-numeric:tabular-nums}
   .graph-cell__labels span:last-child{overflow:hidden;text-overflow:clip;white-space:nowrap}
-  .graph-cell__chart{display:block;width:100%;height:clamp(0.7rem,1.5vmin,0.95rem)}
+  .graph-cell__chart{display:block;width:100%;height:clamp(1.1rem,2.4vmin,1.6rem)}
 
   /* slow drifting light so a static desktop still feels alive --
      crimson/cyan, matching CyberpunkEnvironment's reddish ambient glow */
