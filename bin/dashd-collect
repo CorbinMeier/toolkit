@@ -1,0 +1,78 @@
+#!/usr/bin/env python3
+"""Standalone historical-metrics collector for the desktop dashboard.
+
+Owns every write to data/metrics.db: samples cpu/mem/battery/net on its own
+timer (config.json's refresh.metrics_sample_seconds), independent of
+whether dashd-host has any view open or dashd-serve is being polled at all.
+dashd-serve is read-only against this database -- it only serves
+/api/history from it; the "current value" numbers in /api/state still come
+from dashd-serve's own live psutil call, unrelated to this process (see
+ISSUES.md #14).
+
+Runs forever; systemd (Restart=on-failure) is what keeps it alive across a
+crash, so the loop itself only needs to survive one bad sample, not retry
+logic of its own.
+"""
+from __future__ import annotations
+
+import json
+import signal
+import sqlite3
+import sys
+import time
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parent.parent
+DATA = ROOT / "data"
+CONFIG = ROOT / "config.json"
+
+sys.path.insert(0, str(ROOT / "lib"))
+import metrics  # noqa: E402 -- needs ROOT/lib on sys.path first
+import sysinfo  # noqa: E402
+
+
+def load_config() -> dict:
+    with CONFIG.open() as fh:
+        return json.load(fh)
+
+
+_running = True
+
+
+def _stop(_signum, _frame) -> None:
+    global _running
+    _running = False
+
+
+def collect_once(cfg: dict) -> None:
+    """Sample once and persist it -- split out of main()'s loop so it's
+    directly testable without sleeping."""
+    retain_hours = cfg.get("refresh", {}).get("metrics_retain_hours", 24)
+    sample = sysinfo.sample_stats()
+    metrics.insert_sample(DATA / "metrics.db", sample,
+                           retain_seconds=retain_hours * 3600)
+
+
+def main() -> int:
+    signal.signal(signal.SIGTERM, _stop)
+    signal.signal(signal.SIGINT, _stop)
+    DATA.mkdir(exist_ok=True)
+    print(f"dashd-collect  writing {DATA / 'metrics.db'}", flush=True)
+
+    while _running:
+        cfg = load_config()
+        interval = cfg.get("refresh", {}).get("metrics_sample_seconds", 30)
+        try:
+            collect_once(cfg)
+        except (OSError, sqlite3.Error) as exc:
+            # one bad sample must not kill the collector -- try again next tick
+            print(f"dashd-collect: sample failed: {exc}", file=sys.stderr, flush=True)
+        for _ in range(max(int(interval), 1)):
+            if not _running:
+                break
+            time.sleep(1)
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

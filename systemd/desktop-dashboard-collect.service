@@ -1,0 +1,20 @@
+[Unit]
+Description=Desktop dashboard historical-metrics collector
+Documentation=file:%h/Code/Dashboards/desktop/README.md
+PartOf=graphical-session.target
+After=graphical-session.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/python3 %h/Code/Dashboards/desktop/bin/dashd-collect
+Restart=on-failure
+RestartSec=3
+# Reads /proc via psutil and lsblk-adjacent power_supply nodes; needs no
+# elevated access. Owns data/metrics.db -- the only process that writes it.
+PrivateDevices=yes
+ProtectHome=read-only
+ReadWritePaths=%h/Code/Dashboards/desktop/data
+NoNewPrivileges=yes
+
+[Install]
+WantedBy=graphical-session.target

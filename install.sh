@@ -18,10 +18,10 @@ done
 systemctl --user daemon-reload
 echo
 echo "Units linked but NOT enabled. To start them now:"
-echo "    systemctl --user start desktop-dashboard-serve desktop-dashboard-host"
+echo "    systemctl --user start desktop-dashboard-serve desktop-dashboard-collect desktop-dashboard-host"
 echo
 echo "To also start them at every login:"
-echo "    systemctl --user enable desktop-dashboard-serve desktop-dashboard-host"
+echo "    systemctl --user enable desktop-dashboard-serve desktop-dashboard-collect desktop-dashboard-host"
 echo
 echo "After editing web/, repaint without a restart:"
 echo "    systemctl --user reload desktop-dashboard-host"

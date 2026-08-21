@@ -117,7 +117,10 @@ class TestDiskTree(unittest.TestCase):
             self.assertTrue(row["pct"] is not None or row["mount"])
 
     def test_falls_back_to_psutil_view_when_lsblk_unavailable(self):
-        with patch.object(dashd.subprocess, "run",
+        # disk_tree() lives in lib/sysinfo.py now (ISSUES.md #14); dashd
+        # just re-exports the function, so the real subprocess module to
+        # patch is the one sysinfo imported, not dashd's own namespace.
+        with patch.object(dashd.sysinfo.subprocess, "run",
                            side_effect=FileNotFoundError("no lsblk")):
             rows = dashd.disk_tree()
         self.assertEqual(rows, dashd._disk_tree_from_psutil())
@@ -214,8 +217,10 @@ class TestWeatherCache(unittest.TestCase):
 
 class TestBuildState(unittest.TestCase):
     def setUp(self):
-        # build_state() now opportunistically writes a metrics sample --
-        # keep that out of the real data/ dir, same as TestWeatherCache.
+        # build_state() reads weather.json/extra.json from DATA -- keep
+        # that out of the real data/ dir, same as TestWeatherCache. (It no
+        # longer writes metrics itself; bin/dashd-collect owns that, see
+        # ISSUES.md #14.)
         self._tmp = tempfile.TemporaryDirectory()
         self._orig_data = dashd.DATA
         dashd.DATA = Path(self._tmp.name)
@@ -299,58 +304,6 @@ class TestMetricsStore(unittest.TestCase):
         self.assertEqual(len(rows), 2, rows)
         self.assertIsNone(rows[0]["battery_pct"])   # pre-migration row
         self.assertAlmostEqual(rows[1]["battery_pct"], 55)
-
-
-class TestMaybeSampleMetrics(unittest.TestCase):
-    """dashd-serve's piggyback-on-the-poll sampler."""
-
-    def setUp(self):
-        self._tmp = tempfile.TemporaryDirectory()
-        self._orig_data = dashd.DATA
-        dashd.DATA = Path(self._tmp.name)
-        self._orig_last = dashd._last_sample_ts
-        dashd._last_sample_ts = 0.0
-
-    def tearDown(self):
-        dashd.DATA = self._orig_data
-        dashd._last_sample_ts = self._orig_last
-        self._tmp.cleanup()
-
-    @staticmethod
-    def _cfg(interval=30, retain_hours=24):
-        return {"refresh": {"metrics_sample_seconds": interval,
-                             "metrics_retain_hours": retain_hours}}
-
-    @staticmethod
-    def _sys_stats():
-        return {"cpu": 10.0, "temp_c": 50, "cpu_freq": 2600,
-                "mem": {"pct": 33.0}, "battery": {"pct": 77},
-                "net": {"down": 1.0, "up": 2.0}}
-
-    def test_first_call_writes_a_sample(self):
-        dashd.maybe_sample_metrics(self._cfg(), self._sys_stats())
-        rows = dashd.metrics.query_history(
-            dashd.DATA / "metrics.db", since_seconds=3600)
-        self.assertEqual(len(rows), 1)
-        self.assertAlmostEqual(rows[0]["cpu_pct"], 10.0)
-        self.assertAlmostEqual(rows[0]["mem_pct"], 33.0)
-        self.assertAlmostEqual(rows[0]["battery_pct"], 77)
-
-    def test_no_battery_stores_null_battery_pct(self):
-        stats = self._sys_stats()
-        stats["battery"] = None
-        dashd.maybe_sample_metrics(self._cfg(), stats)
-        rows = dashd.metrics.query_history(
-            dashd.DATA / "metrics.db", since_seconds=3600)
-        self.assertIsNone(rows[0]["battery_pct"])
-
-    def test_second_call_within_interval_is_skipped(self):
-        cfg = self._cfg(interval=9999)
-        dashd.maybe_sample_metrics(cfg, self._sys_stats())
-        dashd.maybe_sample_metrics(cfg, self._sys_stats())
-        rows = dashd.metrics.query_history(
-            dashd.DATA / "metrics.db", since_seconds=3600)
-        self.assertEqual(len(rows), 1, rows)
 
 
 class TestConfig(unittest.TestCase):

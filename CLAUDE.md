@@ -9,12 +9,14 @@ date, or location readout -- the user's own system already shows all
 three (#5, #9). Two halves: System (left) | Forecast — current
 conditions, hourly, week, sun/moon, all one panel (right, #10).
 
-Two processes:
+Three processes:
 
 - `bin/dashd-serve` — loopback static + data server on `127.0.0.1:4320`
+- `bin/dashd-collect` — standalone historical-metrics sampler; the only
+  writer of `data/metrics.db` (#14)
 - `bin/dashd-host` — GTK3 + gtk-layer-shell + WebKit2 surfaces, one per output
 
-Both run as **enabled** systemd user units (see *Current state* below).
+All three run as **enabled** systemd user units (see *Current state* below).
 
 `DESIGN.md` (plus its `.impeccable/design.json` sidecar) documents the
 visual system — "The Night Ops HUD": the teal/gold/red accent triad,
@@ -27,12 +29,20 @@ this file (#13).
 ```
 bin/dashd-serve     HTTP server; /api/state merges weather+sys+extra (and
                     exposes config.metrics_retain_hours so the frontend's
-                    history fetch window tracks it), /api/history serves
-                    lib/metrics.py's stored samples. sys.disks comes from
-                    lsblk (disk_tree()), not just psutil's mounted-partition
-                    view; battery gets a real charging flag from
-                    /sys/class/power_supply (see gotchas)
+                    history fetch window tracks it), /api/history reads
+                    lib/metrics.py's stored samples -- read-only against
+                    data/metrics.db, it never writes to it (#14). sys.disks
+                    comes from lsblk (sysinfo.disk_tree()), not just
+                    psutil's mounted-partition view; battery gets a real
+                    charging flag from /sys/class/power_supply (see gotchas)
+bin/dashd-collect   standalone timer loop (config.metrics_sample_seconds);
+                    the sole writer of data/metrics.db, independent of
+                    whether any view or dashd-serve poll is happening (#14)
 bin/dashd-host      layer-shell surfaces; --list prints monitor names
+lib/sysinfo.py      shared psutil sampling (system_stats() for dashd-serve's
+                    full live snapshot, sample_stats() for dashd-collect's
+                    smaller persisted row) so the two processes can't
+                    measure a metric two different ways
 lib/metrics.py      SQLite historical-metrics store (cpu/mem/battery_pct);
                     self-migrates ALTER TABLE ADD COLUMN for an older DB
 web/index.html      panel structure (Tailwind utility classes); System
@@ -58,7 +68,7 @@ ISSUES.md           the tracker — no GitHub remote on this project
 ## Running and editing
 
 ```bash
-systemctl --user status desktop-dashboard-serve desktop-dashboard-host
+systemctl --user status desktop-dashboard-serve desktop-dashboard-collect desktop-dashboard-host
 systemctl --user reload desktop-dashboard-host   # SIGHUP → reload all views
 journalctl --user -u desktop-dashboard-host -n 30
 ```
@@ -249,13 +259,24 @@ any other script can add panels without touching the server.
 
 ## Current state (2026-08-20)
 
-- Both units **enabled and active** against `graphical-session.target`; the
-  dashboard survives logout.
+- `desktop-dashboard-serve`/`-host` **enabled and active** against
+  `graphical-session.target`; the dashboard survives logout.
+  `desktop-dashboard-collect` (#14) exists as a unit file under `systemd/`
+  but is **not yet linked, enabled, or started** — Gatekeeper Protocol, same
+  as the original two units at first (`ISSUES.md` #1); run `install.sh` and
+  get explicit approval before `enable --now`.
 - `display.transparent` is **false**. The transparent path was verified to
   work — cosmic-comp does composite an RGBA layer-shell surface over
   `cosmic-bg`'s wallpaper, backdrop blur included — but it reads poorly
   against the current black-hole wallpaper, so it was reverted. One-key flip
   in `config.json` plus a host restart if revisited against calmer imagery.
+- #14 (2026-08-20): split historical-metrics collection out of dashd-serve
+  into a standalone `bin/dashd-collect`, the sole writer of
+  `data/metrics.db` now. Shared cpu/mem/battery/net sampling moved into
+  `lib/sysinfo.py` so dashd-serve's live `/api/state` numbers and
+  dashd-collect's persisted rows can't measure a metric two different
+  ways. dashd-serve's "current value" numbers are unaffected — still the
+  same fast live psutil poll as before, unrelated to this split.
 - Open: `ISSUES.md` #3 — `outputs.<name>.layout` reaches
   `document.documentElement.dataset.layout` but no CSS keys off
   `[data-layout]`, so both monitors render the same two-column grid (System |

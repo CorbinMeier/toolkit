@@ -5,21 +5,24 @@ Serves web/ as static files and a merged /api/state document:
 
     weather   Open-Meteo, cached to data/weather.json (refetched on interval)
     sun/moon  sunrise/sunset from Open-Meteo, moon phase computed locally
-    sys       live CPU/RAM/disk/net/battery via psutil
+    sys       live CPU/RAM/disk/net/battery via psutil (lib/sysinfo.py)
     extra     verbatim passthrough of data/extra.json, so cron jobs or other
               scripts can inject arbitrary panels without touching this file
+
+This process only ever *reads* data/metrics.db (the /api/history route,
+below) -- every write to it belongs to the standalone `bin/dashd-collect`,
+which samples on its own timer independent of whether this server is being
+polled at all (see ISSUES.md #14). "Current value" numbers in /api/state
+stay on the fast live psutil path (system_stats(), below), unrelated to
+that split.
 
 Binds loopback only. No auth by design -- do not expose this port.
 """
 from __future__ import annotations
 
-import contextlib
 import json
 import math
 import os
-import socket
-import sqlite3
-import subprocess
 import sys
 import threading
 import time
@@ -39,6 +42,10 @@ CONFIG = ROOT / "config.json"
 
 sys.path.insert(0, str(ROOT / "lib"))
 import metrics  # noqa: E402 -- needs ROOT on sys.path first
+import sysinfo  # noqa: E402,F401 -- ditto; tests patch dashd.sysinfo.subprocess
+from sysinfo import (  # noqa: E402,F401 -- re-exported for tests/back-compat
+    _disk_tree_from_psutil, battery_charging, disk_tree, system_stats,
+)
 
 # https://open-meteo.com/en/docs -- WMO weather interpretation codes
 WMO = {
@@ -66,8 +73,6 @@ def night_adjusted(icon: str, is_day: bool) -> str:
 
 
 _lock = threading.Lock()
-_net_prev: tuple[float, int, int] | None = None
-_last_sample_ts = 0.0
 
 
 def load_config() -> dict:
@@ -209,159 +214,10 @@ def cached_weather(cfg: dict) -> dict:
 
 
 # ---------------------------------------------------------------- system
-
-def _disk_tree_from_psutil() -> list[dict]:
-    """Fallback disk_tree() for when lsblk is missing -- mounted view only."""
-    rows = []
-    for part in psutil.disk_partitions(all=False):
-        if part.fstype in ("squashfs", "overlay", ""):
-            continue
-        try:
-            u = psutil.disk_usage(part.mountpoint)
-        except (PermissionError, OSError):
-            continue
-        rows.append({"name": part.device.rsplit("/", 1)[-1], "fstype": part.fstype,
-                     "size": u.total, "pct": u.percent, "mount": part.mountpoint})
-    return rows
-
-
-def disk_tree() -> list[dict]:
-    """Every partition lsblk knows about, with its current utilization.
-
-    psutil.disk_partitions() only sees mounted filesystems -- an unmounted
-    EFI/recovery/swap partition is invisible to it. lsblk walks the whole
-    block-device tree instead. Whole-disk rows (type "disk") and non-"part"
-    children (loop devices, LUKS/crypt mappings) are skipped -- they don't
-    carry a meaningful utilization figure of their own; a partition with
-    neither a mountpoint nor FSUSE% (e.g. a raw swap slot whose real usage
-    lives on its crypt child) is skipped too rather than shown as a bare,
-    dataless row. Falls back to the psutil-only view if lsblk is missing or
-    fails, so a minimal/container environment still gets *something*.
-    """
-    try:
-        out = subprocess.run(
-            ["lsblk", "-J", "-b", "-o", "NAME,TYPE,SIZE,FSTYPE,FSUSE%,MOUNTPOINT"],
-            capture_output=True, text=True, timeout=5, check=True)
-        tree = json.loads(out.stdout)
-    except (OSError, subprocess.SubprocessError, json.JSONDecodeError):
-        return _disk_tree_from_psutil()
-
-    rows: list[dict] = []
-
-    def walk(devices: list[dict]) -> None:
-        for d in devices:
-            use, mount = d.get("fsuse%"), d.get("mountpoint")
-            if d.get("type") == "part" and (use or mount):
-                rows.append({
-                    "name": d["name"], "fstype": d.get("fstype"),
-                    "size": d.get("size") or 0,
-                    "pct": float(use.rstrip("%")) if use else None,
-                    "mount": mount,
-                })
-            walk(d.get("children") or [])
-
-    walk(tree.get("blockdevices", []))
-    return rows
-
-
-def battery_charging(plugged: bool,
-                      power_supply_dir: Path = Path("/sys/class/power_supply")) -> bool:
-    """True only while the battery is *actually* charging, not merely
-    plugged in -- psutil's power_plugged is AC-present, not charge state
-    (see CLAUDE.md). /sys/class/power_supply/BAT*/status
-    ("Charging"/"Discharging"/"Full"/"Not charging") is the real signal;
-    fall back to `plugged` if no BAT node is exposed at all.
-    """
-    for status_path in sorted(power_supply_dir.glob("BAT*/status")):
-        try:
-            return status_path.read_text().strip() == "Charging"
-        except OSError:
-            continue
-    return plugged
-
-
-def system_stats() -> dict:
-    global _net_prev
-    now = time.time()
-    vm, sw = psutil.virtual_memory(), psutil.swap_memory()
-
-    io = psutil.net_io_counters()
-    up = down = 0.0
-    if _net_prev:
-        dt = max(now - _net_prev[0], 1e-6)
-        down = max(io.bytes_recv - _net_prev[1], 0) / dt
-        up = max(io.bytes_sent - _net_prev[2], 0) / dt
-    _net_prev = (now, io.bytes_recv, io.bytes_sent)
-
-    batt = None
-    if (b := psutil.sensors_battery()):
-        batt = {"pct": round(b.percent), "plugged": b.power_plugged,
-                "charging": battery_charging(b.power_plugged),
-                "secs_left": None if b.secsleft in
-                (psutil.POWER_TIME_UNLIMITED, psutil.POWER_TIME_UNKNOWN)
-                else b.secsleft}
-
-    temp = None
-    try:
-        for name in ("k10temp", "coretemp", "acpitz", "zenpower"):
-            if readings := psutil.sensors_temperatures().get(name):
-                temp = round(readings[0].current)
-                break
-    except (AttributeError, OSError):
-        pass
-
-    return {
-        "cpu": psutil.cpu_percent(interval=None),
-        "cpu_cores": psutil.cpu_percent(interval=None, percpu=True),
-        "cpu_freq": round(f.current) if (f := psutil.cpu_freq()) else None,
-        "load": list(os.getloadavg()),
-        "mem": {"pct": vm.percent, "used": vm.used, "total": vm.total},
-        "swap": {"pct": sw.percent, "used": sw.used, "total": sw.total},
-        "disks": sorted(disk_tree(), key=lambda d: d["name"]),
-        "net": {"up": round(up), "down": round(down)},
-        "battery": batt,
-        "temp_c": temp,
-        "uptime": round(now - psutil.boot_time()),
-        "procs": len(psutil.pids()),
-        "host": socket.gethostname(),
-    }
-
-
-def maybe_sample_metrics(cfg: dict, sys_stats: dict) -> None:
-    """Opportunistically persist one historical-metrics row, at most once
-    per `refresh.metrics_sample_seconds`.
-
-    Piggybacks on the existing /api/state poll rather than running its own
-    timer thread: the dashboard is continuously polled while any view is
-    open, and this reuses stats the caller already computed instead of
-    calling psutil a second time on an independent schedule.
-    psutil.cpu_percent(interval=None) and this file's own _net_prev both
-    measure "since the last call, by anyone in this process" -- a second,
-    independently-timed caller of system_stats() would fight the request
-    handler over that shared baseline and corrupt both readings.
-    """
-    global _last_sample_ts
-    refresh = cfg.get("refresh", {})
-    interval = refresh.get("metrics_sample_seconds", 30)
-    retain_hours = refresh.get("metrics_retain_hours", 24)
-    now = time.time()
-    with _lock:
-        if now - _last_sample_ts < interval:
-            return
-        _last_sample_ts = now
-    sample = {
-        "cpu_pct": sys_stats.get("cpu"),
-        "cpu_temp_c": sys_stats.get("temp_c"),
-        "cpu_freq_mhz": sys_stats.get("cpu_freq"),
-        "mem_pct": sys_stats.get("mem", {}).get("pct"),
-        "battery_pct": (sys_stats.get("battery") or {}).get("pct"),
-        "net_down": sys_stats.get("net", {}).get("down"),
-        "net_up": sys_stats.get("net", {}).get("up"),
-    }
-    # historical metrics are a bonus -- never break /api/state over them
-    with contextlib.suppress(sqlite3.Error, OSError):
-        metrics.insert_sample(DATA / "metrics.db", sample,
-                               retain_seconds=retain_hours * 3600)
+#
+# disk_tree(), battery_charging(), system_stats() now live in
+# lib/sysinfo.py, imported above -- shared with bin/dashd-collect so the two
+# processes can't measure a metric two different ways (see ISSUES.md #14).
 
 
 def build_state(cfg: dict) -> dict:
@@ -373,7 +229,6 @@ def build_state(cfg: dict) -> dict:
         except (json.JSONDecodeError, OSError) as exc:
             extra = {"_error": str(exc)}
     sys_stats = system_stats()
-    maybe_sample_metrics(cfg, sys_stats)
     return {
         "ts": time.time(),
         "config": {"units": cfg["units"], "display": cfg["display"],
