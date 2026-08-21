@@ -77,7 +77,7 @@ The signature visual device, inherited from the CyberpunkUIKit template this sys
 **Key Characteristics:**
 - Notched, chamfered-corner panels — never rounded corners — each carrying a single committed accent (teal, gold, or red)
 - Flat surfaces at rest; glow (text-shadow / box-shadow used as light emission, never elevation) is reserved for real status
-- Dense, table-aligned metric rows, each table compact and sized to its own content rather than stretched to fill the panel: every System row (CPU/MEM/BAT included) shares one shape — icon → label → value → chart or badge (ISSUES.md #31 retired the status LED that used to lead CPU/MEM/BAT; its slot is now an angled Utilization Bars graphic in the tail column, same as Storage/Network's chart)
+- Dense, table-aligned metric rows, each table compact and sized to its own content rather than stretched to fill the panel: every System row (CPU/MEM/BAT included) shares one shape — icon → label → value → chart or badge (#31 retired the status LED that used to lead CPU/MEM/BAT; its slot is now an angled Utilization Bars graphic in the tail column, same as Storage/Network's chart)
 - Tabular numerals everywhere a value updates, so nothing visually jitters on refresh
 - A dark, slowly-drifting ambient gradient background (42s/55s cycles, deliberately desynced) is the only "alive" surface that isn't tied to real data
 
@@ -105,7 +105,7 @@ Three committed accents plus a cool, low-saturation neutral scale. Panels never 
 Each accent carries a desaturated "dim" twin (`#1f6a6e` teal / `#8a6a12` gold / `#9c3230` red) used exclusively for the 2px panel border — the full-saturation accent is reserved for glow, text, and fills; the dim variant is reserved for structural edges.
 
 ### Status Bands (Utilization Bars spectrum)
-Each Utilization Bars segment is colored off its fixed position in the bar, not the metric's live percentage band: **Distress Red** (`#e8615a`) at the low end, through **Ember Gold** (`#fed33f`) at the midpoint, to **Standby Green** (`#2bfea0`) at the high end (see the Utilization Bars component, ISSUES.md #31). This replaced the earlier CPU/MEM status LED, which banded its single dot's hue off the metric's own percentage (green below 70%, gold 70–89%, red from 90%, ISSUES.md #17) — the LED read as too heavy and was retired.
+Each Utilization Bars segment is colored off its fixed position in the bar, not the metric's live percentage band: **Distress Red** (`#e8615a`) at the low end, through **Ember Gold** (`#fed33f`) at the midpoint, to **Standby Green** (`#2bfea0`) at the high end (see the Utilization Bars component, #31). This replaced the earlier CPU/MEM status LED, which banded its single dot's hue off the metric's own percentage (green below 70%, gold 70–89%, red from 90%, #17) — the LED read as too heavy and was retired.
 
 ### Named Rules
 **The One Accent Per Region Rule.** Every panel commits to exactly one accent — border, corner-tab glow, and section-header underline all read from the same `--panel-accent`/`--panel-border` pair. Accents never mix within a single panel.
@@ -137,7 +137,7 @@ Page padding is `2.2vmin` on the sides, and top/bottom padding adds a configurab
 
 Within each half, panels are content-sized, not stretched: rows pack toward the top and leftover vertical space below them is left unfilled, deliberately. A panel never distributes its rows to fill the available height. Related but distinct data within one panel (System's cpu/mem/bat rows vs. its Storage table vs. its Network table; Forecast's current-conditions vs. Hourly vs. Week vs. Sun & Moon) is separated by a `1px` hairline border-top with a small heading, not by breaking into a second panel card — one notched panel per region, internally divided.
 
-Every metric table is compact, not stretched (ISSUES.md #17): no table carries `w-full` — each sizes to its own content instead of filling the panel, so a narrow value or a small right-aligned chart doesn't leave a dead gap between itself and its column boundary. Every System table now shares one `<colgroup>` shape (icon `1.6–1.7em`, label / value auto-sized to content, tail auto-sized) — CPU/MEM/BAT's table used to diverge with a leading status LED column (ISSUES.md #17); that column is retired (#31) and CPU/MEM/BAT now carries its Utilization Bars graphic in the same tail slot Storage/Network already use.
+Every metric table is compact, not stretched (#17): no table carries `w-full` — each sizes to its own content instead of filling the panel, so a narrow value or a small right-aligned chart doesn't leave a dead gap between itself and its column boundary. Every System table now shares one `<colgroup>` shape (icon `1.6–1.7em`, label / value auto-sized to content, tail auto-sized) — CPU/MEM/BAT's table used to diverge with a leading status LED column (#17); that column is retired (#31) and CPU/MEM/BAT now carries its Utilization Bars graphic in the same tail slot Storage/Network already use.
 
 ## Elevation & Depth
 
@@ -163,18 +163,18 @@ Every surface in this system is read-only — there are no buttons, form inputs,
 - **Padding:** `1.5–2.2vmin` depending on region density (System's panel is tighter than Forecast's).
 
 ### Metric Row (System Table Row)
-- **Shape:** one `<tr>` — icon cell, uppercase label cell, right-aligned tabular-nums value cell (with an optional smaller Recessed-Grey sub-line), chart/badge cell. Every System row shares this shape now; CPU/MEM/BAT used to diverge with a leading LED cell (ISSUES.md #17), retired in #31.
-- **Icon:** a hand-rolled 24×24 stroke-only SVG (`stroke-width: 1.6`, `currentColor`-driven), colored by the row's status tone (Signal Teal nominal, Ember Gold once past threshold). Storage icons are a floppy disk glyph (ISSUES.md #17) — a cut top-right corner, metal shutter, and label area, reading as storage media at a glance.
+- **Shape:** one `<tr>` — icon cell, uppercase label cell, right-aligned tabular-nums value cell (with an optional smaller Recessed-Grey sub-line), chart/badge cell. Every System row shares this shape now; CPU/MEM/BAT used to diverge with a leading LED cell (#17), retired in #31.
+- **Icon:** a hand-rolled 24×24 stroke-only SVG (`stroke-width: 1.6`, `currentColor`-driven), colored by the row's status tone (Signal Teal nominal, Ember Gold once past threshold). Storage icons are a floppy disk glyph (#17) — a cut top-right corner, metal shutter, and label area, reading as storage media at a glance.
 
 ### Utilization Bars
-- **Shape:** a row of ten slanted parallelogram segments (SVG `<polygon>`, sharing the leaning-right skew of the notch/corner-tab language) in the tail column of every CPU/MEM/BAT row, replacing the retired status LED (ISSUES.md #31 — user feedback: the LED "wasn't working out"). Sized to sit inline with the row, same slot Storage/Network use for their chart/badge.
+- **Shape:** a row of ten slanted parallelogram segments (SVG `<polygon>`, sharing the leaning-right skew of the notch/corner-tab language) in the tail column of every CPU/MEM/BAT row, replacing the retired status LED (#31 — user feedback: the LED "wasn't working out"). Sized to sit inline with the row, same slot Storage/Network use for their chart/badge.
 - **Fill count:** `round(pct / 100 * 10)` segments read as lit; the rest sit unlit.
 - **Color:** each lit segment takes a fixed spectrum color by its position in the bar — Distress Red at the low end, through Ember Gold, to Standby Green at the high end (see Status Bands under Colors) — not the metric's own live percentage. A half-full bar always shows the same red-to-gold gradient regardless of which metric it belongs to; only the *count* of lit segments encodes the percentage. Unlit segments are a flat, low-opacity Hairline-adjacent grey (`oklch(0.32 0.02 260 / .45)`), reading as the empty track.
 - Not interactive — a read-only status indicator, same as everything else in this system.
 
 ### Step-Line Chart
 - **Style:** a "staircase" (step-after) SVG path, `stroke-width: 2`, rounded caps/joins, `preserveAspectRatio="none"` so it fills its cell exactly — deliberately not a smoothed/interpolated line, since the underlying data is polled samples, not a continuous signal.
-- **Fill:** an optional area fill under the line, a vertical gradient in the row's own tone (`.35` opacity at the line, fading to `0` at the baseline), for more visual presence at wallpaper viewing distance than a bare stroke. Currently used nowhere in the shipped UI (CPU/MEM's filled Trend Graph, the component that used it, was removed — ISSUES.md #34, not wanted on the wallpaper; metrics collection continues server-side) but the `stepChart(..., fill: true)` option stays for a future consumer.
+- **Fill:** an optional area fill under the line, a vertical gradient in the row's own tone (`.35` opacity at the line, fading to `0` at the baseline), for more visual presence at wallpaper viewing distance than a bare stroke. Currently used nowhere in the shipped UI (CPU/MEM's filled Trend Graph, the component that used it, was removed — #34, not wanted on the wallpaper; metrics collection continues server-side) but the `stepChart(..., fill: true)` option stays for a future consumer.
 - **Multi-series:** the Network chart plots two unfilled step lines (download in Signal Teal, upload in Ember Gold) on one shared scale, rather than two independently-scaled charts — the System region's one live use of this component today.
 
 ### Section Header
@@ -191,7 +191,7 @@ Every surface in this system is read-only — there are no buttons, form inputs,
 - **Do** use `font-variant-numeric: tabular-nums` on any text that holds a value which updates on a poll.
 - **Do** let a panel's content determine its height; leave unused vertical space rather than stretching rows to fill it.
 - **Do** reserve glow (box-shadow-as-light, text-shadow) for a real status condition — hot, charging, offline, or the panel corner tab's constant "this region is live" signal.
-- **Do** keep every System table's `<colgroup>` proportions identical (icon / label / value / tail) so their columns line up — all four now share the same shape since the CPU/MEM/BAT-only LED column was retired (ISSUES.md #31).
+- **Do** keep every System table's `<colgroup>` proportions identical (icon / label / value / tail) so their columns line up — all four now share the same shape since the CPU/MEM/BAT-only LED column was retired (#31).
 - **Do** size every metric table to its own content, not its parent panel (no `w-full`) — a narrow value or a small chart shouldn't leave a dead gap between itself and its column boundary.
 
 ### Don't:

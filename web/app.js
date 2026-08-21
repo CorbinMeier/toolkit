@@ -1,12 +1,12 @@
 /* Desktop dashboard renderer.
  *
  * No date/clock/location readout -- the user's own system already shows
- * all three (see ISSUES.md #5, #9). Everything redraws from /api/state on
+ * all three (see #5, #9). Everything redraws from /api/state on
  * a poll. Render is a pure function of the last good state, so a failed
  * poll just keeps the previous frame up and raises the offline banner
  * instead of blanking the wallpaper.
  *
- * ISSUES.md #34: the CPU/Memory trend graphs (and the /api/history poll
+ *  #34: the CPU/Memory trend graphs (and the /api/history poll
  * that fed them) were removed from this file -- not wanted on the
  * wallpaper. Collection is untouched (dashd-collect still writes
  * data/metrics.db every config.metrics_sample_seconds, and dashd-serve
@@ -167,7 +167,7 @@ function sysIcon(kind, tone = 'currentColor') {
       });
       break;
     case 'disk':
-      // Floppy disk (ISSUES.md #17): body with the classic cut top-right
+      // Floppy disk (#17): body with the classic cut top-right
       // corner, a metal shutter near the top, and a label area below --
       // reads as storage media at a glance, unlike the old plain-disk glyph.
       g.appendChild(el('path', {
@@ -189,7 +189,7 @@ function sysIcon(kind, tone = 'currentColor') {
       break;
     // Weather stat icons -- same hand-rolled stroke language as the System
     // icons above (no emoji, no external asset), for the Wind/Humidity/
-    // Rain/UV rows and the sunrise/sunset readout (ISSUES.md, Forecast
+    // Rain/UV rows and the sunrise/sunset readout (#9, Forecast
     // brought to System's icon-led row treatment).
     case 'wind':
       g.appendChild(el('path', { d: 'M2 8 H13.5 a2.75 2.75 0 1 0 -2.75 -2.75' }));
@@ -248,7 +248,7 @@ function arrowGlyph(dir) {
 // Three-stop hex interpolation (crimson -> warm -> online) used to color
 // each segment of utilBars() -- a fixed spectrum across the bar's full
 // length, revealed proportionally by how many segments are filled, the
-// same effect as the reference racing-stat graphic (ISSUES.md #31).
+// same effect as the reference racing-stat graphic (#31).
 function lerpHex(a, b, t) {
   const pa = [1, 3, 5].map((i) => parseInt(a.slice(i, i + 2), 16));
   const pb = [1, 3, 5].map((i) => parseInt(b.slice(i, i + 2), 16));
@@ -260,7 +260,7 @@ function spectrumColor(t) {
     : lerpHex('#fed33f', '#2bfea0', (t - 0.5) / 0.5);
 }
 
-/* Angled utilization bar (ISSUES.md #31, replacing the status LED -- user
+/* Angled utilization bar (#31, replacing the status LED -- user
  * feedback: "not working out"). A row of slanted parallelogram segments,
  * same idea as a car-stat readout: segments up to the filled count light up
  * in a fixed red -> gold -> green spectrum across the bar's position (not
@@ -362,7 +362,7 @@ function miniBar(pct, tone = 'var(--color-accent)') {
 
 // One <tr>: icon | label | value | tail node (utilization bar, histograph,
 // or mini bar). Same shape for every System row now -- CPU/MEM/BAT used to
-// lead with a status LED instead of a tail column (ISSUES.md #16, #17);
+// lead with a status LED instead of a tail column (#16, #17);
 // that LED is retired (#31, "not working out") in favor of an angled
 // utilization-bar graphic in the same tail slot Storage/Network already
 // use, so every row shares one column layout -- a real <table>, not
@@ -400,8 +400,8 @@ function sysRow({ icon, iconNode, label, value, sub = '', tail = null, tone = 'v
   return tr;
 }
 
-// CPU/Memory/Battery value rows. Trend graphs used to render here (ISSUES.md
-// #17, #33) but were removed (#34) -- not wanted on the wallpaper. Metrics
+// CPU/Memory/Battery value rows. Trend graphs used to render here (#17,
+// #33) but were removed (#34) -- not wanted on the wallpaper. Metrics
 // collection is untouched (dashd-collect, metrics.db, /api/history all still
 // live) for possible later use. Each row's tail column is an angled
 // utilization-bar graphic (#31, replacing the retired status LED).
@@ -450,7 +450,7 @@ function renderCpuMemBat(s) {
      </div>`;
 }
 
-// Storage: its own dedicated area (ISSUES.md #12), not mixed into the
+// Storage: its own dedicated area (#12), not mixed into the
 // cpu/mem/bat rows above. Every partition lsblk reports a real utilization
 // for, not just psutil's mounted view -- see dashd-serve's disk_tree().
 function renderDisks(disks) {
@@ -470,7 +470,7 @@ function renderDisks(disks) {
 
 // Network: dedicated area below Storage, one row, one step chart with two
 // lines (download/upload). No long-term storage for this one (see
-// ISSUES.md #12) -- it's the ring buffer's fine 5s resolution that makes
+// #12) -- it's the ring buffer's fine 5s resolution that makes
 // brief throughput bursts visible at all, so a DB-backed tier would just
 // flatten them.
 function renderNetwork(s) {
@@ -527,7 +527,7 @@ function renderWeather(w) {
 
 /* Compact hourly strip: time + icon + temp, no chart. Replaces a "Next 24
  * hours" sparkline that was vague and cost far more vertical space than
- * the info was worth (see ISSUES.md #8). */
+ * the info was worth (see #8). */
 function renderHourly(w) {
   const pts = w.hourly.filter((h) => h.temp != null).slice(0, 6);
   $('hourly').replaceChildren(...pts.map((p) => {

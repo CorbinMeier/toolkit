@@ -4,7 +4,7 @@ Used by both `bin/dashd-serve` (the live /api/state snapshot, full detail)
 and `bin/dashd-collect` (the smaller periodic row persisted to SQLite) --
 kept in one place so the two processes' net-throughput delta, real
 charging-vs-plugged-in state, and cpu-temp lookup can't drift out of sync
-(see ISSUES.md #14).
+(see #14).
 
 Each importing process gets its own module instance, so `_net_prev`'s delta
 baseline is private to that process -- exactly what's wanted, since it means

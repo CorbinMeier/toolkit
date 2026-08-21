@@ -127,7 +127,7 @@
 
   /* System table: icon | label | value | histograph/badge, one row per
      metric, so everything lines up in real table columns instead of
-     independently-sized flex rows. width:fit-content (ISSUES.md #33) --
+     independently-sized flex rows. width:fit-content (#33) --
      the CPU/MEM/BAT table is a direct child of .panel's flex column, so
      without this it inherits align-items:stretch and gets forced to the
      panel's full cross-axis width, which then spreads its auto-sized
@@ -148,7 +148,7 @@
   .icon-inline{width:0.9em;height:0.9em;display:inline-block;vertical-align:-0.15em}
   .icon-inline-sm{width:0.8em;height:0.8em;display:inline-block;vertical-align:-0.08em}
 
-  /* Angled utilization bar (ISSUES.md #31, replacing the retired status
+  /* Angled utilization bar (#31, replacing the retired status
      LED -- user feedback: "not working out"). A row of slanted parallelogram
      <polygon> segments built in app.js's utilBars(); this rule just gives
      the containing <svg> a small glow so the lit segments read as
@@ -188,7 +188,7 @@
   </div>
 
   <!-- No date/clock/location readout -- the user's system already shows
-       all three (see ISSUES.md #5, #9). Single stacked column: System above
+       all three (see #5, #9). Single stacked column: System above
        Forecast, both compact (justify-self-start) rather than the old
        side-by-side halves. -->
   <main id="root" class="h-full w-full px-[2.2vmin] gap-[1.8vmin]
@@ -196,7 +196,7 @@
         grid grid-cols-1">
 
     <!-- ============ SYSTEM ============ -->
-    <!-- self-start (ISSUES.md #35): without it, #root's grid default
+    <!-- self-start (#35): without it, #root's grid default
          align-items:stretch forces this <section> to fill the row's full
          height (matched to the taller Forecast section) even though the
          visible .panel card inside it already hugs its own content --
@@ -215,7 +215,7 @@
         <h2 class="sec-head text-faint uppercase tracking-[0.3em] text-[clamp(.55rem,1.15vmin,.8rem)]">
           System</h2>
         <!-- CPU, Memory, Battery -- table so icon / label / value / utilization
-             bar line up across every row (ISSUES.md #31: the row shape now
+             bar line up across every row (#31: the row shape now
              matches Storage/Network -- icon, label, value, tail -- since the
              leading status LED was retired). Compact, not w-full (#17) --
              sized to its own content, not stretched to fill the panel.
@@ -282,7 +282,7 @@
              the wallpaper. Markup/render code kept intact (renderHourly()
              in app.js still runs, just targets a hidden node) in case it
              comes back, same pattern as the retired CPU/MEM trend graphs
-             (ISSUES.md #34). -->
+             (#34). -->
         <div class="hidden pt-[1.1vmin] border-t border-[var(--color-hairline)]">
           <h3 class="sec-head text-faint uppercase tracking-[0.3em]
               text-[clamp(.5rem,1.05vmin,.72rem)] mb-[0.6vmin]">Hourly</h3>
@@ -298,7 +298,7 @@
         <!-- Sun & Moon hidden -- same "too much dead space" feedback as
              Hourly. Markup/render code kept intact (renderSunMoon() in
              app.js still runs, just targets hidden nodes), same pattern as
-             the retired CPU/MEM trend graphs (ISSUES.md #34). -->
+             the retired CPU/MEM trend graphs (#34). -->
         <div class="hidden pt-[1.1vmin] border-t border-[var(--color-hairline)]">
           <h3 class="sec-head text-faint uppercase tracking-[0.3em]
               text-[clamp(.5rem,1.05vmin,.72rem)] mb-[0.7vmin]">Sun &amp; Moon</h3>

@@ -142,9 +142,9 @@ def main() -> int:
             return (m.group(1) if m else "").strip()
 
         # No date/clock/location readout -- the user's own system already
-        # shows all three (see ISSUES.md #5, #9). Current temperature now
+        # shows all three (see #5, #9). Current temperature now
         # renders as the Forecast panel's "NOW" sys-table row (no more
-        # large standalone hero readout, see ISSUES.md) -- its label plus
+        # large standalone hero readout, see #9) -- its label plus
         # a degree-marked value is the remaining proof the panel rendered.
         if not w.get("unavailable"):
             check("temperature rendered", ">NOW<" in dom and "°" in dom,
@@ -155,7 +155,7 @@ def main() -> int:
         check("storage section rendered", ">Storage<" in dom, "missing Storage header")
         check("network section rendered", ">Network<" in dom and ">NET<" in dom,
               "missing Network header/row")
-        # ISSUES.md #34: trend graphs are deliberately not shown on the
+        # #34: trend graphs are deliberately not shown on the
         # wallpaper anymore (collection continues server-side) -- assert
         # they stay gone rather than silently reappearing on a regression.
         check("cpu/mem trend graphs stay hidden", ">30M<" not in dom,

@@ -7,7 +7,7 @@ whether dashd-host has any view open or dashd-serve is being polled at all.
 dashd-serve is read-only against this database -- it only serves
 /api/history from it; the "current value" numbers in /api/state still come
 from dashd-serve's own live psutil call, unrelated to this process (see
-ISSUES.md #14).
+#14).
 
 Runs forever; systemd (Restart=on-failure) is what keeps it alive across a
 crash, so the loop itself only needs to survive one bad sample, not retry

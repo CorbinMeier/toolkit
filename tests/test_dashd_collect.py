@@ -24,7 +24,7 @@ _loader.exec_module(collect)
 
 class TestCollectOnce(unittest.TestCase):
     """collect_once() is main()'s loop body pulled out so it's testable
-    without sleeping -- see ISSUES.md #14."""
+    without sleeping -- see #14."""
 
     def setUp(self):
         self._tmp = tempfile.TemporaryDirectory()

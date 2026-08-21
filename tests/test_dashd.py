@@ -117,7 +117,7 @@ class TestDiskTree(unittest.TestCase):
             self.assertTrue(row["pct"] is not None or row["mount"])
 
     def test_falls_back_to_psutil_view_when_lsblk_unavailable(self):
-        # disk_tree() lives in lib/sysinfo.py now (ISSUES.md #14); dashd
+        # disk_tree() lives in lib/sysinfo.py now (#14); dashd
         # just re-exports the function, so the real subprocess module to
         # patch is the one sysinfo imported, not dashd's own namespace.
         with patch.object(dashd.sysinfo.subprocess, "run",
@@ -220,7 +220,7 @@ class TestBuildState(unittest.TestCase):
         # build_state() reads weather.json/extra.json from DATA -- keep
         # that out of the real data/ dir, same as TestWeatherCache. (It no
         # longer writes metrics itself; bin/dashd-collect owns that, see
-        # ISSUES.md #14.)
+        # #14.)
         self._tmp = tempfile.TemporaryDirectory()
         self._orig_data = dashd.DATA
         dashd.DATA = Path(self._tmp.name)

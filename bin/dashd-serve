@@ -12,7 +12,7 @@ Serves web/ as static files and a merged /api/state document:
 This process only ever *reads* data/metrics.db (the /api/history route,
 below) -- every write to it belongs to the standalone `bin/dashd-collect`,
 which samples on its own timer independent of whether this server is being
-polled at all (see ISSUES.md #14). "Current value" numbers in /api/state
+polled at all (see #14). "Current value" numbers in /api/state
 stay on the fast live psutil path (system_stats(), below), unrelated to
 that split.
 
@@ -217,7 +217,7 @@ def cached_weather(cfg: dict) -> dict:
 #
 # disk_tree(), battery_charging(), system_stats() now live in
 # lib/sysinfo.py, imported above -- shared with bin/dashd-collect so the two
-# processes can't measure a metric two different ways (see ISSUES.md #14).
+# processes can't measure a metric two different ways (see #14).
 
 
 def build_state(cfg: dict) -> dict:

@@ -67,8 +67,6 @@ data/               weather.json cache, extra.json, metrics.db (all gitignored)
 scripts/smoke.py    the "build" stage — end-to-end render assertions
 tests/test_dashd.py unittest suite (hermetic, no network)
 systemd/            the two user units
-ISSUES.md           legacy tracker, superseded by GitHub issues (origin →
-                    CorbinMeier/desktop, see #21); kept only for history
 ```
 
 ## Running and editing
@@ -297,11 +295,10 @@ any other script can add panels without touching the server.
 - **Never run `systemctl --user enable/start` autonomously** — present and
   wait for yes/no (Gatekeeper Protocol, same as the sibling `../claude`
   project). The current units were enabled on explicit approval.
-- GitHub (`gh issue`) is the tracker now — `origin` points at
+- GitHub (`gh issue`) is the tracker — `origin` points at
   `CorbinMeier/desktop` (see #21). File work as a `gh` issue before fixing
   it, bracket work with `gh issue comment` `Started at:` / `Ended at:` /
-  `Time elapsed:` lines pulled from `date`. `ISSUES.md` is legacy history
-  only — do not add new entries to it.
+  `Time elapsed:` lines pulled from `date`.
 - The human is the final verification step for anything visual. Verify
   functionally first (smoke stage, curl, journal), then ask them to look —
   a screenshot cannot see past their windows.
@@ -312,7 +309,7 @@ any other script can add panels without touching the server.
   `graphical-session.target`; the dashboard survives logout.
   `desktop-dashboard-collect` (#14) was linked, approved, and
   `enable --now`'d in-session — Gatekeeper Protocol satisfied, same as the
-  original two units (`ISSUES.md` #1).
+  original two units (#1).
 - `display.transparent` is **false**. The transparent path was verified to
   work — cosmic-comp does composite an RGBA layer-shell surface over
   `cosmic-bg`'s wallpaper, backdrop blur included — but it reads poorly
@@ -351,7 +348,7 @@ any other script can add panels without touching the server.
   dashd-collect's persisted rows can't measure a metric two different
   ways. dashd-serve's "current value" numbers are unaffected — still the
   same fast live psutil poll as before, unrelated to this split.
-- Open: `ISSUES.md` #3 — `outputs.<name>.layout` reaches
+- Open: #3 — `outputs.<name>.layout` reaches
   `document.documentElement.dataset.layout` but no CSS keys off
   `[data-layout]`, so both monitors render the same two-column grid (System |
   Forecast, since #10). Looks right on both; just not differentiated.
