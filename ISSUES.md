@@ -2,6 +2,21 @@
 
 Newest first. No GitHub remote on this project, so this file is the tracker.
 
+## 20. Add a one-shot script that runs the chain and deploys to the live desktop
+
+Status: open
+Source: user request
+Date: 2026-08-20
+
+User request mid-session: "Create a script that builds and updates the
+desktop with the current changes." `web/` has no build step (CLAUDE.md),
+so "build" here means the §6 lint->test->build chain; "update the
+desktop" means reload the live `desktop-dashboard-host` unit so the
+change actually renders, per the project's existing "Edit, then reload"
+workflow -- just automated into one command instead of run by hand.
+
+Started at: 2026-08-20T19:28:49-07:00
+
 ## 19. CPU/Memory trend graph: collapse the 30S/5M/30M three-tier row into one filled 30-minute graph
 
 Status: closed
