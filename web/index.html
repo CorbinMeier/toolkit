@@ -471,6 +471,28 @@
         <div id="schedule" class="flex flex-col gap-[0.15vmin]"></div>
       </div>
     </section>
+
+    <!-- ============ MONITOR: networked devices (#27) ============ -->
+    <section class="accent-crimson flex flex-col min-h-0 self-start justify-self-start">
+      <div class="panel px-[2vmin] py-[1.5vmin] flex flex-col gap-[0.6vmin]">
+        <h2 class="sec-head text-faint uppercase tracking-[0.3em] text-[clamp(.55rem,1.15vmin,.8rem)]">
+          Monitor</h2>
+
+        <!-- Devices: same icon|label|value sys-table shape as System.
+             Scan target/interval are set via the Control Backend (#30);
+             this just renders dashd-serve's cached nmap sweep result. -->
+        <div>
+          <h3 class="sec-head text-faint uppercase tracking-[0.3em]
+              text-[clamp(.48rem,1vmin,.68rem)] mb-[0.35vmin]">Devices</h3>
+          <table class="sys-table border-collapse">
+            <colgroup>
+              <col class="w-[1.6em]"><col><col><col>
+            </colgroup>
+            <tbody id="devices"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
   </main>
 
   <script src="app.js"></script>

@@ -196,6 +196,19 @@ function sysIcon(kind, tone = 'currentColor') {
       g.appendChild(el('line', { x1: 15.5, y1: 3, x2: 20, y2: 5.5 }));
       g.appendChild(el('circle', { cx: 12, cy: 17.5, r: 3.2, fill: tone }));
       break;
+    // Networked-devices row icon (#27): a small node with radiating links,
+    // reads as "host on the network" at a glance, same hand-drawn language
+    // as the rest of this glyph set.
+    case 'device':
+      g.appendChild(el('circle', { cx: 12, cy: 12, r: 3 }));
+      [0, 1, 2, 3].forEach((i) => {
+        const a = (i * Math.PI) / 2 + Math.PI / 4;
+        g.appendChild(el('line', {
+          x1: 12 + Math.cos(a) * 5, y1: 12 + Math.sin(a) * 5,
+          x2: 12 + Math.cos(a) * 10, y2: 12 + Math.sin(a) * 10,
+        }));
+      });
+      break;
     // Weather stat icons -- same hand-rolled stroke language as the System
     // icons above (no emoji, no external asset), for the Wind/Humidity/
     // Rain/UV rows and the sunrise/sunset readout (#9, Forecast
@@ -526,6 +539,33 @@ function renderMusic(music) {
     sub: [music.artist, music.album].filter(Boolean).join(' · '),
     tail: pct != null ? miniBar(pct, 'var(--color-accent)') : null,
   }));
+}
+
+// Networked devices (#27): one row per host nmap's ping sweep found up,
+// same icon|label|value|tail sys-table shape as everything else in System.
+// scan_target/scan_interval_seconds live in config.json, editable from the
+// Control Backend (#30) -- this panel just renders whatever dashd-serve's
+// cached_devices() last found.
+function renderDevices(devices) {
+  const box = $('devices');
+  box.replaceChildren();
+  if (!devices || !devices.length) {
+    const tr = document.createElement('tr');
+    const td = document.createElement('td');
+    td.colSpan = 4;
+    td.className = 'text-faint text-[clamp(.42rem,.85vmin,.6rem)] py-[0.2vmin]';
+    td.textContent = 'no devices found';
+    tr.appendChild(td);
+    box.appendChild(tr);
+    return;
+  }
+  devices.forEach((d) => {
+    box.appendChild(sysRow({
+      icon: 'device', label: (d.hostname || d.ip).toUpperCase(),
+      tone: 'var(--color-online)',
+      value: d.hostname ? d.ip : 'up',
+    }));
+  });
 }
 
 /* -------------------------------------------------------- weather panels */
@@ -916,6 +956,7 @@ function apply(s) {
   renderCalendar(s.extra);
   renderTasks(s.tasks);
   renderSchedule((s.extra && s.extra.schedule) || []);
+  renderDevices(s.devices);
   refreshAutoCycles();
 
   const boot = $('boot');

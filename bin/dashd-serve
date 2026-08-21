@@ -49,7 +49,8 @@ DATA = ROOT / "data"
 CONFIG = ROOT / "config.json"
 
 sys.path.insert(0, str(ROOT / "lib"))
-import metrics  # noqa: E402 -- needs ROOT on sys.path first
+import devices  # noqa: E402 -- needs ROOT on sys.path first
+import metrics  # noqa: E402
 import sysinfo  # noqa: E402,F401 -- ditto; tests patch dashd.sysinfo.subprocess
 from sysinfo import (  # noqa: E402,F401 -- re-exported for tests/back-compat
     _disk_tree_from_psutil, battery_charging, disk_tree, now_playing, system_stats,
@@ -221,6 +222,59 @@ def cached_weather(cfg: dict) -> dict:
             return {"error": str(exc), "stale": True, "unavailable": True}
 
 
+# ------------------------------------------------------------- devices/logs
+
+_devices_scan_lock = threading.Lock()
+_devices_scanning = False
+
+
+def _run_device_scan(target: str, path: Path) -> None:
+    """Runs off the request thread -- see cached_devices() below."""
+    global _devices_scanning
+    try:
+        found = devices.scan_devices(target)
+        with _lock:
+            path.write_text(json.dumps({"devices": found, "fetched_at": time.time()}))
+    finally:
+        with _devices_scan_lock:
+            _devices_scanning = False
+
+
+def cached_devices(cfg: dict) -> list[dict]:
+    """LAN device sweep, cached to data/devices.json (#27), refreshed by a
+    background thread rather than inline: an nmap -sn ping sweep can take
+    real seconds (longer still if scan_target isn't actually reachable), and
+    running it synchronously inside an /api/state request would stall that
+    poll -- and every other client polling at the same time, since it's the
+    handler thread that would block. Returns the last-known cache (empty
+    list before the first scan completes) and kicks off a fresh scan once
+    devices.scan_interval_seconds has elapsed, at most one at a time.
+    """
+    dev_cfg = cfg.get("devices", {})
+    target = dev_cfg.get("scan_target")
+    if not target:
+        return []
+    path = DATA / "devices.json"
+    ttl = dev_cfg.get("scan_interval_seconds", 300)
+    with _lock:
+        cache = None
+        if path.exists():
+            try:
+                cache = json.loads(path.read_text())
+            except (json.JSONDecodeError, OSError):
+                cache = None
+    age = time.time() - cache["fetched_at"] if cache else 1e9
+
+    global _devices_scanning
+    if age >= ttl:
+        with _devices_scan_lock:
+            if not _devices_scanning:
+                _devices_scanning = True
+                threading.Thread(target=_run_device_scan, args=(target, path),
+                                  daemon=True).start()
+    return cache["devices"] if cache else []
+
+
 # ---------------------------------------------------------------- system
 #
 # disk_tree(), battery_charging(), system_stats() now live in
@@ -273,6 +327,7 @@ def build_state(cfg: dict) -> dict:
         "sys": sys_stats,
         "music": now_playing(),
         "tasks": load_tasks(),
+        "devices": cached_devices(cfg),
         "extra": extra,
     }
 

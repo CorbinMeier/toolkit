@@ -70,10 +70,12 @@ def main() -> int:
 
         state = json.loads(get("/api/state"))
         check("state has all top-level keys",
-              {"ts", "config", "weather", "sys", "tasks", "extra"} <= state.keys(),
-              str(sorted(state.keys())))
+              {"ts", "config", "weather", "sys", "tasks", "devices", "extra"}
+              <= state.keys(), str(sorted(state.keys())))
         check("tasks has an items list",
               isinstance(state["tasks"].get("items"), list), state["tasks"])
+        check("devices is a list", isinstance(state["devices"], list),
+              state["devices"])
 
         w = state["weather"]
         if w.get("unavailable"):
@@ -158,6 +160,12 @@ def main() -> int:
         check("network section rendered", ">Network<" in dom and ">NET<" in dom,
               "missing Network header/row")
         check("tasks section rendered", ">Tasks<" in dom, "missing Tasks header")
+        # "Monitor" (not ">Monitor<") -- its <h2> wraps across two lines in
+        # the source, same as System's own header, so the text never sits
+        # flush against the closing '>' the way single-line h3s do below.
+        check("monitor section rendered",
+              "Monitor" in dom and ">Devices<" in dom,
+              "missing Monitor/Devices headers (#27)")
         # #34: trend graphs are deliberately not shown on the
         # wallpaper anymore (collection continues server-side) -- assert
         # they stay gone rather than silently reappearing on a regression.

@@ -281,14 +281,17 @@ class TestBuildState(unittest.TestCase):
 
     def test_contains_the_keys_the_page_reads(self):
         cfg = dashd.load_config()
-        orig = dashd.cached_weather
+        orig_weather, orig_devices = dashd.cached_weather, dashd.cached_devices
         dashd.cached_weather = lambda _c: {"stale": False, "unavailable": True}
+        dashd.cached_devices = lambda _c: []
         try:
             st = dashd.build_state(cfg)
         finally:
-            dashd.cached_weather = orig
-        for key in ("ts", "config", "weather", "sys", "music", "tasks", "extra"):
+            dashd.cached_weather = orig_weather
+            dashd.cached_devices = orig_devices
+        for key in ("ts", "config", "weather", "sys", "music", "tasks", "devices", "extra"):
             self.assertIn(key, st)
+        self.assertEqual(st["devices"], [])
         for key in ("units", "display", "location", "poll", "metrics_retain_hours"):
             self.assertIn(key, st["config"])
 
@@ -387,6 +390,31 @@ class TestMetricsStore(unittest.TestCase):
         self.assertEqual(len(rows), 2, rows)
         self.assertIsNone(rows[0]["battery_pct"])   # pre-migration row
         self.assertAlmostEqual(rows[1]["battery_pct"], 55)
+
+
+class TestDevices(unittest.TestCase):
+    """dashd.devices is lib/devices.py (#27), re-exported the same way
+    dashd.sysinfo is -- patch the subprocess module it actually imported."""
+
+    _GREP_OUTPUT = (
+        "Host: 192.168.1.5 (router.lan)\tStatus: Up\n"
+        "Host: 192.168.1.9 ()\tStatus: Up\n"
+        "Host: 192.168.1.20 ()\tStatus: Down\n"
+    )
+
+    def test_parses_up_hosts_from_grepable_output(self):
+        fake = type("R", (), {"stdout": self._GREP_OUTPUT})()
+        with patch.object(dashd.devices.subprocess, "run", return_value=fake):
+            found = dashd.devices.scan_devices("192.168.1.0/24")
+        self.assertEqual(found, [
+            {"ip": "192.168.1.5", "hostname": "router.lan", "status": "up"},
+            {"ip": "192.168.1.9", "hostname": "", "status": "up"},
+        ])
+
+    def test_missing_nmap_returns_empty_list_not_an_error(self):
+        with patch.object(dashd.devices.subprocess, "run",
+                           side_effect=FileNotFoundError("no nmap")):
+            self.assertEqual(dashd.devices.scan_devices("192.168.1.0/24"), [])
 
 
 class TestConfig(unittest.TestCase):
