@@ -354,6 +354,7 @@ def maybe_sample_metrics(cfg: dict, sys_stats: dict) -> None:
         "cpu_temp_c": sys_stats.get("temp_c"),
         "cpu_freq_mhz": sys_stats.get("cpu_freq"),
         "mem_pct": sys_stats.get("mem", {}).get("pct"),
+        "battery_pct": (sys_stats.get("battery") or {}).get("pct"),
         "net_down": sys_stats.get("net", {}).get("down"),
         "net_up": sys_stats.get("net", {}).get("up"),
     }
@@ -378,7 +379,12 @@ def build_state(cfg: dict) -> dict:
         "config": {"units": cfg["units"], "display": cfg["display"],
                    "location": cfg["location"]["name"],
                    "outputs": cfg.get("outputs", {}),
-                   "poll": cfg["refresh"]["state_poll_seconds"]},
+                   "poll": cfg["refresh"]["state_poll_seconds"],
+                   # so the frontend's /api/history fetch window can track
+                   # the server's actual retention instead of a hardcoded
+                   # guess that silently drifts from config.json
+                   "metrics_retain_hours": cfg["refresh"].get(
+                       "metrics_retain_hours", 24)},
         "weather": cached_weather(cfg),
         "sys": sys_stats,
         "extra": extra,

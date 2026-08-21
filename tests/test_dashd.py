@@ -234,7 +234,7 @@ class TestBuildState(unittest.TestCase):
             dashd.cached_weather = orig
         for key in ("ts", "config", "weather", "sys", "extra"):
             self.assertIn(key, st)
-        for key in ("units", "display", "location", "poll"):
+        for key in ("units", "display", "location", "poll", "metrics_retain_hours"):
             self.assertIn(key, st["config"])
 
 
@@ -280,6 +280,26 @@ class TestMetricsStore(unittest.TestCase):
         self.assertEqual(len(rows), 1, rows)
         self.assertAlmostEqual(rows[0]["cpu_pct"], 99)
 
+    def test_old_schema_db_self_migrates_a_new_column(self):
+        """A DB written before battery_pct existed in COLUMNS must not break
+        on first touch after the upgrade -- CREATE TABLE IF NOT EXISTS is a
+        no-op against it, so _connect() has to ALTER TABLE the gap in."""
+        conn = sqlite3.connect(self.db)
+        conn.execute(
+            "CREATE TABLE samples (ts REAL NOT NULL, cpu_pct REAL, "
+            "cpu_temp_c REAL, cpu_freq_mhz REAL, mem_pct REAL, "
+            "net_down REAL, net_up REAL)")  # no battery_pct
+        conn.execute("INSERT INTO samples (ts, cpu_pct) VALUES (?, ?)",
+                     (time.time(), 7.0))
+        conn.commit()
+        conn.close()
+
+        dashd.metrics.insert_sample(self.db, {"battery_pct": 55}, retain_seconds=3600)
+        rows = dashd.metrics.query_history(self.db, since_seconds=3600)
+        self.assertEqual(len(rows), 2, rows)
+        self.assertIsNone(rows[0]["battery_pct"])   # pre-migration row
+        self.assertAlmostEqual(rows[1]["battery_pct"], 55)
+
 
 class TestMaybeSampleMetrics(unittest.TestCase):
     """dashd-serve's piggyback-on-the-poll sampler."""
@@ -304,7 +324,8 @@ class TestMaybeSampleMetrics(unittest.TestCase):
     @staticmethod
     def _sys_stats():
         return {"cpu": 10.0, "temp_c": 50, "cpu_freq": 2600,
-                "mem": {"pct": 33.0}, "net": {"down": 1.0, "up": 2.0}}
+                "mem": {"pct": 33.0}, "battery": {"pct": 77},
+                "net": {"down": 1.0, "up": 2.0}}
 
     def test_first_call_writes_a_sample(self):
         dashd.maybe_sample_metrics(self._cfg(), self._sys_stats())
@@ -313,6 +334,15 @@ class TestMaybeSampleMetrics(unittest.TestCase):
         self.assertEqual(len(rows), 1)
         self.assertAlmostEqual(rows[0]["cpu_pct"], 10.0)
         self.assertAlmostEqual(rows[0]["mem_pct"], 33.0)
+        self.assertAlmostEqual(rows[0]["battery_pct"], 77)
+
+    def test_no_battery_stores_null_battery_pct(self):
+        stats = self._sys_stats()
+        stats["battery"] = None
+        dashd.maybe_sample_metrics(self._cfg(), stats)
+        rows = dashd.metrics.query_history(
+            dashd.DATA / "metrics.db", since_seconds=3600)
+        self.assertIsNone(rows[0]["battery_pct"])
 
     def test_second_call_within_interval_is_skipped(self):
         cfg = self._cfg(interval=9999)

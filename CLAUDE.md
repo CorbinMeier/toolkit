@@ -1,11 +1,12 @@
 # Desktop Dashboard
 
 Live HTML rendered as the desktop wallpaper on COSMIC/Wayland — weather,
-forecast, sun/moon, system stats (with SQLite-backed history for cpu/mem
-trends). Not a wallpaper image on a timer: a real WebKit view with CSS
-animation and JS, one surface per monitor, sitting below the windows. No
-digital clock, date, or location readout -- the user's own system already
-shows all three (#5, #9). Two halves: System (left) | Forecast — current
+forecast, sun/moon, system stats (with SQLite-backed history for cpu/mem/
+battery trends, rendered as multi-tier step-line charts, #12). Not a
+wallpaper image on a timer: a real WebKit view with CSS animation and JS,
+one surface per monitor, sitting below the windows. No digital clock,
+date, or location readout -- the user's own system already shows all
+three (#5, #9). Two halves: System (left) | Forecast — current
 conditions, hourly, week, sun/moon, all one panel (right, #10).
 
 Two processes:
@@ -18,16 +19,26 @@ Both run as **enabled** systemd user units (see *Current state* below).
 ## Layout
 
 ```
-bin/dashd-serve     HTTP server; /api/state merges weather+sys+extra,
-                    /api/history serves lib/metrics.py's stored samples.
-                    sys.disks comes from lsblk (disk_tree()), not just
-                    psutil's mounted-partition view; battery gets a real
-                    charging flag from /sys/class/power_supply (see gotchas)
+bin/dashd-serve     HTTP server; /api/state merges weather+sys+extra (and
+                    exposes config.metrics_retain_hours so the frontend's
+                    history fetch window tracks it), /api/history serves
+                    lib/metrics.py's stored samples. sys.disks comes from
+                    lsblk (disk_tree()), not just psutil's mounted-partition
+                    view; battery gets a real charging flag from
+                    /sys/class/power_supply (see gotchas)
 bin/dashd-host      layer-shell surfaces; --list prints monitor names
-lib/metrics.py      SQLite historical-metrics store (cpu/mem trends)
+lib/metrics.py      SQLite historical-metrics store (cpu/mem/battery_pct);
+                    self-migrates ALTER TABLE ADD COLUMN for an older DB
 web/index.html      panel structure (Tailwind utility classes); System
-                    renders as a <table> (icon|label|value|histograph/badge)
-web/app.js          all rendering; pure function of last good state
+                    renders as three <table>s (cpu/mem/bat, Storage, Network),
+                    each icon|label|value|chart-or-badge, plus a step-line-
+                    chart sub-row per time tier under CPU/Memory/Battery
+web/app.js          all rendering; pure function of last good state.
+                    Two independent trend sources feed the step charts: an
+                    in-memory ring buffer (this session's own /api/state
+                    polls, for the 30s CPU/Memory tier and the Network
+                    chart) and trendHistory (/api/history rows, for every
+                    tier >= 5 minutes)
 web/vendor/         Tailwind v4 browser build, vendored (no network at runtime)
 config.json         location, units, port, display layer, per-output overrides,
                     metrics sample/retain interval
@@ -186,6 +197,25 @@ render loop.
 - `pkill -f dashd-serve` **kills the shell running it**, because the pattern
   matches that shell's own command line. Resolve PIDs with `pgrep` and skip
   `$$`, or use `systemctl --user stop`.
+- **`CREATE TABLE IF NOT EXISTS` does not add a column to an existing
+  table.** `data/metrics.db` is gitignored and had already been running in
+  production (cpu/mem/net only) by the time `battery_pct` was added to
+  `metrics.COLUMNS` (#12) — the old on-disk table would otherwise 500 on
+  first `INSERT`/`SELECT` referencing it. `metrics._connect()` now diffs
+  `PRAGMA table_info(samples)` against `COLUMNS` and `ALTER TABLE ADD
+  COLUMN`s whatever's missing, every connection. Any *future* `COLUMNS`
+  addition needs nothing more than adding the name to the tuple — the
+  migration is generic — but removing/renaming a column would need real
+  thought (this only ever adds).
+- **A 30-second step-line chart cannot be built from `/api/history`** —
+  samples land there roughly every `metrics_sample_seconds` (30s default),
+  so a 30-second window is 0-1 points. `web/app.js` keeps a separate
+  client-side ring buffer (`ring`, fed from every `/api/state` poll, ~5s)
+  for exactly that tier, plus the Network chart (throughput bursts are
+  brief enough that even 30s DB resolution would flatten them). Anything
+  5 minutes or longer reads from `trendHistory` (`/api/history`) instead,
+  since by then the DB's resolution is fine *and* it survives a page
+  reload, which the in-memory ring buffer does not.
 
 ## Data
 
@@ -235,3 +265,10 @@ any other script can add panels without touching the server.
   Verified functionally (smoke stage against an isolated worktree-local
   server) but not visually — per the user's "no more verifying (I can do
   that)" instruction, this round is theirs to eyeball on the live desktop.
+- #12 (2026-08-20): CPU/Memory/Battery now render as a step-line-chart
+  stack (30s/5m/30m for CPU+Memory, 30m/4h/24h for Battery), Storage and
+  Network split into their own visually separated areas within System
+  (Network gets a dual-line down/up step chart, no DB storage -- by
+  design, see gotchas). `battery_pct` added to `lib/metrics.py`'s
+  `COLUMNS` with a self-migrating `ALTER TABLE` for the already-running
+  production DB. Same as #9-#11: functionally verified only, not visually.

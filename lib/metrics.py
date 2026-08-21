@@ -17,8 +17,10 @@ import time
 from pathlib import Path
 
 # Columns are nullable: a given sample may be missing e.g. cpu_temp_c on a
-# machine with no readable thermal sensor (see dashd-serve's system_stats).
-COLUMNS = ("cpu_pct", "cpu_temp_c", "cpu_freq_mhz", "mem_pct", "net_down", "net_up")
+# machine with no readable thermal sensor, or battery_pct on a desktop with
+# no battery at all (see dashd-serve's system_stats).
+COLUMNS = ("cpu_pct", "cpu_temp_c", "cpu_freq_mhz", "mem_pct", "battery_pct",
+           "net_down", "net_up")
 
 
 def _connect(db_path: Path) -> sqlite3.Connection:
@@ -30,6 +32,15 @@ def _connect(db_path: Path) -> sqlite3.Connection:
         "CREATE TABLE IF NOT EXISTS samples (ts REAL NOT NULL, "
         + ", ".join(f"{c} REAL" for c in COLUMNS) + ")")
     conn.execute("CREATE INDEX IF NOT EXISTS idx_samples_ts ON samples(ts)")
+    # CREATE TABLE IF NOT EXISTS is a no-op against an existing DB from
+    # before a COLUMNS change (battery_pct was added after this table had
+    # already been running in production) -- ALTER TABLE ADD COLUMN each
+    # column query_history/insert_sample expect but the on-disk table
+    # doesn't have yet, so an older DB self-migrates on first touch.
+    existing = {row[1] for row in conn.execute("PRAGMA table_info(samples)")}
+    for col in COLUMNS:
+        if col not in existing:
+            conn.execute(f"ALTER TABLE samples ADD COLUMN {col} REAL")
     return conn
 
 

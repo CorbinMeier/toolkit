@@ -189,20 +189,48 @@
 
     <!-- ============ LEFT HALF: system ============ -->
     <section class="accent-cyan flex flex-col min-h-0">
-      <div class="panel px-[2vmin] py-[1.5vmin] flex flex-col gap-[0.7vmin]">
+      <div class="panel px-[2vmin] py-[1.5vmin] flex flex-col gap-[0.6vmin]">
         <h2 class="sec-head text-faint uppercase tracking-[0.3em] text-[clamp(.55rem,1.15vmin,.8rem)]">
           System</h2>
-        <!-- Table so icon / label / value / histograph line up across every
-             row -- CPU and Memory are one line each (label + % + inline
-             trend), not a full-width progress bar. -->
+        <!-- CPU, Memory, Battery -- table so icon / label / value / chart
+             line up across every row. Each metric is one value row plus a
+             step-line-chart row per time tier (see ISSUES.md #12); Battery
+             sits directly under Memory. -->
         <table class="sys-table w-full border-collapse">
           <colgroup>
-            <col class="w-[1.7em]"><col><col class="w-[26%]"><col class="w-[32%]">
+            <col class="w-[1.7em]"><col><col class="w-[24%]"><col class="w-[36%]">
           </colgroup>
           <tbody id="sys"></tbody>
         </table>
+
+        <!-- Storage: its own visually separated area, not mixed into the
+             cpu/mem/bat metric rows above. -->
+        <div class="pt-[0.6vmin] border-t border-[var(--color-hairline)]">
+          <h3 class="sec-head text-faint uppercase tracking-[0.3em]
+              text-[clamp(.48rem,1vmin,.68rem)] mb-[0.35vmin]">Storage</h3>
+          <table class="sys-table w-full border-collapse">
+            <colgroup>
+              <col class="w-[1.7em]"><col><col class="w-[24%]"><col class="w-[36%]">
+            </colgroup>
+            <tbody id="disks"></tbody>
+          </table>
+        </div>
+
+        <!-- Network: its own dedicated area below Storage, one row with a
+             dual-line (down/up) step chart. -->
+        <div class="pt-[0.6vmin] border-t border-[var(--color-hairline)]">
+          <h3 class="sec-head text-faint uppercase tracking-[0.3em]
+              text-[clamp(.48rem,1vmin,.68rem)] mb-[0.35vmin]">Network</h3>
+          <table class="sys-table w-full border-collapse">
+            <colgroup>
+              <col class="w-[1.7em]"><col><col class="w-[24%]"><col class="w-[36%]">
+            </colgroup>
+            <tbody id="net"></tbody>
+          </table>
+        </div>
+
         <div id="sysfoot" class="text-faint num tracking-wide
-             text-[clamp(.48rem,1vmin,.72rem)] pt-[0.6vmin]
+             text-[clamp(.46rem,.95vmin,.68rem)] pt-[0.55vmin]
              border-t border-[var(--color-hairline)]">—</div>
       </div>
     </section>

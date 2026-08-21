@@ -2,10 +2,11 @@
  *
  * No date/clock/location readout -- the user's own system already shows
  * all three (see ISSUES.md #5, #9). Everything redraws from /api/state on
- * a poll, plus a slower, independent poll of /api/history for the compact
- * trend sparklines. Render is a pure function of the last good state, so a
- * failed poll just keeps the previous frame up and raises the offline
- * banner instead of blanking the wallpaper.
+ * a poll, plus a slower, independent poll of /api/history for the CPU/
+ * Memory/Battery step-line-chart tiers (see ISSUES.md #12). Render is a
+ * pure function of the last good state, so a failed poll just keeps the
+ * previous frame up and raises the offline banner instead of blanking the
+ * wallpaper.
  */
 'use strict';
 
@@ -22,10 +23,43 @@ const STATIC = params.get('static') === '1';
 
 let state = null;
 let failures = 0;
-// Recent cpu_pct/mem_pct trend, from a separate slow poll of /api/history --
-// independent of the 5s state poll since sample resolution there is ~30s.
-// Named `trend`, not `history` -- that's a reserved browser global (Window.history).
-let trend = { cpu_pct: [], mem_pct: [] };
+
+// Rows from /api/history (SQLite-backed, ~30s resolution -- see
+// lib/metrics.py), refreshed by the slow pollHistory() poll below. Feeds
+// the 5-minute-and-longer step-chart tiers for CPU/Memory/Battery, and
+// persists across a page reload since it's server-side. Named
+// `trendHistory`, not `history` -- that's a reserved browser global
+// (Window.history).
+let trendHistory = [];
+// A window's worth of *this browser session's* /api/state polls (default
+// every 5s), independent of trendHistory. This is what makes a genuine
+// "30 second" chart possible at all -- /api/history's own samples are ~30s
+// apart, so a 30s window of *those* would be 0-1 points. Also backs the
+// Network chart, which wants the finer resolution regardless of window
+// (throughput bursts are brief; 30s-resolution DB samples would flatten
+// them). Capped by wall-clock age, not point count, so it self-adjusts to
+// whatever the configured poll interval actually is.
+const RING_WINDOW_MS = 5 * 60 * 1000;
+let ring = { t: [], cpu: [], mem: [], down: [], up: [] };
+function pushRing(s) {
+  const now = Date.now();
+  ring.t.push(now); ring.cpu.push(s.cpu); ring.mem.push(s.mem.pct);
+  ring.down.push(s.net.down); ring.up.push(s.net.up);
+  const cutoff = now - RING_WINDOW_MS;
+  while (ring.t.length && ring.t[0] < cutoff) {
+    ring.t.shift(); ring.cpu.shift(); ring.mem.shift(); ring.down.shift(); ring.up.shift();
+  }
+}
+function ringSince(key, ms) {
+  const cutoff = Date.now() - ms;
+  const i = ring.t.findIndex((t) => t >= cutoff);
+  return i === -1 ? [] : ring[key].slice(i);
+}
+function historySince(key, ms) {
+  const cutoff = Date.now() - ms;
+  return trendHistory.filter((r) => r.ts * 1000 >= cutoff && r[key] != null)
+    .map((r) => r[key]);
+}
 
 /* ------------------------------------------------------------------ icons */
 /* Hand-rolled so there is zero external asset dependency. */
@@ -152,28 +186,50 @@ function sysIcon(kind, tone = 'currentColor') {
       g.appendChild(el('rect', { x: 1.5, y: 7, width: 17, height: 10, rx: 1.5 }));
       g.appendChild(el('rect', { x: 19.5, y: 10, width: 2.2, height: 4, rx: 0.6, fill: tone }));
       break;
+    case 'net':
+      g.appendChild(el('line', { x1: 8, y1: 3, x2: 8, y2: 15 }));
+      g.appendChild(el('polyline', { points: '4.5,11.5 8,15 11.5,11.5' }));
+      g.appendChild(el('line', { x1: 16, y1: 21, x2: 16, y2: 9 }));
+      g.appendChild(el('polyline', { points: '12.5,12.5 16,9 19.5,12.5' }));
+      break;
     default: break;
   }
   return g;
 }
 
-/* Tiny inline trend line -- deliberately preserveAspectRatio="none": unlike
- * the big weather sparkline (CLAUDE.md), this one has no text or marker
- * children to distort, just a path, so stretching it to exactly fill a
- * fixed-size box is what's wanted for a compact inline indicator. This is
- * the "[HISTOGRAPH]" the CPU/Memory rows show next to their percentage. */
-function miniSpark(values, tone = 'var(--color-accent)') {
+/* Step line chart -- compact enough to sit on a single line next to text
+ * (a tier label, in sysTierRow() below). "Step" rather than a diagonal
+ * line: each sample holds its value until the next one arrives (a
+ * staircase), which reads truer for a polled metric than interpolating
+ * between two readings that were never actually in between. Accepts one
+ * or more {values, tone} series sharing one x/y scale, so the Network
+ * chart can plot download and upload as two lines without them fighting
+ * over independent scales. Deliberately preserveAspectRatio="none": these
+ * are bare paths with no text/marker children to distort (see CLAUDE.md's
+ * gotcha on that attribute), so stretching to exactly fill a fixed small
+ * box is exactly what's wanted here. */
+function stepChart(series, cls) {
   const svg = el('svg', { viewBox: '0 0 100 30', preserveAspectRatio: 'none',
-    class: 'w-[clamp(2.6rem,6.5vmin,4.2rem)] h-[clamp(0.8rem,1.8vmin,1.05rem)] shrink-0 ml-auto' });
-  if (values.length < 2) return svg;
-  const lo = Math.min(...values), hi = Math.max(...values);
+    class: cls || 'w-[clamp(3.4rem,9vmin,6.4rem)] h-[clamp(0.8rem,1.8vmin,1.05rem)] shrink-0 ml-auto' });
+  const all = series.flatMap((sr) => sr.values);
+  if (all.length < 2) return svg;
+  const lo = Math.min(...all), hi = Math.max(...all);
   const span = Math.max(hi - lo, 1);
-  const x = (i) => (i / (values.length - 1)) * 100;
-  const y = (v) => 28 - ((v - lo) / span) * 26;
-  const line = values.map((v, i) => `${i ? 'L' : 'M'} ${x(i).toFixed(1)} ${y(v).toFixed(1)}`).join(' ');
-  svg.appendChild(el('path', { d: line, fill: 'none', stroke: tone,
-    'stroke-width': 2.5, 'stroke-linecap': 'round', 'stroke-linejoin': 'round',
-    'vector-effect': 'non-scaling-stroke', opacity: '.8' }));
+  const pad = 2;
+  const y = (v) => (30 - pad) - ((v - lo) / span) * (30 - pad * 2);
+  series.forEach(({ values, tone }) => {
+    if (values.length < 2) return;
+    const x = (i) => (i / (values.length - 1)) * 100;
+    let d = `M ${x(0).toFixed(1)} ${y(values[0]).toFixed(1)}`;
+    for (let i = 1; i < values.length; i++) {
+      // hold the previous value flat to this sample's x, then step to it
+      d += ` L ${x(i).toFixed(1)} ${y(values[i - 1]).toFixed(1)}`;
+      d += ` L ${x(i).toFixed(1)} ${y(values[i]).toFixed(1)}`;
+    }
+    svg.appendChild(el('path', { d, fill: 'none', stroke: tone,
+      'stroke-width': 2, 'stroke-linecap': 'round', 'stroke-linejoin': 'round',
+      'vector-effect': 'non-scaling-stroke', opacity: '.85' }));
+  });
   return svg;
 }
 
@@ -221,29 +277,91 @@ function sysRow({ icon, label, value, sub = '', tail = null, tone = 'var(--color
   return tr;
 }
 
-function renderSys(s) {
+// A step chart's own line -- no icon (indented under its metric's sysRow),
+// just a small tier label ("30S"/"5M"/...) and the chart, so the whole
+// thing reads as one line of text-plus-chart per the tier it represents.
+function sysTierRow(label, values, tone) {
+  const tr = document.createElement('tr');
+  tr.appendChild(document.createElement('td')); // empty icon column
+  const labelTd = document.createElement('td');
+  labelTd.className = 'text-faint pl-[0.6vmin] tracking-[0.1em] ' +
+    'text-[clamp(.4rem,.82vmin,.58rem)]';
+  labelTd.textContent = label;
+  tr.append(labelTd, document.createElement('td'));
+  const tailTd = document.createElement('td');
+  tailTd.className = 'pl-[0.6vmin]';
+  tailTd.appendChild(stepChart([{ values, tone }]));
+  tr.appendChild(tailTd);
+  return tr;
+}
+
+// CPU/Memory: 30 seconds (ring buffer -- DB resolution is ~30s, too coarse
+// for this window), 5 minutes and 30 minutes (SQLite-backed /api/history,
+// which survives a page reload). Battery: 30 minutes, 4 hours, 24 hours,
+// all from /api/history since a battery barely moves in any window short
+// enough for the ring buffer to cover.
+function renderCpuMemBat(s) {
   const box = $('sys');
   box.replaceChildren();
   const hot = (p) => p > 88 ? 'var(--color-warm)' : 'var(--color-accent)';
 
+  const cpuTone = hot(s.cpu);
   box.appendChild(sysRow({
-    icon: 'cpu', label: 'CPU', tone: hot(s.cpu),
+    icon: 'cpu', label: 'CPU', tone: cpuTone,
     value: `${s.cpu.toFixed(0)}%`,
     sub: [s.temp_c ? `${s.temp_c}°C` : null,
       s.cpu_freq ? `${(s.cpu_freq / 1000).toFixed(1)}GHz` : null].filter(Boolean).join(' · '),
-    tail: miniSpark(trend.cpu_pct, hot(s.cpu)),
   }));
+  box.appendChild(sysTierRow('30S', ringSince('cpu', 30_000), cpuTone));
+  box.appendChild(sysTierRow('5M', historySince('cpu_pct', 5 * 60_000), cpuTone));
+  box.appendChild(sysTierRow('30M', historySince('cpu_pct', 30 * 60_000), cpuTone));
 
+  const memTone = hot(s.mem.pct);
   box.appendChild(sysRow({
-    icon: 'mem', label: 'MEM', tone: hot(s.mem.pct),
+    icon: 'mem', label: 'MEM', tone: memTone,
     value: `${s.mem.pct.toFixed(0)}%`,
     sub: `${bytes(s.mem.used)} / ${bytes(s.mem.total)}`,
-    tail: miniSpark(trend.mem_pct, hot(s.mem.pct)),
   }));
+  box.appendChild(sysTierRow('30S', ringSince('mem', 30_000), memTone));
+  box.appendChild(sysTierRow('5M', historySince('mem_pct', 5 * 60_000), memTone));
+  box.appendChild(sysTierRow('30M', historySince('mem_pct', 30 * 60_000), memTone));
 
-  // Every partition lsblk reports a real utilization for, not just
-  // psutil's mounted view -- see dashd-serve's disk_tree().
-  s.disks.forEach((d) => {
+  if (s.battery) {
+    const battTone = s.battery.pct < 20 && !s.battery.plugged
+      ? 'var(--color-warm)' : 'var(--color-accent)';
+    const chrg = document.createElement('span');
+    chrg.className = `chrg-badge${s.battery.charging ? ' is-charging' : ''}`;
+    chrg.textContent = 'CHRG';
+    box.appendChild(sysRow({
+      icon: 'battery', label: 'BAT', tone: battTone,
+      value: `${s.battery.pct}%`,
+      sub: !s.battery.plugged && s.battery.secs_left ? dur(s.battery.secs_left) : '',
+      tail: chrg,
+    }));
+    box.appendChild(sysTierRow('30M', historySince('battery_pct', 30 * 60_000), battTone));
+    box.appendChild(sysTierRow('4H', historySince('battery_pct', 4 * 3600_000), battTone));
+    box.appendChild(sysTierRow('24H', historySince('battery_pct', 24 * 3600_000), battTone));
+  }
+
+  const load = s.load.map((n) => n.toFixed(2)).join('  ');
+  $('sysfoot').innerHTML =
+    `<div class="flex justify-between gap-[1vmin]">
+       <span>up ${dur(s.uptime)} · ${s.procs} procs</span>
+       <span>${s.host}</span>
+     </div>
+     <div class="flex justify-between gap-[1vmin] mt-[0.3vmin] opacity-70">
+       <span>load ${load}</span>
+     </div>`;
+}
+
+// Storage: its own dedicated area (ISSUES.md #12), not mixed into the
+// cpu/mem/bat rows above. Every partition lsblk reports a real utilization
+// for, not just psutil's mounted view -- see dashd-serve's disk_tree().
+function renderDisks(disks) {
+  const box = $('disks');
+  box.replaceChildren();
+  const hot = (p) => p > 88 ? 'var(--color-warm)' : 'var(--color-accent)';
+  disks.forEach((d) => {
     const label = d.mount && d.mount !== '[SWAP]'
       ? (d.mount.split('/').filter(Boolean).pop() || '/') : d.name;
     box.appendChild(sysRow({
@@ -252,30 +370,25 @@ function renderSys(s) {
       tail: miniBar(d.pct, hot(d.pct ?? 0)),
     }));
   });
+}
 
-  if (s.battery) {
-    const chrg = document.createElement('span');
-    chrg.className = `chrg-badge${s.battery.charging ? ' is-charging' : ''}`;
-    chrg.textContent = 'CHRG';
-    box.appendChild(sysRow({
-      icon: 'battery', label: 'BAT',
-      tone: s.battery.pct < 20 && !s.battery.plugged ? 'var(--color-warm)' : 'var(--color-accent)',
-      value: `${s.battery.pct}%`,
-      sub: !s.battery.plugged && s.battery.secs_left ? dur(s.battery.secs_left) : '',
-      tail: chrg,
-    }));
-  }
-
-  const load = s.load.map((n) => n.toFixed(2)).join('  ');
-  $('sysfoot').innerHTML =
-    `<div class="flex justify-between gap-[1vmin]">
-       <span>↓${bytes(s.net.down)}/s&nbsp;&nbsp;↑${bytes(s.net.up)}/s</span>
-       <span>load ${load}</span>
-     </div>
-     <div class="flex justify-between gap-[1vmin] mt-[0.3vmin] opacity-70">
-       <span>up ${dur(s.uptime)} · ${s.procs} procs</span>
-       <span>${s.host}</span>
-     </div>`;
+// Network: dedicated area below Storage, one row, one step chart with two
+// lines (download/upload). No long-term storage for this one (see
+// ISSUES.md #12) -- it's the ring buffer's fine 5s resolution that makes
+// brief throughput bursts visible at all, so a DB-backed tier would just
+// flatten them.
+function renderNetwork(s) {
+  const box = $('net');
+  box.replaceChildren();
+  box.appendChild(sysRow({
+    icon: 'net', label: 'NET', tone: 'var(--color-accent)',
+    value: `↓${bytes(s.net.down)}/s`,
+    sub: `↑${bytes(s.net.up)}/s`,
+    tail: stepChart([
+      { values: ringSince('down', RING_WINDOW_MS), tone: 'var(--color-accent)' },
+      { values: ringSince('up', RING_WINDOW_MS), tone: 'var(--color-warm)' },
+    ]),
+  }));
 }
 
 /* -------------------------------------------------------- weather panels */
@@ -435,8 +548,12 @@ function apply(s) {
   root.setProperty('--safe-top', `${disp.safe_area_top || 0}px`);
   root.setProperty('--safe-bottom', `${disp.safe_area_bottom || 0}px`);
 
+  historyHours = s.config.metrics_retain_hours || historyHours;
+  pushRing(s.sys);
   renderWeather(s.weather);
-  renderSys(s.sys);
+  renderCpuMemBat(s.sys);
+  renderDisks(s.sys.disks);
+  renderNetwork(s.sys);
 
   const boot = $('boot');
   if (boot && !boot.dataset.done) {
@@ -480,23 +597,20 @@ async function poll() {
   }
 }
 
-// Separate, slower poll for the sparkline trend data -- history.db samples
-// every ~30s (config.refresh.metrics_sample_seconds), so polling it on the
-// same 5s cadence as /api/state would be pure waste. Failure just keeps
-// showing the last-known trend, same philosophy as the main poll.
-const HISTORY_HOURS = 2;
+// Separate, slower poll for the 5-minute-and-longer step-chart tiers --
+// history.db samples every ~30s (config.refresh.metrics_sample_seconds),
+// so polling it on the same 5s cadence as /api/state would be pure waste.
+// Fetches the *entire* retention window in one call and lets
+// historySince() slice it per tier client-side, rather than one fetch per
+// tier -- cheap on loopback, and keeps this to a single request. Failure
+// just keeps showing the last-known history, same philosophy as poll().
+let historyHours = 24; // refined from state.config.metrics_retain_hours in apply()
 const HISTORY_POLL_MS = 60_000;
 async function pollHistory() {
   try {
-    const r = await fetch(`/api/history?hours=${HISTORY_HOURS}`, { cache: 'no-store' });
-    if (r.ok) {
-      const { samples } = await r.json();
-      trend = {
-        cpu_pct: samples.map((s) => s.cpu_pct).filter((v) => v != null),
-        mem_pct: samples.map((s) => s.mem_pct).filter((v) => v != null),
-      };
-    }
-  } catch { /* keep the last-known trend */ }
+    const r = await fetch(`/api/history?hours=${historyHours}`, { cache: 'no-store' });
+    if (r.ok) ({ samples: trendHistory } = await r.json());
+  } catch { /* keep the last-known history */ }
   finally { setTimeout(pollHistory, HISTORY_POLL_MS); }
 }
 
