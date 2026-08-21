@@ -292,7 +292,8 @@ class TestBuildState(unittest.TestCase):
             dashd.cached_weather = orig_weather
             dashd.cached_devices = orig_devices
             dashd.logsrc.read_log_lines = orig_logs
-        for key in ("ts", "config", "weather", "sys", "music", "tasks", "devices", "logs", "extra"):
+        for key in ("ts", "config", "weather", "sys", "music", "tasks", "devices",
+                    "logs", "extra"):
             self.assertIn(key, st)
         self.assertEqual(st["devices"], [])
         self.assertEqual(st["logs"], [])
