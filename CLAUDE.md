@@ -3,7 +3,8 @@
 Live HTML rendered as the desktop wallpaper on COSMIC/Wayland — weather,
 forecast, sun/moon, system stats (with SQLite-backed history for cpu/mem
 trends, CPU and Memory each rendering a compact three-tier step-line graph
-row; battery has no graphs, #12, #17). Not a
+row; battery has no graphs, #12, #17), and an MPRIS now-playing music panel
+(#26). Not a
 wallpaper image on a timer: a real WebKit view with CSS animation and JS,
 one surface per monitor, sitting below the windows. No digital clock,
 date, or location readout -- the user's own system already shows all
@@ -43,7 +44,11 @@ bin/dashd-host      layer-shell surfaces; --list prints monitor names
 lib/sysinfo.py      shared psutil sampling (system_stats() for dashd-serve's
                     full live snapshot, sample_stats() for dashd-collect's
                     smaller persisted row) so the two processes can't
-                    measure a metric two different ways
+                    measure a metric two different ways. now_playing() (#26)
+                    shells out to `playerctl` for MPRIS now-playing state --
+                    source-agnostic (local player or browser tab, whatever
+                    registers over MPRIS), returns None if nothing is
+                    playing/paused or playerctl isn't installed
 lib/metrics.py      SQLite historical-metrics store (cpu/mem/battery_pct);
                     self-migrates ALTER TABLE ADD COLUMN for an older DB
 web/index.html      panel structure (Tailwind utility classes); System
@@ -53,7 +58,10 @@ web/index.html      panel structure (Tailwind utility classes); System
                     icon|label|value|chart-or-badge. CPU/Memory each add one
                     row of three side-by-side step-line graphs (30S/5M/30M,
                     corner-labeled tier name + value range) instead of three
-                    stacked rows; Battery has none (#17)
+                    stacked rows; Battery has none (#17). Music (#26) is a
+                    fourth System sub-section below Network, same
+                    icon|label|value|tail row shape, hidden entirely when
+                    nothing is playing/paused
 web/app.js          all rendering; pure function of last good state.
                     Two independent trend sources feed the step charts: an
                     in-memory ring buffer (this session's own /api/state
@@ -310,6 +318,21 @@ any other script can add panels without touching the server.
 
 ## Current state (2026-08-20)
 
+- #26 (2026-08-20): new Music component -- MPRIS now-playing state via
+  `playerctl` (`lib/sysinfo.now_playing()`), source-agnostic (picks up any
+  local player or browser tab registered over MPRIS, no per-service
+  integration). Merged into `/api/state` as `music` (null when nothing is
+  playing/paused). Renders as a fourth System sub-section below Network,
+  same icon|label|value|tail row shape as CPU/MEM/Storage/Network, and
+  stays hidden entirely rather than showing an empty row when idle.
+  `playerctl` is a system package (`libplayerctl2`/`playerctl`, already
+  installed on this machine) -- if it's ever missing, `now_playing()`
+  degrades to always returning None rather than erroring. Functionally
+  verified (unit tests against a mocked `playerctl` subprocess, smoke
+  stage, live curl against `/api/state` with nothing playing); not
+  visually verified with an actual track playing -- no player had an
+  active track during this session, so eyeball the populated state on the
+  live desktop next time something is playing.
 - All three units (`serve`/`collect`/`host`) **enabled and active** against
   `graphical-session.target`; the dashboard survives logout.
   `desktop-dashboard-collect` (#14) was linked, approved, and

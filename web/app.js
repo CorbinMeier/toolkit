@@ -187,6 +187,13 @@ function sysIcon(kind, tone = 'currentColor') {
       g.appendChild(el('line', { x1: 16, y1: 21, x2: 16, y2: 9 }));
       g.appendChild(el('polyline', { points: '12.5,12.5 16,9 19.5,12.5' }));
       break;
+    case 'music':
+      // Eighth note -- same hand-rolled stroke language as the rest of
+      // System's icons, no emoji/external asset.
+      g.appendChild(el('line', { x1: 15.5, y1: 3, x2: 15.5, y2: 16.5 }));
+      g.appendChild(el('line', { x1: 15.5, y1: 3, x2: 20, y2: 5.5 }));
+      g.appendChild(el('circle', { cx: 12, cy: 17.5, r: 3.2, fill: tone }));
+      break;
     // Weather stat icons -- same hand-rolled stroke language as the System
     // icons above (no emoji, no external asset), for the Wind/Humidity/
     // Rain/UV rows and the sunrise/sunset readout (#9, Forecast
@@ -487,6 +494,32 @@ function renderNetwork(s) {
   }));
 }
 
+// Music: its own dedicated area below Network, only shown while something
+// is actually playing/paused (#26). Source-agnostic -- whatever
+// dashd-serve's now_playing() picked up from MPRIS, be it a local player
+// or a browser tab. The section collapses entirely when idle rather than
+// showing a permanent empty row.
+function renderMusic(music) {
+  const section = $('musicSection');
+  const box = $('music');
+  box.replaceChildren();
+  if (!music) {
+    section.classList.add('hidden');
+    return;
+  }
+  section.classList.remove('hidden');
+  const pct = music.length_secs
+    ? Math.min(100, ((music.position_secs ?? 0) / music.length_secs) * 100)
+    : null;
+  box.appendChild(sysRow({
+    icon: 'music', label: music.playing ? 'PLAYING' : 'PAUSED',
+    tone: music.playing ? 'var(--color-accent)' : 'var(--color-muted)',
+    value: music.title,
+    sub: [music.artist, music.album].filter(Boolean).join(' · '),
+    tail: pct != null ? miniBar(pct, 'var(--color-accent)') : null,
+  }));
+}
+
 /* -------------------------------------------------------- weather panels */
 function renderWeather(w) {
   if (w.unavailable) {
@@ -722,6 +755,7 @@ function apply(s) {
   renderCpuMemBat(s.sys);
   renderDisks(s.sys.disks);
   renderNetwork(s.sys);
+  renderMusic(s.music);
   refreshAutoCycles();
 
   const boot = $('boot');

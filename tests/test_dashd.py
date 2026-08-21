@@ -126,6 +126,56 @@ class TestDiskTree(unittest.TestCase):
         self.assertEqual(rows, dashd._disk_tree_from_psutil())
 
 
+class TestNowPlaying(unittest.TestCase):
+    """now_playing() lives in lib/sysinfo.py (ISSUES.md #14 pattern); dashd
+    re-exports it, so the real subprocess module to patch is the one
+    sysinfo imported, not dashd's own namespace (same as disk_tree above).
+    """
+
+    def _run(self, returncode=0, stdout=""):
+        return type("CP", (), {"returncode": returncode, "stdout": stdout})()
+
+    def test_no_playerctl_binary_returns_none(self):
+        with patch.object(dashd.sysinfo.subprocess, "run",
+                           side_effect=FileNotFoundError("no playerctl")):
+            self.assertIsNone(dashd.now_playing())
+
+    def test_no_players_returns_none(self):
+        with patch.object(dashd.sysinfo.subprocess, "run",
+                           return_value=self._run(returncode=1, stdout="")):
+            self.assertIsNone(dashd.now_playing())
+
+    def test_stopped_player_is_ignored(self):
+        sep = "\x1f"
+        line = sep.join(["some.player", "Stopped", "", "", "", "", "", ""])
+        with patch.object(dashd.sysinfo.subprocess, "run",
+                           return_value=self._run(stdout=line)):
+            self.assertIsNone(dashd.now_playing())
+
+    def test_playing_track_is_parsed(self):
+        sep = "\x1f"
+        line = sep.join(["some.player", "Playing", "Artist", "Title", "Album",
+                          "180000000", "45000000", "https://example/art.jpg"])
+        with patch.object(dashd.sysinfo.subprocess, "run",
+                           return_value=self._run(stdout=line)):
+            music = dashd.now_playing()
+        self.assertEqual(music["title"], "Title")
+        self.assertEqual(music["artist"], "Artist")
+        self.assertTrue(music["playing"])
+        self.assertAlmostEqual(music["length_secs"], 180.0)
+        self.assertAlmostEqual(music["position_secs"], 45.0)
+
+    def test_playing_preferred_over_paused(self):
+        sep = "\x1f"
+        paused = sep.join(["p1", "Paused", "A1", "T1", "", "", "", ""])
+        playing = sep.join(["p2", "Playing", "A2", "T2", "", "", "", ""])
+        with patch.object(dashd.sysinfo.subprocess, "run",
+                           return_value=self._run(stdout=f"{paused}\n{playing}")):
+            music = dashd.now_playing()
+        self.assertEqual(music["title"], "T2")
+        self.assertTrue(music["playing"])
+
+
 class TestBatteryCharging(unittest.TestCase):
     def setUp(self):
         self._tmp = tempfile.TemporaryDirectory()
@@ -237,7 +287,7 @@ class TestBuildState(unittest.TestCase):
             st = dashd.build_state(cfg)
         finally:
             dashd.cached_weather = orig
-        for key in ("ts", "config", "weather", "sys", "extra"):
+        for key in ("ts", "config", "weather", "sys", "music", "extra"):
             self.assertIn(key, st)
         for key in ("units", "display", "location", "poll", "metrics_retain_hours"):
             self.assertIn(key, st["config"])

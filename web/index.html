@@ -263,6 +263,21 @@
           </table>
         </div>
 
+        <!-- Music: MPRIS now-playing (#26), source-agnostic -- local player
+             or browser tab, whatever registers over MPRIS. Hidden by
+             default; renderMusic() in app.js only reveals it while
+             something is actually playing/paused. -->
+        <div id="musicSection" class="hidden pt-[0.6vmin] border-t border-[var(--color-hairline)]">
+          <h3 class="sec-head text-faint uppercase tracking-[0.3em]
+              text-[clamp(.48rem,1vmin,.68rem)] mb-[0.35vmin]">Music</h3>
+          <table class="sys-table border-collapse">
+            <colgroup>
+              <col class="w-[1.7em]"><col><col><col>
+            </colgroup>
+            <tbody id="music"></tbody>
+          </table>
+        </div>
+
         <div id="sysfoot" class="text-faint num tracking-wide
              text-[clamp(.46rem,.95vmin,.68rem)] pt-[0.55vmin]
              border-t border-[var(--color-hairline)]">—</div>

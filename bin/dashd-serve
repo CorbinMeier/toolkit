@@ -6,6 +6,9 @@ Serves web/ as static files and a merged /api/state document:
     weather   Open-Meteo, cached to data/weather.json (refetched on interval)
     sun/moon  sunrise/sunset from Open-Meteo, moon phase computed locally
     sys       live CPU/RAM/disk/net/battery via psutil (lib/sysinfo.py)
+    music     current MPRIS now-playing state via `playerctl`, or None if
+              nothing is playing/paused (lib/sysinfo.py, source-agnostic --
+              works with any player that registers over MPRIS)
     extra     verbatim passthrough of data/extra.json, so cron jobs or other
               scripts can inject arbitrary panels without touching this file
 
@@ -44,7 +47,7 @@ sys.path.insert(0, str(ROOT / "lib"))
 import metrics  # noqa: E402 -- needs ROOT on sys.path first
 import sysinfo  # noqa: E402,F401 -- ditto; tests patch dashd.sysinfo.subprocess
 from sysinfo import (  # noqa: E402,F401 -- re-exported for tests/back-compat
-    _disk_tree_from_psutil, battery_charging, disk_tree, system_stats,
+    _disk_tree_from_psutil, battery_charging, disk_tree, now_playing, system_stats,
 )
 
 # https://open-meteo.com/en/docs -- WMO weather interpretation codes
@@ -242,6 +245,7 @@ def build_state(cfg: dict) -> dict:
                        "metrics_retain_hours", 24)},
         "weather": cached_weather(cfg),
         "sys": sys_stats,
+        "music": now_playing(),
         "extra": extra,
     }
 

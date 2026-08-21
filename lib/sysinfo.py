@@ -163,6 +163,58 @@ def sample_stats() -> dict:
     }
 
 
+_MUSIC_FIELDS = ("playerName", "status", "artist", "title", "album",
+                  "mpris:length", "position", "mpris:artUrl")
+_MUSIC_SEP = "\x1f"
+
+
+def now_playing() -> dict | None:
+    """Current MPRIS playback state, or None if nothing is playing/paused.
+
+    Source-agnostic per #26 -- `playerctl` talks to whatever the machine
+    has registered over MPRIS (a local player, a browser tab, a streaming
+    app), so there's no per-service integration to maintain. Missing
+    `playerctl` binary, no registered players, or a player with no track
+    loaded (its `metadata` call errors) are all just "nothing playing".
+    """
+    fmt = _MUSIC_SEP.join(f"{{{{{f}}}}}" for f in _MUSIC_FIELDS)
+    try:
+        out = subprocess.run(
+            ["playerctl", "-a", "metadata", "-f", fmt],
+            capture_output=True, text=True, timeout=3)
+    except (OSError, subprocess.SubprocessError):
+        return None
+    if out.returncode != 0 or not out.stdout.strip():
+        return None
+
+    candidates = []
+    for line in out.stdout.splitlines():
+        parts = line.split(_MUSIC_SEP)
+        if len(parts) != len(_MUSIC_FIELDS):
+            continue
+        player, status, artist, title, album, length_us, position_us, art_url = parts
+        if status not in ("Playing", "Paused") or not title:
+            continue
+        candidates.append({
+            "player": player,
+            "playing": status == "Playing",
+            "artist": artist or None,
+            "title": title,
+            "album": album or None,
+            "length_secs": (int(length_us) / 1_000_000
+                             if length_us.isdigit() else None),
+            "position_secs": (int(position_us) / 1_000_000
+                               if position_us.isdigit() else None),
+            "art_url": art_url or None,
+        })
+
+    # Prefer an actively-playing player over one that's merely paused.
+    for c in candidates:
+        if c["playing"]:
+            return c
+    return candidates[0] if candidates else None
+
+
 def system_stats() -> dict:
     """Full live snapshot for /api/state -- everything sample_stats() covers
     plus disks, per-core detail, load, swap, uptime, process count, host.
