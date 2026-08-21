@@ -16,6 +16,16 @@ previously-seen device "offline" instead of dropping it when a scan
 doesn't find it, and scopes the whole thing to the CURRENT default
 gateway's identity so hopping onto a different network doesn't show a
 pile of some other network's offline devices.
+
+IPv6 is layered on top (user request: "I want ipv6 to be the main way to
+identify devices") via NDP (ip_v6_neighbors()), the IPv6 analog of ARP.
+There's no ARP-sweep equivalent for a whole /64 (2**64 addresses), so
+IPv6 discovery instead pings the all-nodes multicast group, which
+populates the kernel's neighbor cache with whatever's on the segment --
+verified live, an empty cache had 9 entries a moment after that ping. MAC
+is the join key between "who's up" (IPv4 sweep) and "what's their IPv6
+address" (NDP), same MAC the rest of this module already treats as the
+one true stable identifier.
 """
 from __future__ import annotations
 
@@ -32,8 +42,14 @@ import psutil
 
 _HOST_RE = re.compile(
     r"^Host:\s+(?P<ip>\S+)\s+(?:\((?P<hostname>[^)]*)\))?\s+Status:\s+(?P<status>\S+)")
-_NEIGH_RE = re.compile(r"^(?P<ip>\S+)\s+dev\s+\S+.*?\blladdr\s+(?P<mac>\S+)")
+# "dev <iface>" is optional: `ip neigh show` (no dev filter, arp_table()'s
+# case) prints it on every line, but `ip -6 neigh show dev <iface>`
+# (ipv6_neighbors()'s case -- filtering BY interface) omits it, since it's
+# now implied. Confirmed live: without this the filtered form matched
+# nothing at all, silently returning {} from every real scan.
+_NEIGH_RE = re.compile(r"^(?P<ip>\S+)(?:\s+dev\s+\S+)?.*?\blladdr\s+(?P<mac>\S+)")
 _DEFAULT_ROUTE_RE = re.compile(r"^default\s+via\s+(?P<gw>\S+)\s+dev\s+(?P<iface>\S+)")
+_IPV6_ALL_NODES = "ff02::1"
 
 
 def _run(cmd: list[str], timeout: float = 5) -> str:
@@ -92,6 +108,37 @@ def arp_table() -> dict[str, str]:
         m = _NEIGH_RE.match(line)
         if m:
             table[m.group("ip")] = m.group("mac").lower()
+    return table
+
+
+def ipv6_neighbors(iface: str, timeout: float = 2) -> dict[str, str]:
+    """MAC -> IPv6 address on `iface`, the IPv6 analog of arp_table().
+    IPv6 has no ARP-sweep equivalent for an entire /64 (2**64 addresses,
+    vs IPv4's 254-address /24), so instead of scanning this pings the
+    all-nodes multicast group (ff02::1) -- every IPv6 host on the segment
+    answers a multicast ping, populating the kernel's neighbor cache
+    immediately (verified live: an empty `ip -6 neigh show` had 9 entries
+    moments after this ping). A device that already has a cached entry
+    from other traffic is picked up too, whether or not it answered this
+    particular ping.
+
+    Deliberately NOT trying to prefer a "better" global/ULA address over
+    link-local when both are cached: privacy-extension global addresses
+    (RFC 4941) rotate on their own schedule, which would make a device's
+    displayed identifier drift over time even though nothing about the
+    device changed -- link-local is what the multicast ping actually
+    elicits and is stable for as long as the device stays on this link,
+    so that's what this returns.
+    """
+    # Best-effort -- errors (bad iface, no ping6 binary, etc.) just mean
+    # the neighbor cache doesn't get freshened, not a hard failure.
+    _run(["ping", "-6", "-c", "1", "-W", "1", f"{_IPV6_ALL_NODES}%{iface}"],
+         timeout=timeout)
+    table = {}
+    for line in _run(["ip", "-6", "neigh", "show", "dev", iface]).splitlines():
+        m = _NEIGH_RE.match(line)
+        if m:
+            table[m.group("mac").lower()] = m.group("ip")
     return table
 
 
@@ -154,7 +201,7 @@ def _mdns_resolve(ip: str, timeout: float = 1.5) -> str:
     return parts[1] if len(parts) == 2 else ""
 
 
-def scan_devices(target: str, timeout: int = 30) -> list[dict]:
+def scan_devices(target: str, timeout: int = 60) -> list[dict]:
     """One-shot ping sweep of `target` (CIDR or range). Returns
     [{"ip", "mac", "hostname", "status"}, ...] for hosts nmap reports as
     up. "mac" is None when the ARP cache hasn't resolved it (e.g. the host
@@ -176,6 +223,14 @@ def scan_devices(target: str, timeout: int = 30) -> list[dict]:
     silently, since "no devices found" alone gives no hint the config is
     wrong -- see scripts/nmap.py, which surfaces the same warning
     interactively.
+
+    `timeout` defaults to 60, not nmap's own fast-path speed -- a real
+    scan against this shipped network was observed taking 29.71s (against
+    the old 30s default), so an occasionally-slower run would silently
+    truncate to zero hosts, indistinguishable from "nothing's up". This
+    runs on a background thread (see bin/dashd-serve's _run_device_scan),
+    so a longer budget has no cost besides slightly staler data on an
+    unusually slow round.
 
     Otherwise never raises for the caller's benefit -- a missing `nmap`
     binary or a scan timeout means "no devices this round", not a dead
@@ -216,39 +271,65 @@ def scan_devices(target: str, timeout: int = 30) -> list[dict]:
     return found
 
 
+def full_scan(target: str, gateway: dict,
+              timeout: int = 60) -> tuple[list[dict], str | None]:
+    """scan_devices() plus each device's IPv6 address layered in by MAC
+    (user request: "I want ipv6 to be the main way to identify devices").
+    One ipv6_neighbors() call, not one per device -- it pings the whole
+    segment, so a single pass already has everything it's going to get.
+
+    Returns (devices, gateway_ipv6) -- devices gain an "ipv6" key (None if
+    not resolved); gateway_ipv6 is the gateway's own address, split out
+    because it isn't part of the device list and default_gateway() itself
+    deliberately stays IPv6-free (it's called on every /api/state request;
+    ipv6_neighbors() pings the segment and isn't cheap enough for that).
+    """
+    found = scan_devices(target, timeout=timeout)
+    v6 = ipv6_neighbors(gateway["iface"]) if gateway.get("iface") else {}
+    for d in found:
+        d["ipv6"] = v6.get(d["mac"]) if d.get("mac") else None
+    return found, v6.get(gateway.get("mac"))
+
+
 # --------------------------------------------------------------- registry
 #
 # Persisted to data/devices.json by callers (bin/dashd-serve's background
 # scan thread, scripts/nmap.py's manual run) -- both funnel through
 # load_registry()/merge_scan() so the on-disk shape only has one owner and
-# a stale flat list from before this registry existed can't corrupt a
-# merge. Shape:
+# a stale pre-registry file can't corrupt a merge. A list of gateways, each
+# with a list of connected devices (user request: "structured data",
+# explicitly a list-of-lists rather than the dict-keyed-by-opaque-id shape
+# this used before) -- easy to hand-read/hand-edit, e.g. to set a device's
+# name_override, which merge_scan() always carries forward verbatim since
+# it's the one field a scan never derives or overwrites. Shape:
 #
-#   {"networks": {
-#      "<gateway mac, or 'gw:<ip>' if the mac isn't known>": {
-#        "gateway_ip": "...",
-#        "last_scan": <epoch seconds>,
-#        "devices": {
-#          "<mac, or the ip if the mac isn't known>": {
-#            "ip": "...", "hostname": "...", "status": "up"|"offline",
-#            "first_seen": <epoch seconds>, "last_seen": <epoch seconds>
-#          }, ...
-#        }
-#      }, ...
-#   }}
+#   {"gateways": [
+#      {"id": "<gateway mac, or 'gw:<ip>' if the mac isn't known>",
+#       "ip": "...", "ipv6": "..."|null, "last_scan": <epoch seconds>,
+#       "devices": [
+#         {"mac": "..."|null, "ip": "...", "ipv6": "..."|null,
+#          "hostname": "...", "name_override": "..."|null,
+#          "status": "up"|"offline",
+#          "first_seen": <epoch seconds>, "last_seen": <epoch seconds>},
+#         ...
+#       ]},
+#      ...
+#   ]}
 
 def load_registry(path: Path) -> dict:
-    """Reads the on-disk registry, tolerating a missing/corrupt/
-    pre-registry (flat list) file -- any of those just means "nothing
-    remembered yet", not an error."""
+    """Reads the on-disk registry, tolerating a missing/corrupt/older-shape
+    (the pre-#27-follow-up dict-of-networks, or the earlier flat list)
+    file -- any of those just means "nothing remembered yet", not an
+    error. There's no migration: the registry is a self-healing cache, not
+    a record of things that can't be re-discovered by scanning again."""
     if not path.exists():
-        return {"networks": {}}
+        return {"gateways": []}
     try:
         data = json.loads(path.read_text())
     except (ValueError, OSError):
-        return {"networks": {}}
-    if not isinstance(data, dict) or not isinstance(data.get("networks"), dict):
-        return {"networks": {}}
+        return {"gateways": []}
+    if not isinstance(data, dict) or not isinstance(data.get("gateways"), list):
+        return {"gateways": []}
     return data
 
 
@@ -264,50 +345,97 @@ def network_key(gateway: dict | None) -> str | None:
     return gateway["mac"] or f"gw:{gateway['ip']}"
 
 
+def find_gateway(registry: dict, key: str) -> dict | None:
+    """The registry's entry for network `key`, or None if this network has
+    never been scanned. Public (not _-prefixed): bin/dashd-serve reads the
+    gateway's stored ipv6/last_scan directly, same reasoning devices_for_
+    network() and merge_scan() are both public."""
+    for gw in registry["gateways"]:
+        if gw.get("id") == key:
+            return gw
+    return None
+
+
 def merge_scan(registry: dict, gateway: dict | None, found: list[dict],
-               now: float | None = None) -> None:
+               gateway_ipv6: str | None = None, now: float | None = None) -> None:
     """Merges a fresh scan's results into `registry` in place, scoped to
     `gateway`'s network. Devices from a previous scan on THIS network that
     didn't show up this round are marked "offline", not dropped -- that's
     the actual "remember devices" behavior. Devices under a DIFFERENT
-    network's key are untouched (that's what makes network-hopping not
-    bleed one network's devices into another's)."""
+    network's entry are untouched (that's what makes network-hopping not
+    bleed one network's devices into another's).
+
+    `name_override` is carried forward from the existing record verbatim,
+    never set or cleared here -- it's the one field this function treats
+    as purely user-owned (user request: "a name override which I can
+    set"), so a scan can never quietly overwrite a name someone typed in.
+    """
     key = network_key(gateway)
     if not key:
         return
     now = time.time() if now is None else now
-    net = registry["networks"].setdefault(key, {"gateway_ip": None, "devices": {}})
-    net["gateway_ip"] = gateway["ip"]
-    net["last_scan"] = now
+    gw_rec = find_gateway(registry, key)
+    if gw_rec is None:
+        gw_rec = {"id": key, "ip": None, "ipv6": None, "last_scan": None, "devices": []}
+        registry["gateways"].append(gw_rec)
+    gw_rec["ip"] = gateway["ip"]
+    if gateway_ipv6:
+        gw_rec["ipv6"] = gateway_ipv6
+    gw_rec["last_scan"] = now
+
+    by_id, order = {}, []
+    for d in gw_rec["devices"]:
+        dev_id = d.get("mac") or d["ip"]
+        by_id[dev_id] = d
+        order.append(dev_id)
 
     seen = set()
     for d in found:
         dev_id = d.get("mac") or d["ip"]
         seen.add(dev_id)
-        existing = net["devices"].get(dev_id, {})
-        net["devices"][dev_id] = {
+        prev = by_id.get(dev_id, {})
+        by_id[dev_id] = {
+            "mac": d.get("mac"),
             "ip": d["ip"],
-            "hostname": d.get("hostname") or existing.get("hostname", ""),
+            "ipv6": d.get("ipv6") or prev.get("ipv6"),
+            "hostname": d.get("hostname") or prev.get("hostname", ""),
+            "name_override": prev.get("name_override"),
             "status": "up",
-            "first_seen": existing.get("first_seen", now),
+            "first_seen": prev.get("first_seen", now),
             "last_seen": now,
         }
-    for dev_id, rec in net["devices"].items():
+        if dev_id not in order:
+            order.append(dev_id)
+
+    for dev_id in order:
         if dev_id not in seen:
-            rec["status"] = "offline"
+            by_id[dev_id]["status"] = "offline"
+
+    gw_rec["devices"] = [by_id[dev_id] for dev_id in order]
 
 
 def self_device(gateway: dict | None) -> dict | None:
-    """This machine's own {"ip", "hostname"} on `gateway`'s interface --
-    used to pin "this device" first in devices_for_network() (user
-    request: it's "technically on and connected" by definition, since this
-    code is what's running the scan). None without a gateway/interface."""
+    """This machine's own {"mac", "ip", "ipv6", "hostname"} on `gateway`'s
+    interface -- used to pin "this device" first in devices_for_network()
+    (user request: it's "technically on and connected" by definition,
+    since this code is what's running the scan). `ipv6` is the
+    link-local address specifically (matches what ipv6_neighbors() gives
+    every other device, and doesn't drift the way a privacy-extension
+    global address would -- see ipv6_neighbors()'s docstring). `mac` comes
+    from psutil.AF_LINK, the same interface's own hardware address, so
+    devices_for_network() can match by MAC like everywhere else instead of
+    falling back to comparing IPs. None without a gateway/interface."""
     if not gateway or not gateway.get("iface"):
         return None
+    mac = ip = ipv6 = None
     for addr in psutil.net_if_addrs().get(gateway["iface"], []):
         if addr.family == socket.AF_INET:
-            return {"ip": addr.address, "hostname": socket.gethostname()}
-    return None
+            ip = addr.address
+        elif addr.family == socket.AF_INET6 and addr.address.startswith("fe80"):
+            ipv6 = addr.address.split("%")[0]
+        elif addr.family == psutil.AF_LINK:
+            mac = addr.address.lower()
+    return {"mac": mac, "ip": ip, "ipv6": ipv6, "hostname": socket.gethostname()}
 
 
 def devices_for_network(registry: dict, gateway: dict | None) -> list[dict]:
@@ -323,24 +451,30 @@ def devices_for_network(registry: dict, gateway: dict | None) -> list[dict]:
     key = network_key(gateway)
     if not key:
         return []
-    net = registry["networks"].get(key)
-    devices = dict(net["devices"]) if net else {}
+    gw_rec = find_gateway(registry, key)
+    devs = list(gw_rec["devices"]) if gw_rec else []
 
     me = self_device(gateway)
     self_row = None
     if me:
-        for dev_id, rec in list(devices.items()):
-            if rec["ip"] == me["ip"]:
-                hostname = me["hostname"] or rec.get("hostname", "")
-                self_row = {**rec, "hostname": hostname, "status": "up"}
-                del devices[dev_id]
+        for i, rec in enumerate(devs):
+            same = ((me["mac"] and rec.get("mac") == me["mac"])
+                    or rec.get("ip") == me["ip"])
+            if same:
+                self_row = {
+                    **rec,
+                    "hostname": me["hostname"] or rec.get("hostname", ""),
+                    "ipv6": rec.get("ipv6") or me.get("ipv6"),
+                    "status": "up",
+                }
+                del devs[i]
                 break
         if self_row is None:
             now = time.time()
-            self_row = {"ip": me["ip"], "hostname": me["hostname"],
+            self_row = {"mac": me["mac"], "ip": me["ip"], "ipv6": me["ipv6"],
+                        "hostname": me["hostname"], "name_override": None,
                         "status": "up", "first_seen": now, "last_seen": now}
 
     rest = sorted(
-        devices.values(),
-        key=lambda d: (d["status"] != "up", ipaddress.ip_address(d["ip"])))
+        devs, key=lambda d: (d["status"] != "up", ipaddress.ip_address(d["ip"])))
     return ([self_row] if self_row else []) + rest

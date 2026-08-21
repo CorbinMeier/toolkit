@@ -413,25 +413,34 @@
     </section>
 
     <!-- DEVICES: networked-device presence sweep (#27), now "remembered"
-         per-network (user request) -- lib/devices.py's registry keys
-         devices by MAC (stable across DHCP/IP changes) and marks a
-         previously-seen device "offline" instead of dropping it when a
-         scan doesn't find it, scoped to the current default gateway's
-         identity so hopping networks doesn't show a pile of some other
-         network's stale devices. Was combined with Log under a "Monitor"
-         heading; Log moved up front so this stood alone with a fixed
-         bottom-center anchor for a while, now moved again to sit directly
-         under System. Each row is status-dot | IP | device name (user
-         request) -- see statusDot()/renderDevices() in app.js, no more
-         node-glyph icon. Scan target/interval are set via the Control
-         Backend (#30); this just renders dashd-serve's cached sweep
-         result. #devicesCount (user request) shows the device count in
-         parens right after the "Devices" label. The header's right side
-         shows #devicesNetwork (the current gateway's IP -- "which profile
-         we're connecting to", user request) and #devicesSpinner (hidden
-         by default) while state.devices_scanning is true -- an nmap sweep
-         can take real seconds, so this is the "still working" signal
-         instead of a panel that silently doesn't update for a while. -->
+         per-network (user request) -- lib/devices.py's registry is a list
+         of gateways, each with a list of connected devices (user request:
+         "structured data"), keyed internally by MAC (stable across DHCP/
+         IP changes) and marks a previously-seen device "offline" instead
+         of dropping it when a scan doesn't find it, scoped to the current
+         default gateway's identity so hopping networks doesn't show a
+         pile of some other network's stale devices. Was combined with Log
+         under a "Monitor" heading; Log moved up front so this stood alone
+         with a fixed bottom-center anchor for a while, now moved again to
+         sit directly under System. Each row is status-dot | identifier |
+         device name -- see statusDot()/renderDevices() in app.js, no more
+         node-glyph icon. The identifier is IPv6 first (user request: "I
+         want ipv6 to be the main way to identify devices"), falling back
+         to IPv4 or MAC when IPv6 isn't known for that device yet; the
+         name is a user-settable name_override (hand-edited into
+         data/devices.json, never touched by a scan once set) first, then
+         the resolved hostname -- a device with neither still gets a row
+         (user request: "if there's no name, and no override, it should
+         show on the devices list"). Scan target/interval are set via the
+         Control Backend (#30); this just renders dashd-serve's cached
+         sweep result. #devicesCount (user request) shows the device count
+         in parens right after the "Devices" label. The header's right
+         side shows #devicesNetwork (the current gateway's IPv6, falling
+         back to IPv4 -- "which profile we're connecting to", user
+         request) and #devicesSpinner (hidden by default) while
+         state.devices_scanning is true -- an nmap sweep can take real
+         seconds, so this is the "still working" signal instead of a panel
+         that silently doesn't update for a while. -->
     <section class="accent-crimson flex flex-col">
       <div class="panel px-[2vmin] py-[1.5vmin] flex flex-col gap-[0.6vmin]">
         <h2 class="sec-head text-faint uppercase tracking-[0.3em] text-[clamp(.55rem,1.15vmin,.8rem)]

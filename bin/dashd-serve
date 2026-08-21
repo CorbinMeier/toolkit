@@ -229,17 +229,21 @@ _devices_scan_lock = threading.Lock()
 _devices_scanning = False
 
 
-def _run_device_scan(target: str, gateway: dict | None, path: Path) -> None:
+def _run_device_scan(target: str, gateway: dict, path: Path) -> None:
     """Runs off the request thread -- see cached_devices() below. Merges
     into the on-disk registry rather than overwriting it, so devices from
     other networks (or this network's devices that just didn't answer this
-    round -- see merge_scan()'s offline handling) survive."""
+    round -- see merge_scan()'s offline handling) survive. full_scan(), not
+    scan_devices() directly, so each device's IPv6 address (user request:
+    "I want ipv6 to be the main way to identify devices") gets layered in
+    by the one ipv6_neighbors() call this also needs for the gateway's own
+    address."""
     global _devices_scanning
     try:
-        found = devices.scan_devices(target)
+        found, gateway_ipv6 = devices.full_scan(target, gateway)
         with _lock:
             registry = devices.load_registry(path)
-            devices.merge_scan(registry, gateway, found)
+            devices.merge_scan(registry, gateway, found, gateway_ipv6=gateway_ipv6)
             path.write_text(json.dumps(registry))
     finally:
         with _devices_scan_lock:
@@ -248,21 +252,25 @@ def _run_device_scan(target: str, gateway: dict | None, path: Path) -> None:
 
 def cached_devices(cfg: dict) -> dict:
     """LAN device sweep, remembered per-network in data/devices.json (#27,
-    plus the "remember devices" follow-up), refreshed by a background
-    thread rather than inline: an nmap -sn ping sweep can take real seconds
-    (longer still if scan_target isn't actually reachable), and running it
-    synchronously inside an /api/state request would stall that poll -- and
-    every other client polling at the same time, since it's the handler
-    thread that would block.
+    plus the "remember devices" and "ipv6" follow-ups), refreshed by a
+    background thread rather than inline: an nmap -sn ping sweep (plus an
+    IPv6 neighbor-discovery ping) can take real seconds (longer still if
+    scan_target isn't actually reachable), and running it synchronously
+    inside an /api/state request would stall that poll -- and every other
+    client polling at the same time, since it's the handler thread that
+    would block.
 
     Returns {"gateway": {...}|None, "devices": [...]} for the CURRENT
     network only (identified by the default gateway's MAC, see
     devices.network_key()) -- a device remembered from a different
     network the machine was on before never leaks into today's list, so
     hopping networks doesn't show a pile of stale "offline" entries that
-    were never on this network to begin with. Kicks off a fresh scan once
-    devices.scan_interval_seconds has elapsed for THIS network, at most
-    one at a time.
+    were never on this network to begin with. The gateway dict is enriched
+    with its last-known "ipv6" from the registry here -- default_gateway()
+    itself deliberately stays IPv6-free (it's called on every request;
+    ipv6_neighbors() pings the segment and isn't cheap enough for that).
+    Kicks off a fresh scan once devices.scan_interval_seconds has elapsed
+    for THIS network, at most one at a time.
     """
     dev_cfg = cfg.get("devices", {})
     target = dev_cfg.get("scan_target")
@@ -273,10 +281,15 @@ def cached_devices(cfg: dict) -> dict:
         registry = devices.load_registry(path)
     device_list = devices.devices_for_network(registry, gateway)
 
+    gw_rec = None
+    display_gateway = None
+    if gateway:
+        gw_rec = devices.find_gateway(registry, devices.network_key(gateway))
+        display_gateway = {**gateway, "ipv6": gw_rec["ipv6"] if gw_rec else None}
+
     if target and gateway:
-        key = devices.network_key(gateway)
-        net = registry["networks"].get(key, {})
-        age = time.time() - net.get("last_scan", 0)
+        last_scan = gw_rec.get("last_scan") if gw_rec else None
+        age = time.time() - (last_scan or 0)
         ttl = dev_cfg.get("scan_interval_seconds", 300)
 
         global _devices_scanning
@@ -288,7 +301,7 @@ def cached_devices(cfg: dict) -> dict:
                         target=_run_device_scan, args=(target, gateway, path),
                         daemon=True).start()
 
-    return {"gateway": gateway, "devices": device_list}
+    return {"gateway": display_gateway, "devices": device_list}
 
 
 def devices_scanning() -> bool:

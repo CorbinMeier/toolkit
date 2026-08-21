@@ -52,7 +52,7 @@
   "display": {
     "layer": "BOTTOM",
     "transparent": true,
-    "theme": "night_ops",
+    "theme": "retro_terminal",
     "_theme_options": [
       "night_ops",
       "retro_terminal"

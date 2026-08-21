@@ -22,6 +22,8 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from unittest.mock import patch
 
+import psutil
+
 BIN = Path(__file__).resolve().parent.parent / "bin" / "dashd-serve"
 
 # bin/dashd-serve has no .py suffix, so it needs an explicit source loader.
@@ -518,6 +520,45 @@ class TestDevicesArpAndGateway(unittest.TestCase):
             self.assertIsNone(dashd.devices.default_gateway())
 
 
+class TestIpv6Neighbors(unittest.TestCase):
+    """ipv6_neighbors() -- the IPv6 analog of arp_table(), added for user
+    request "I want ipv6 to be the main way to identify devices". Verified
+    live against the real network this shipped against: `ip -6 neigh show`
+    was empty at rest, and had 9 entries moments after pinging ff02::1."""
+
+    # `ip -6 neigh show dev <iface>` (filtered by interface, what
+    # ipv6_neighbors() actually runs) omits the "dev <iface>" field each
+    # line would otherwise carry -- confirmed against the real command
+    # live. Using the unfiltered format here (which DOES carry "dev
+    # wlo1") would silently mask a real regression: an earlier version of
+    # this fixture did exactly that and let a real live bug (the filtered
+    # form matched nothing at all) slip past this test.
+    _NEIGH6_OUTPUT = (
+        "fe80::2ef0:5dff:fef9:bcf6 lladdr 2c:f0:5d:f9:bc:f6 router STALE\n"
+        "fe80::d6ab:cdff:fe67:718d lladdr d4:ab:cd:67:71:8d STALE\n"
+        "fe80::9999  FAILED\n"  # no lladdr -- unresolved, must be skipped
+    )
+
+    def test_parses_lladdr_keyed_by_mac(self):
+        with patch.object(dashd.devices, "_run",
+                           return_value=self._NEIGH6_OUTPUT) as run:
+            table = dashd.devices.ipv6_neighbors("wlo1")
+        self.assertEqual(table, {
+            "2c:f0:5d:f9:bc:f6": "fe80::2ef0:5dff:fef9:bcf6",
+            "d4:ab:cd:67:71:8d": "fe80::d6ab:cdff:fe67:718d",
+        })
+        # Pings the all-nodes multicast group on the given interface before
+        # reading the neighbor cache, to freshen it -- verify both calls
+        # happened, not just the one whose output got parsed.
+        cmds = [c.args[0] for c in run.call_args_list]
+        self.assertTrue(any(c[:3] == ["ping", "-6", "-c"] for c in cmds))
+        self.assertTrue(any(c[:4] == ["ip", "-6", "neigh", "show"] for c in cmds))
+
+    def test_empty_neighbor_cache_is_empty_dict(self):
+        with patch.object(dashd.devices, "_run", return_value=""):
+            self.assertEqual(dashd.devices.ipv6_neighbors("wlo1"), {})
+
+
 class TestMdnsResolve(unittest.TestCase):
     """_mdns_resolve() -- parses `avahi-resolve -a` output, the fallback
     name source added after user report ("the devices are not reporting
@@ -551,7 +592,11 @@ class TestDevicesRegistry(unittest.TestCase):
     """load_registry()/merge_scan()/devices_for_network() -- the "remember
     devices" behavior (user request): a device missing from a scan is
     marked offline, not dropped, and everything is scoped per-network so
-    hopping networks doesn't leak one network's devices into another's."""
+    hopping networks doesn't leak one network's devices into another's.
+    Registry shape is a list of gateways each with a list of devices
+    (user request: "structured data" -- "a list of gateways, and each
+    gateway should have a list of connected devices"), not the dict-keyed-
+    by-opaque-id shape this used before."""
 
     def setUp(self):
         self._tmp = tempfile.TemporaryDirectory()
@@ -561,15 +606,21 @@ class TestDevicesRegistry(unittest.TestCase):
         self._tmp.cleanup()
 
     def test_load_registry_missing_file_is_empty(self):
-        self.assertEqual(dashd.devices.load_registry(self.path), {"networks": {}})
+        self.assertEqual(dashd.devices.load_registry(self.path), {"gateways": []})
 
     def test_load_registry_tolerates_corrupt_json(self):
         self.path.write_text("{not json")
-        self.assertEqual(dashd.devices.load_registry(self.path), {"networks": {}})
+        self.assertEqual(dashd.devices.load_registry(self.path), {"gateways": []})
 
-    def test_load_registry_tolerates_pre_registry_flat_shape(self):
+    def test_load_registry_tolerates_older_dict_shape(self):
+        # The dict-keyed-by-network-id shape this registry used before the
+        # "structured data" follow-up, and the even older pre-registry
+        # flat list before that -- both must be treated as "nothing
+        # remembered yet", not corrupt data merge_scan() might choke on.
+        self.path.write_text(json.dumps({"networks": {"aa:bb": {"devices": {}}}}))
+        self.assertEqual(dashd.devices.load_registry(self.path), {"gateways": []})
         self.path.write_text(json.dumps({"devices": [], "fetched_at": 1.0}))
-        self.assertEqual(dashd.devices.load_registry(self.path), {"networks": {}})
+        self.assertEqual(dashd.devices.load_registry(self.path), {"gateways": []})
 
     def test_network_key_prefers_gateway_mac(self):
         self.assertEqual(
@@ -583,9 +634,67 @@ class TestDevicesRegistry(unittest.TestCase):
     def test_network_key_none_without_a_gateway(self):
         self.assertIsNone(dashd.devices.network_key(None))
 
+    def test_find_gateway_by_id(self):
+        registry = {"gateways": [{"id": "aa:aa:aa:aa:aa:aa", "devices": []}]}
+        self.assertIsNotNone(dashd.devices.find_gateway(registry, "aa:aa:aa:aa:aa:aa"))
+        self.assertIsNone(dashd.devices.find_gateway(registry, "bb:bb:bb:bb:bb:bb"))
+
+    def test_merge_scan_creates_one_gateway_entry_per_network(self):
+        gw = {"ip": "10.1.1.1", "mac": "aa:aa:aa:aa:aa:aa"}
+        registry = {"gateways": []}
+        dashd.devices.merge_scan(registry, gw, [], now=1000.0)
+        dashd.devices.merge_scan(registry, gw, [], now=2000.0)  # same network again
+        self.assertEqual(len(registry["gateways"]), 1)
+        self.assertEqual(registry["gateways"][0]["id"], "aa:aa:aa:aa:aa:aa")
+        self.assertEqual(registry["gateways"][0]["last_scan"], 2000.0)
+
+    def test_gateway_ipv6_stored_and_preserved_when_not_resupplied(self):
+        gw = {"ip": "10.1.1.1", "mac": "aa:aa:aa:aa:aa:aa"}
+        registry = {"gateways": []}
+        dashd.devices.merge_scan(registry, gw, [], gateway_ipv6="fe80::1", now=1000.0)
+        self.assertEqual(registry["gateways"][0]["ipv6"], "fe80::1")
+        # A later scan that couldn't resolve the gateway's IPv6 this round
+        # (gateway_ipv6=None) must not blank out what was already known.
+        dashd.devices.merge_scan(registry, gw, [], gateway_ipv6=None, now=2000.0)
+        self.assertEqual(registry["gateways"][0]["ipv6"], "fe80::1")
+
+    def test_device_ipv6_layered_in_and_preserved(self):
+        gw = {"ip": "10.1.1.1", "mac": "aa:aa:aa:aa:aa:aa"}
+        registry = {"gateways": []}
+        dashd.devices.merge_scan(registry, gw, [
+            {"ip": "10.1.1.5", "mac": "11:11:11:11:11:11", "hostname": "",
+             "ipv6": "fe80::5"},
+        ], now=1000.0)
+        # A later scan where this device's ipv6 wasn't resolved must keep
+        # the previously-known address rather than blanking it.
+        dashd.devices.merge_scan(registry, gw, [
+            {"ip": "10.1.1.5", "mac": "11:11:11:11:11:11",
+             "hostname": "", "ipv6": None},
+        ], now=2000.0)
+        found = dashd.devices.devices_for_network(registry, gw)
+        self.assertEqual(found[0]["ipv6"], "fe80::5")
+
+    def test_name_override_is_never_set_or_cleared_by_a_scan(self):
+        gw = {"ip": "10.1.1.1", "mac": "aa:aa:aa:aa:aa:aa"}
+        registry = {"gateways": [{
+            "id": "aa:aa:aa:aa:aa:aa", "ip": "10.1.1.1", "ipv6": None, "last_scan": 0,
+            "devices": [{
+                "mac": "11:11:11:11:11:11", "ip": "10.1.1.5", "ipv6": None,
+                "hostname": "", "name_override": "Living Room TV",
+                "status": "offline", "first_seen": 0, "last_seen": 0,
+            }],
+        }]}
+        dashd.devices.merge_scan(registry, gw, [
+            {"ip": "10.1.1.5", "mac": "11:11:11:11:11:11", "hostname": "roku-abc123"},
+        ], now=1000.0)
+
+        found = dashd.devices.devices_for_network(registry, gw)
+        self.assertEqual(found[0]["name_override"], "Living Room TV")
+        self.assertEqual(found[0]["hostname"], "roku-abc123")  # still resolves normally
+
     def test_device_missing_from_a_later_scan_goes_offline_not_dropped(self):
         gw = {"ip": "10.1.1.1", "mac": "aa:aa:aa:aa:aa:aa"}
-        registry = {"networks": {}}
+        registry = {"gateways": []}
         dashd.devices.merge_scan(registry, gw, [
             {"ip": "10.1.1.5", "mac": "11:11:11:11:11:11", "hostname": "phone"},
         ], now=1000.0)
@@ -599,7 +708,7 @@ class TestDevicesRegistry(unittest.TestCase):
 
     def test_device_seen_again_goes_back_to_up(self):
         gw = {"ip": "10.1.1.1", "mac": "aa:aa:aa:aa:aa:aa"}
-        registry = {"networks": {}}
+        registry = {"gateways": []}
         found = [{"ip": "10.1.1.5", "mac": "11:11:11:11:11:11", "hostname": "phone"}]
         dashd.devices.merge_scan(registry, gw, found, now=1000.0)
         dashd.devices.merge_scan(registry, gw, [], now=2000.0)
@@ -612,7 +721,7 @@ class TestDevicesRegistry(unittest.TestCase):
     def test_devices_scoped_to_current_network_only(self):
         gw_home = {"ip": "10.1.1.1", "mac": "aa:aa:aa:aa:aa:aa"}
         gw_cafe = {"ip": "192.168.5.1", "mac": "bb:bb:bb:bb:bb:bb"}
-        registry = {"networks": {}}
+        registry = {"gateways": []}
         dashd.devices.merge_scan(registry, gw_home, [
             {"ip": "10.1.1.5", "mac": "11:11:11:11:11:11", "hostname": "phone"},
         ], now=1000.0)
@@ -624,7 +733,7 @@ class TestDevicesRegistry(unittest.TestCase):
 
     def test_devices_for_network_sorts_up_before_offline_then_by_ip(self):
         gw = {"ip": "10.1.1.1", "mac": "aa:aa:aa:aa:aa:aa"}
-        registry = {"networks": {}}
+        registry = {"gateways": []}
         dashd.devices.merge_scan(registry, gw, [
             {"ip": "10.1.1.20", "mac": "22:22:22:22:22:22", "hostname": ""},
             {"ip": "10.1.1.5", "mac": "11:11:11:11:11:11", "hostname": ""},
@@ -638,7 +747,7 @@ class TestDevicesRegistry(unittest.TestCase):
                           [("10.1.1.5", "up"), ("10.1.1.20", "offline")])
 
     def test_devices_for_network_empty_without_a_gateway(self):
-        self.assertEqual(dashd.devices.devices_for_network({"networks": {}}, None), [])
+        self.assertEqual(dashd.devices.devices_for_network({"gateways": []}, None), [])
 
 
 class TestDevicesSelf(unittest.TestCase):
@@ -650,9 +759,19 @@ class TestDevicesSelf(unittest.TestCase):
     test machine's real interfaces/hostname."""
 
     _GATEWAY = {"ip": "10.1.1.1", "mac": "aa:aa:aa:aa:aa:aa", "iface": "wlo1"}
-    _MY_ADDRS = {"wlo1": [type("A", (), {
-        "family": socket.AF_INET, "address": "10.1.1.38",
-        "netmask": "255.255.254.0"})()]}
+    _MY_ADDRS = {"wlo1": [
+        type("A", (), {"family": socket.AF_INET, "address": "10.1.1.38",
+                        "netmask": "255.255.254.0"})(),
+        type("A", (), {"family": socket.AF_INET6,
+                        "address": "fe80::1234%wlo1", "netmask": None})(),
+        # A global/temporary address too, to confirm self_device() ignores
+        # it in favor of the link-local one (see its docstring: privacy-
+        # extension addresses rotate, link-local doesn't).
+        type("A", (), {"family": socket.AF_INET6,
+                        "address": "fdb4:f832::abcd", "netmask": None})(),
+        type("A", (), {"family": psutil.AF_LINK, "address": "F8:3D:C6:BF:50:70",
+                        "netmask": None})(),
+    ]}
 
     def setUp(self):
         self.enterContext(patch.object(
@@ -662,14 +781,17 @@ class TestDevicesSelf(unittest.TestCase):
 
     def test_self_device_reads_the_gateways_interface(self):
         me = dashd.devices.self_device(self._GATEWAY)
-        self.assertEqual(me, {"ip": "10.1.1.38", "hostname": "cim-hp-flip"})
+        self.assertEqual(me, {
+            "mac": "f8:3d:c6:bf:50:70", "ip": "10.1.1.38",
+            "ipv6": "fe80::1234", "hostname": "cim-hp-flip",
+        })
 
     def test_self_device_none_without_gateway_or_interface(self):
         self.assertIsNone(dashd.devices.self_device(None))
         self.assertIsNone(dashd.devices.self_device({"ip": "10.1.1.1", "iface": None}))
 
     def test_self_device_leads_the_list_even_though_ip_sorts_later(self):
-        registry = {"networks": {}}
+        registry = {"gateways": []}
         dashd.devices.merge_scan(registry, self._GATEWAY, [
             {"ip": "10.1.1.5", "mac": "11:11:11:11:11:11", "hostname": "phone"},
         ], now=1000.0)
@@ -677,8 +799,21 @@ class TestDevicesSelf(unittest.TestCase):
         self.assertEqual([d["ip"] for d in result], ["10.1.1.38", "10.1.1.5"])
         self.assertEqual(result[0]["status"], "up")
 
+    def test_self_device_matched_by_mac_gets_its_ipv6_filled_in(self):
+        # Real-world case: a previous IPv4-only scan (or one where NDP
+        # hadn't resolved this device's ipv6 yet) recorded this machine
+        # with mac but no ipv6 -- self_device() should still recognize it
+        # (by mac, not ip) and backfill the ipv6 it already knows.
+        registry = {"gateways": []}
+        dashd.devices.merge_scan(registry, self._GATEWAY, [
+            {"ip": "10.1.1.38", "mac": "f8:3d:c6:bf:50:70",
+             "hostname": "cim-hp-flip", "ipv6": None},
+        ], now=1000.0)
+        result = dashd.devices.devices_for_network(registry, self._GATEWAY)
+        self.assertEqual(result[0]["ipv6"], "fe80::1234")
+
     def test_self_device_forced_up_even_if_scan_marked_it_offline(self):
-        registry = {"networks": {}}
+        registry = {"gateways": []}
         dashd.devices.merge_scan(registry, self._GATEWAY, [
             {"ip": "10.1.1.38", "mac": None, "hostname": "cim-hp-flip"},
         ], now=1000.0)
@@ -689,9 +824,10 @@ class TestDevicesSelf(unittest.TestCase):
         self.assertEqual(result[0]["status"], "up")
 
     def test_self_device_synthesized_when_no_scan_has_run_yet(self):
-        result = dashd.devices.devices_for_network({"networks": {}}, self._GATEWAY)
+        result = dashd.devices.devices_for_network({"gateways": []}, self._GATEWAY)
         self.assertEqual(result, [{
-            "ip": "10.1.1.38", "hostname": "cim-hp-flip", "status": "up",
+            "mac": "f8:3d:c6:bf:50:70", "ip": "10.1.1.38", "ipv6": "fe80::1234",
+            "hostname": "cim-hp-flip", "name_override": None, "status": "up",
             "first_seen": result[0]["first_seen"], "last_seen": result[0]["last_seen"],
         }])
 
@@ -753,7 +889,9 @@ class TestDevicesScanning(unittest.TestCase):
     default_gateway() is patched throughout: cached_devices() now calls it
     on every request (#27 "remember devices" follow-up), and the real
     function shells out to `ip route`, which would make these tests depend
-    on whatever network the suite happens to run on."""
+    on whatever network the suite happens to run on. _run_device_scan()
+    calls devices.full_scan() now (not scan_devices() directly), so that's
+    what gets mocked to control the background thread's result."""
 
     _GATEWAY = {"ip": "10.1.1.1", "mac": "aa:aa:aa:aa:aa:aa", "iface": "wlo1"}
 
@@ -761,7 +899,7 @@ class TestDevicesScanning(unittest.TestCase):
         self._tmp = tempfile.TemporaryDirectory()
         self._orig_data = dashd.DATA
         dashd.DATA = Path(self._tmp.name)
-        self._orig_scan = dashd.devices.scan_devices
+        self._orig_full_scan = dashd.devices.full_scan
         self._orig_gateway = dashd.devices.default_gateway
         self._orig_self = dashd.devices.self_device
         dashd.devices.default_gateway = lambda: self._GATEWAY
@@ -775,7 +913,7 @@ class TestDevicesScanning(unittest.TestCase):
 
     def tearDown(self):
         dashd.DATA = self._orig_data
-        dashd.devices.scan_devices = self._orig_scan
+        dashd.devices.full_scan = self._orig_full_scan
         dashd.devices.default_gateway = self._orig_gateway
         dashd.devices.self_device = self._orig_self
         dashd._devices_scanning = False
@@ -785,13 +923,14 @@ class TestDevicesScanning(unittest.TestCase):
         started = threading.Event()
         release = threading.Event()
 
-        def fake_scan(_target, timeout=30):
+        def fake_full_scan(_target, _gateway, timeout=30):
             started.set()
             release.wait(timeout=2)
-            return [{"ip": "10.1.1.5", "mac": "11:11:11:11:11:11",
-                      "hostname": "", "status": "up"}]
+            found = [{"ip": "10.1.1.5", "mac": "11:11:11:11:11:11",
+                      "hostname": "", "ipv6": "fe80::5", "status": "up"}]
+            return found, "fe80::1"
 
-        dashd.devices.scan_devices = fake_scan
+        dashd.devices.full_scan = fake_full_scan
         cfg = {"devices": {"scan_target": "10.1.1.0/24",
                             "scan_interval_seconds": 300}}
 
@@ -808,18 +947,60 @@ class TestDevicesScanning(unittest.TestCase):
         self.assertFalse(dashd.devices_scanning())
 
         # And the scan result actually landed in the registry, scoped to
-        # this network, picked up on the very next call.
+        # this network, picked up on the very next call -- including the
+        # gateway's own ipv6, enriched from the registry (#27 "ipv6"
+        # follow-up: default_gateway() itself deliberately stays IPv6-free).
         result = dashd.cached_devices(cfg)
-        self.assertEqual(result["gateway"], self._GATEWAY)
+        self.assertEqual(result["gateway"], {**self._GATEWAY, "ipv6": "fe80::1"})
         self.assertEqual(len(result["devices"]), 1)
         self.assertEqual(result["devices"][0]["ip"], "10.1.1.5")
+        self.assertEqual(result["devices"][0]["ipv6"], "fe80::5")
         self.assertEqual(result["devices"][0]["status"], "up")
+
+    def test_does_not_retrigger_while_a_scan_is_already_in_flight(self):
+        # User request: "not re-trigger until the last sweep completes".
+        # age stays >= ttl for the ENTIRE duration of the first scan (the
+        # registry's last_scan doesn't update until that scan finishes and
+        # writes it) -- calling cached_devices() again mid-scan must still
+        # only ever have one full_scan() call in flight.
+        started = threading.Event()
+        release = threading.Event()
+        call_count = 0
+
+        def fake_full_scan(_target, _gateway, timeout=30):
+            nonlocal call_count
+            call_count += 1
+            started.set()
+            release.wait(timeout=2)
+            return [], None
+
+        dashd.devices.full_scan = fake_full_scan
+        cfg = {"devices": {"scan_target": "10.1.1.0/24",
+                            "scan_interval_seconds": 300}}
+
+        dashd.cached_devices(cfg)  # kicks off scan #1
+        self.assertTrue(started.wait(timeout=2), "scan never started")
+
+        # Several more polls while #1 is still blocked on `release` --
+        # age is still >= ttl every time (nothing has written a fresh
+        # last_scan yet), so this is exactly the case that must NOT spawn
+        # a second thread.
+        for _ in range(5):
+            dashd.cached_devices(cfg)
+        self.assertEqual(call_count, 1)
+
+        release.set()
+        for _ in range(50):
+            if not dashd.devices_scanning():
+                break
+            time.sleep(0.05)
+        self.assertEqual(call_count, 1)
 
     def test_no_gateway_means_no_scan_and_empty_devices(self):
         dashd.devices.default_gateway = lambda: None
         cfg = {"devices": {"scan_target": "10.1.1.0/24"}}
 
-        with patch.object(dashd.devices, "scan_devices") as run:
+        with patch.object(dashd.devices, "full_scan") as run:
             result = dashd.cached_devices(cfg)
         self.assertIsNone(result["gateway"])
         self.assertEqual(result["devices"], [])
@@ -829,7 +1010,7 @@ class TestDevicesScanning(unittest.TestCase):
         # Pre-seed the registry as if the machine had previously been on a
         # different network -- cached_devices() must not surface that.
         other_gw = {"ip": "192.168.5.1", "mac": "bb:bb:bb:bb:bb:bb"}
-        registry = {"networks": {}}
+        registry = {"gateways": []}
         dashd.devices.merge_scan(registry, other_gw, [
             {"ip": "192.168.5.9", "mac": "22:22:22:22:22:22", "hostname": "laptop"},
         ], now=1.0)

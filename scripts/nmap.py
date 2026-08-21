@@ -1,13 +1,14 @@
 #!/usr/bin/env python3
 """Manual on-demand LAN device scan (`npm`/`pnpm run nmap`).
 
-Runs the same nmap -sn ping sweep dashd-serve's background thread runs
-periodically (lib/devices.py), against config.json's devices.scan_target,
-and merges the result into data/devices.json's per-network registry (same
-load_registry()/merge_scan() dashd-serve itself uses -- writing the old
-flat {"devices": [...]} shape here would clobber whatever dashd-serve had
-remembered) so the running dashboard picks it up on its next poll instead
-of waiting out scan_interval_seconds.
+Runs the same nmap -sn ping sweep + IPv6 neighbor discovery dashd-serve's
+background thread runs periodically (lib/devices.py's full_scan()),
+against config.json's devices.scan_target, and merges the result into
+data/devices.json's per-network registry (same load_registry()/
+merge_scan() dashd-serve itself uses -- writing an older/different shape
+here would clobber whatever dashd-serve had remembered) so the running
+dashboard picks it up on its next poll instead of waiting out
+scan_interval_seconds.
 
 Standalone -- this is a separate process from dashd-serve, so it doesn't
 (and can't cheaply) drive the live Devices panel's scanning spinner; that
@@ -42,20 +43,23 @@ def main() -> int:
         return 1
 
     print(f"scanning {target} (network: {gateway['ip']}) ...")
-    found = devices.scan_devices(target)
+    found, gateway_ipv6 = devices.full_scan(target, gateway)
 
     DATA.mkdir(exist_ok=True)
     path = DATA / "devices.json"
     registry = devices.load_registry(path)
-    devices.merge_scan(registry, gateway, found)
+    devices.merge_scan(registry, gateway, found, gateway_ipv6=gateway_ipv6)
     path.write_text(json.dumps(registry))
 
+    if gateway_ipv6:
+        print(f"gateway ipv6: {gateway_ipv6}")
     if not found:
         print("no devices found")
         return 0
     for d in found:
         label = d["hostname"] or "—"
-        print(f"  {d['ip']:<15} {d['mac'] or '(no mac)':<19} {label}")
+        print(f"  {d['ip']:<15} {d.get('ipv6') or '(no ipv6)':<28} "
+              f"{d['mac'] or '(no mac)':<19} {label}")
     print(f"{len(found)} device(s) up")
     return 0
 
