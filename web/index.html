@@ -127,7 +127,15 @@
 
   /* System table: icon | label | value | histograph/badge, one row per
      metric, so everything lines up in real table columns instead of
-     independently-sized flex rows. */
+     independently-sized flex rows. width:fit-content (ISSUES.md #33) --
+     the CPU/MEM/BAT table is a direct child of .panel's flex column, so
+     without this it inherits align-items:stretch and gets forced to the
+     panel's full cross-axis width, which then spreads its auto-sized
+     label/value/tail columns edge-to-edge. Storage/Network's tables never
+     hit this because they sit one level deeper inside a plain wrapper
+     <div> (the flex item), not as the table itself; harmless to apply
+     here too since their natural width already equals their content. */
+  .sys-table{width:fit-content}
   .sys-table td{vertical-align:middle;padding:0.32vmin 0}
   .sys-table .sysicon{width:1.05em;height:1.05em;display:block}
 
@@ -140,11 +148,19 @@
   .util-bars polygon{transition:fill .6s ease}
   .util-bars{filter:drop-shadow(0 0 1.5px rgb(0 0 0 / .4))}
 
-  /* Trend graph row beneath a CPU/MEM row (ISSUES.md #17, revised): one
+  /* Trend graph beneath a CPU/MEM row (ISSUES.md #17, revised): one
      full-width filled step chart with its own corner labels (window
      length left, value range right) -- was three side-by-side 30S/5M/30M
-     tiers, collapsed to a single 30-minute window per user feedback. */
-  .graph-row{display:flex;gap:1vmin;padding:0.2vmin 0 0.3vmin}
+     tiers, collapsed to a single 30-minute window per user feedback.
+     Lives in its own #sysgraphs container now, a sibling of the value-row
+     <table> rather than a colspan row inside it (ISSUES.md #33) -- the
+     chart's width:100% was forcing that table's auto layout to blow out
+     the value/tail columns it shared, spreading every row edge-to-edge.
+     .graph-row-indent's padding-left approximates clearing the icon+label
+     columns above it (can't align exactly without sharing table columns,
+     but doesn't need to -- it's a supporting chart, not tabular data). */
+  .graph-row-indent{display:flex;gap:1vmin;padding:0.2vmin 0 0.3vmin;
+    padding-left:2.6em}
   .graph-cell{position:relative;flex:1 1 0;min-width:3.2rem;display:flex;
     flex-direction:column;gap:0.15em}
   .graph-cell__labels{display:flex;justify-content:space-between;gap:0.4em;
@@ -194,19 +210,24 @@
       <div class="panel px-[2vmin] py-[1.5vmin] flex flex-col gap-[0.6vmin]">
         <h2 class="sec-head text-faint uppercase tracking-[0.3em] text-[clamp(.55rem,1.15vmin,.8rem)]">
           System</h2>
-        <!-- CPU, Memory, Battery -- table so LED / icon / label / value line
-             up across every row (LED leads -- the most immediate signal,
-             ISSUES.md #17). CPU/Memory each get one value row plus a single
-             row of three compact side-by-side tier graphs (not three
-             stacked full-width rows); Battery has no graphs at all (#17)
-             and sits directly under Memory. Compact, not w-full (#17) --
-             sized to its own content, not stretched to fill the panel. -->
+        <!-- CPU, Memory, Battery -- table so icon / label / value / utilization
+             bar line up across every row (ISSUES.md #31: the row shape now
+             matches Storage/Network -- icon, label, value, tail -- since the
+             leading status LED was retired). Compact, not w-full (#17) --
+             sized to its own content, not stretched to fill the panel.
+             #33: the 30-minute trend graph used to live inside this same
+             table (colspan cells sharing the value/tail columns), but its
+             internal width:100% chart forced those columns to blow out to
+             fill the panel, spreading the value row edge-to-edge. It now
+             renders in its own sysgraphs container below, decoupled from
+             this table's column widths entirely. -->
         <table class="sys-table border-collapse">
           <colgroup>
-            <col class="w-[1.1em]"><col class="w-[1.6em]"><col><col>
+            <col class="w-[1.6em]"><col><col><col>
           </colgroup>
           <tbody id="sys"></tbody>
         </table>
+        <div id="sysgraphs" class="flex flex-col"></div>
 
         <!-- Storage: its own visually separated area, not mixed into the
              cpu/mem/bat metric rows above. -->

@@ -385,22 +385,17 @@ function graphCell(label, values, tone) {
 // -- was three side-by-side 30S/5M/30M tiers, collapsed to a single
 // 30-minute window per user feedback: three independently-auto-scaled
 // mini charts made magnitude impossible to compare across tiers and the
-// 30S tier was near-flat dead space at this size). Spans under the
-// label+value columns (colspan 2 each) -- the LED+icon columns stay
-// empty, same indent as where the metric's own icon sits in the row
-// above.
+// 30S tier was near-flat dead space at this size). Rendered into its own
+// #sysgraphs container, a sibling of the value-row <table>, not a colspan
+// row inside it (ISSUES.md #33): the graph-cell's internal width:100%
+// chart was forcing the table's auto layout to blow out the value/tail
+// columns it shared, spreading every row edge-to-edge. Indented to
+// roughly clear the icon+label columns above it.
 function metricGraphRow(label, values, tone) {
-  const tr = document.createElement('tr');
-  const spacer = document.createElement('td');
-  spacer.colSpan = 2;
-  const cell = document.createElement('td');
-  cell.colSpan = 2;
-  const row = document.createElement('div');
-  row.className = 'graph-row';
-  row.appendChild(graphCell(label, values, tone));
-  cell.appendChild(row);
-  tr.append(spacer, cell);
-  return tr;
+  const wrap = document.createElement('div');
+  wrap.className = 'graph-row-indent';
+  wrap.appendChild(graphCell(label, values, tone));
+  return wrap;
 }
 
 // CPU/Memory: one filled trend graph each, the last 30 minutes
@@ -413,6 +408,8 @@ function metricGraphRow(label, values, tone) {
 function renderCpuMemBat(s) {
   const box = $('sys');
   box.replaceChildren();
+  const graphs = $('sysgraphs');
+  graphs.replaceChildren();
   const hot = (p) => p > 88 ? 'var(--color-warm)' : 'var(--color-accent)';
   const pad2 = (n) => String(Math.round(n)).padStart(2, '0');
 
@@ -424,7 +421,7 @@ function renderCpuMemBat(s) {
       s.cpu_freq ? `${(s.cpu_freq / 1000).toFixed(1)}GHz` : null].filter(Boolean).join(' · '),
     tail: utilBars(s.cpu),
   }));
-  box.appendChild(metricGraphRow('30M', historySince('cpu_pct', 30 * 60_000), cpuTone));
+  graphs.appendChild(metricGraphRow('30M', historySince('cpu_pct', 30 * 60_000), cpuTone));
 
   const memTone = hot(s.mem.pct);
   box.appendChild(sysRow({
@@ -433,7 +430,7 @@ function renderCpuMemBat(s) {
     sub: `${bytes(s.mem.used)} / ${bytes(s.mem.total)}`,
     tail: utilBars(s.mem.pct),
   }));
-  box.appendChild(metricGraphRow('30M', historySince('mem_pct', 30 * 60_000), memTone));
+  graphs.appendChild(metricGraphRow('30M', historySince('mem_pct', 30 * 60_000), memTone));
 
   if (s.battery) {
     const battTone = s.battery.pct <= 35 && !s.battery.plugged

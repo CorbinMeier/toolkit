@@ -177,6 +177,26 @@ render loop.
   Fix/pattern: set `element.style.paddingLeft`/`paddingRight` directly
   instead of a `pl-*`/`pr-*` class on any `<td>` in these tables — inline
   styles always win regardless of the shorthand rule's specificity.
+- **A `<table>` that is a *direct* child of a `flex flex-col` container
+  inherits `align-items: stretch` and gets forced to the container's full
+  cross-axis width, even with no `w-full` class anywhere** -- this silently
+  undid #17's "compact, sized to its own content" table sizing for exactly
+  one table. CPU/MEM/BAT's `<table class="sys-table">` sits directly inside
+  `.panel` (itself `flex flex-col`), so it stretched full width; its
+  unconstrained label/value/tail `<colgroup>` columns then absorbed that
+  extra width, spreading the row edge-to-edge with `value`/`tail`'s
+  right-aligned content hugging the far right (#33). Storage/Network never
+  hit this because their tables sit one level deeper inside a plain wrapper
+  `<div>` -- the div is the flex item and gets stretched, but the table
+  inside it is an ordinary block box sized by normal (shrink-to-fit) table
+  layout. Fix: `.sys-table{width:fit-content}` overrides the inherited
+  stretch regardless of DOM nesting -- applied table-wide since it's a
+  no-op for tables that were already content-sized. A second contributing
+  factor: CPU/MEM's 30-minute trend graph used to be a colspan row sharing
+  the same table's value/tail columns; its internal `width:100%` chart
+  compounded the blowout, so it was also pulled out into its own
+  `#sysgraphs` sibling container, decoupled from the value table's column
+  widths entirely.
 - **PyGObject version pinning**: `gi.require_version("Gdk", "3.0")` must come
   before the `from gi.repository import ...` line and before anything pulls in
   Gtk 4, or the import dies with `Requiring namespace 'Gdk' version '3.0', but
