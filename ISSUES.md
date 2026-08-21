@@ -4,7 +4,7 @@ Newest first. No GitHub remote on this project, so this file is the tracker.
 
 ## 19. CPU/Memory trend graph: collapse the 30S/5M/30M three-tier row into one filled 30-minute graph
 
-Status: open
+Status: closed
 Source: user request
 Date: 2026-08-20
 
@@ -17,7 +17,22 @@ this: each of the 30S/5M/30M cells auto-scaled independently so
 magnitude wasn't comparable across tiers by eye, and the 30S tier read
 as near-flat dead space at that size.
 
+`stepChart()` gained an optional per-series `fill` flag (SVG
+linearGradient under the step path); `graphCell()`/`metricGraphRow()`
+collapsed from three tiers to one; `renderCpuMemBat()` now reads
+`historySince('cpu_pct'|'mem_pct', 30 min)` only, so the ring-buffer-fed
+30S tier is gone (Network's down/up ring tracking is unaffected). DESIGN.md's
+Compact Tier Graph component renamed to Trend Graph and rewritten.
+
+Verified via the full lint -> test -> build chain (eslint, ruff, unittest
+against system python3, `scripts/smoke.py`) and a live headless-Chrome
+screenshot pass confirming the filled area actually renders; visual
+confirmation on the live desktop is the user's per the project's usual
+convention.
+
 Started at: 2026-08-20T19:25:36-07:00
+Ended at: 2026-08-20T19:27:05-07:00
+Time elapsed: 1m29s
 
 ## 18. Battery LED: charging should read green, not red; flash red only at low charge
 
