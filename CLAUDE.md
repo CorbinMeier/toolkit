@@ -271,11 +271,18 @@ any other script can add panels without touching the server.
   `cosmic-bg`'s wallpaper, backdrop blur included — but it reads poorly
   against the current black-hole wallpaper, so it was reverted. One-key flip
   in `config.json` plus a host restart if revisited against calmer imagery.
-- #15 (2026-08-20): CPU/MEM/BAT icons now sit inside a two-layer
-  utilization ring (deep-red base + a glowing fill that scales with
-  percentage; battery uses a discrete charging/dim/low-flash state
-  instead) -- see DESIGN.md's Utilization Ring component. Replaces the
-  CHRG text badge entirely, which is removed.
+- #16 (2026-08-20): shrank the CPU/MEM/BAT utilization indicator from a
+  large background ring to a small `0.85em` LED sitting after the row's
+  label text, close to that text's own cap-height. Fill mechanic switched
+  from scale (grows) to opacity (brightens) -- a real LED doesn't grow --
+  and glow blur/spread were capped small so the halo stays proportionate
+  instead of blooming into a blob. See DESIGN.md's Utilization LED
+  component (supersedes #15's ring version).
+- #15 (2026-08-20): CPU/MEM/BAT icons briefly sat inside a two-layer
+  utilization ring (deep-red base + a glowing fill that scaled with
+  percentage; battery used a discrete charging/dim/low-flash state) --
+  replaced the CHRG text badge, which is removed. Ring reworked into a
+  small LED by #16 after user feedback that it read as too heavy.
 - #14 (2026-08-20): split historical-metrics collection out of dashd-serve
   into a standalone `bin/dashd-collect`, the sole writer of
   `data/metrics.db` now. Shared cpu/mem/battery/net sampling moved into

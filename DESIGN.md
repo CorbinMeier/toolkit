@@ -56,11 +56,11 @@ components:
   panel:
     backgroundColor: "{colors.deep-console}"
     padding: "1.5vmin 2vmin"
-  icon-ring-base:
+  icon-led-base:
     backgroundColor: "oklch(0.15 0.03 25)"
     rounded: "{rounded.circle}"
-  icon-ring-fill:
-    gradient: "radial-gradient(circle at 42% 34%, oklch(0.85 0.08 25) 0%, {colors.distress-red} 55%, oklch(0.30 0.07 25) 100%)"
+  icon-led-fill:
+    gradient: "radial-gradient(circle at 38% 32%, oklch(0.85 0.08 25) 0%, {colors.distress-red} 55%, oklch(0.30 0.07 25) 100%)"
     rounded: "{rounded.circle}"
 ---
 
@@ -94,7 +94,7 @@ Three committed accents plus a cool, low-saturation neutral scale. Panels never 
 - **Ember Gold** (`#fed33f`): the Forecast region's accent (current conditions, hourly, week, sun & moon) — and doubles system-wide as the "hot/warning" tone once a metric crosses its threshold (CPU/memory/disk > 88%, battery < 20% and unplugged, sun-arc daytime marker).
 
 ### Tertiary
-- **Distress Red** (`#e8615a`): reserved for things that are actually wrong or actively drawing power — the offline banner and its status dot, and the CPU/MEM/BAT icon rings' fill and glow (a deep near-black red at rest, brightening toward full Distress Red as CPU/memory utilization approaches 100%, or solid while the battery is genuinely charging). Never used as a passive accent the way teal and gold are.
+- **Distress Red** (`#e8615a`): reserved for things that are actually wrong or actively drawing power — the offline banner and its status dot, and the CPU/MEM/BAT utilization LEDs' fill and glow (a deep near-black red at rest, brightening toward full Distress Red as CPU/memory utilization approaches 100%, or solid while the battery is genuinely charging). Never used as a passive accent the way teal and gold are.
 
 ### Neutral
 - **Signal White** (`oklch(0.96 0.01 250)`): primary text — numeric readouts, temperature, weather description.
@@ -152,11 +152,11 @@ Flat by design — there is no drop-shadow-based elevation anywhere in the syste
 
 The corner is the system's one recurring geometric signature: every panel is `clip-path`-cut from a rectangle into a pentagon, chamfering the bottom-right corner at a fixed `1.15rem` diagonal, with a small glowing accent-colored tab (`1.55rem × 3px`, rotated −45°) sitting in the resulting notch. Panel borders are a flat `2px` solid line in the region's dim accent color — no border-radius anywhere on a panel.
 
-Outside the panel level, corner treatment drops to two simple cases: perfect circles (the `0.55em` status dot on the offline banner, and the `1.6em` utilization ring behind each CPU/MEM/BAT icon), and everything else sharply notched. There is no intermediate rounded-rectangle vocabulary (no `8px`/`16px` card-radius family, no barely-rounded badge) — a shape is either sharply notched or a perfect circle, with nothing in between.
+Outside the panel level, corner treatment drops to two simple cases: perfect circles (the `0.55em` status dot on the offline banner, and the `0.85em` utilization LED after each CPU/MEM/BAT row label), and everything else sharply notched. There is no intermediate rounded-rectangle vocabulary (no `8px`/`16px` card-radius family, no barely-rounded badge) — a shape is either sharply notched or a perfect circle, with nothing in between.
 
 ## Components
 
-Every surface in this system is read-only — there are no buttons, form inputs, or navigation, since the dashboard has no interactive affordances at all. The components below are the actual repeating primitives: the panel container, the metric row, the utilization ring, the step-line chart, the section header, and the status dot/banner pairing.
+Every surface in this system is read-only — there are no buttons, form inputs, or navigation, since the dashboard has no interactive affordances at all. The components below are the actual repeating primitives: the panel container, the metric row, the utilization LED, the step-line chart, the section header, and the status dot/banner pairing.
 
 ### Panel (Notched Container)
 - **Shape:** pentagon `clip-path` chamfering the bottom-right corner (`1.15rem` cut), `2px` solid border in the region's dim accent color, `backdrop-filter: blur(6px)`.
@@ -166,14 +166,14 @@ Every surface in this system is read-only — there are no buttons, form inputs,
 
 ### Metric Row (System Table Row)
 - **Shape:** one `<tr>` in a shared-`<colgroup>` table — icon cell, uppercase label cell, right-aligned tabular-nums value cell (with an optional smaller Recessed-Grey sub-line), chart/badge cell.
-- **Icon:** a hand-rolled 24×24 stroke-only SVG (`stroke-width: 1.6`, `currentColor`-driven), colored by the row's status tone (Signal Teal nominal, Ember Gold once past threshold). CPU/MEM/BAT icons additionally sit inside a Utilization Ring (below); Storage and Network icons don't.
+- **Icon:** a hand-rolled 24×24 stroke-only SVG (`stroke-width: 1.6`, `currentColor`-driven), colored by the row's status tone (Signal Teal nominal, Ember Gold once past threshold). Unchanged by the Utilization LED (below) — the LED sits after the label text, not on the icon.
 - **Tier sub-rows:** a metric with historical data (CPU, Memory, Battery) gets 2–3 additional slim rows directly beneath its value row — no icon, just a small tracked label (`30S`/`5M`/`30M`, or `30M`/`4H`/`24H` for Battery) and a step-line chart filling the chart column. This is what makes one metric read as a small instrument cluster rather than a single number.
 
-### Utilization Ring
-- **Shape:** two stacked `1.6em` circles behind the CPU/MEM/BAT icon — a fixed base disc and a second disc on top that scales up from the center.
-- **Base (inert):** deep near-black red (`oklch(0.15 0.03 25)`), always present — reads as the gauge's empty/off state.
-- **Fill:** a radial gradient (bright highlight center → full Distress Red → a darker red edge) that scales from `0` to `1` with the metric's percentage and glows brighter as it grows (`box-shadow` blur/spread both scale with the same value) — reads as a status light powering up, not a progress bar. Transitions `0.6s ease`, matching the CHRG-badge-era cross-fade cadence this replaces.
-- **Battery variant:** ignores percentage and reflects a discrete charge state instead — solid + fully glowing while genuinely charging (not merely plugged in; see `sysinfo.battery_charging()`), dim (`0.22` scale, `0.55` opacity, no glow) at rest, and flashing opaque/`0.12`-opacity on a hard `2s steps(1)` cycle (1s on, 1s off) when below 20% and not charging. Charging always wins over the low-battery flash. Respects `prefers-reduced-motion` (flash becomes a steady dim-ish state).
+### Utilization LED
+- **Shape:** two stacked `0.85em` circles inline immediately after the CPU/MEM/BAT row's label text — close to that text's own cap-height, sitting right on the text rather than floating independently of it. (An earlier version was a much larger `1.6em` ring behind the icon; it read as too heavy and was replaced, ISSUES.md #16.)
+- **Base (inert):** deep near-black red (`oklch(0.15 0.03 25)`), always present — reads as the LED's off state.
+- **Fill:** a radial gradient (bright highlight center → full Distress Red → a darker red edge), whose opacity *and* glow (`box-shadow`, capped at a modest `5px` blur / `1.2px` spread so the halo stays proportionate to a small LED instead of blooming into a blob) both scale together from `0` to `1` with the metric's percentage — dim at rest, brightening to fully lit and glowing as it approaches 100%. A real LED brightens; it doesn't grow, so this is opacity-driven rather than the scale-transform the earlier ring version used. Transitions `0.6s ease`.
+- **Battery variant:** ignores percentage and reflects a discrete charge state instead — solid + fully glowing while genuinely charging (not merely plugged in; see `sysinfo.battery_charging()`), dim (`0.25` glow, no boosted box-shadow) at rest, and flashing opaque/`0.12`-opacity on a hard `2s steps(1)` cycle (1s on, 1s off) when below 20% and not charging. Charging always wins over the low-battery flash. Respects `prefers-reduced-motion` (flash becomes a steady dim-ish state).
 - Not interactive — a read-only status indicator, same as everything else in this system.
 
 ### Step-Line Chart
@@ -201,4 +201,4 @@ Every surface in this system is read-only — there are no buttons, form inputs,
 - **Don't** use large rounded corners or a soft-card look anywhere. The notch (pentagon `clip-path`, `1.15rem` chamfer) is this system's entire corner language; a `border-radius: 8px+` card would read as a different design system grafted on.
 - **Don't** add a drop shadow for hierarchy or lift. This system has no elevation model — depth comes from blur and ambient background layering only (see the Flat-By-Default Rule).
 - **Don't** mix two accents on one panel, or apply an accent color to an element outside its region.
-- **Don't** add an interactive affordance (button, input, hover-driven control) — this is a read-only, no-input wallpaper surface. If a status element (like the utilization ring) looks like it could be a button, that's a bug, not an invitation to wire up a click handler.
+- **Don't** add an interactive affordance (button, input, hover-driven control) — this is a read-only, no-input wallpaper surface. If a status element (like the utilization LED) looks like it could be a button, that's a bug, not an invitation to wire up a click handler.

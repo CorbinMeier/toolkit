@@ -197,25 +197,29 @@ function sysIcon(kind, tone = 'currentColor') {
   return g;
 }
 
-/* "Power gauge" badge behind the CPU/MEM/BAT icons: a fixed deep-red base
- * disc (.icon-ring, CSS) plus a second same-size disc (.icon-ring__fill)
- * that grows from the center and glows brighter as pct approaches 100 --
- * reads as a status light powering up, not a progress bar. CPU/MEM drive it
- * continuously off their percentage; battery ignores pct entirely and
- * instead reflects a discrete charge state (see renderCpuMemBat) via
- * ringState, since "charging" isn't something a fill level can express.
+/* Small status LED for the CPU/MEM/BAT rows, sitting inline after the row
+ * label text (ISSUES.md #16 -- an earlier version wrapped the icon in a
+ * much larger background ring, which read as too heavy; a real LED doesn't
+ * grow, it brightens). Sized in em so it's always exactly the label text's
+ * own height. A fixed deep-red base disc (.icon-led, CSS) sits under a
+ * second disc (.icon-led__fill) whose opacity and glow both scale with
+ * --led-glow (0-1) -- dim red at rest, brightening to full glowing
+ * Distress Red as pct approaches 100. CPU/MEM drive --led-glow continuously
+ * off their percentage; battery ignores pct and instead reflects a
+ * discrete charge state (see renderCpuMemBat) via ringState, since
+ * "charging" isn't something a glow level alone can express.
  */
-function iconRing(kind, tone, { pct = null, ringState = null } = {}) {
-  const wrap = document.createElement('span');
-  wrap.className = `icon-ring${ringState ? ` icon-ring--batt-${ringState}` : ''}`;
+function metricLed({ pct = null, ringState = null } = {}) {
+  const dot = document.createElement('span');
+  dot.className = `icon-led${ringState ? ` icon-led--batt-${ringState}` : ''}`;
   const fill = document.createElement('span');
-  fill.className = 'icon-ring__fill';
+  fill.className = 'icon-led__fill';
   if (!ringState) {
-    const scale = Math.max(0, Math.min(1, (pct ?? 0) / 100));
-    fill.style.setProperty('--ring-scale', scale.toFixed(2));
+    const glow = Math.max(0, Math.min(1, (pct ?? 0) / 100));
+    fill.style.setProperty('--led-glow', glow.toFixed(2));
   }
-  wrap.append(fill, sysIcon(kind, tone));
-  return wrap;
+  dot.appendChild(fill);
+  return dot;
 }
 
 /* Step line chart -- compact enough to sit on a single line next to text
@@ -269,21 +273,21 @@ function miniBar(pct, tone = 'var(--color-accent)') {
   return wrap;
 }
 
-// One <tr>: icon (optionally wrapped in a utilization ring, see `ring`
-// below) | label | value (+ optional smaller sub-line) | tail node
+// One <tr>: icon | label (optionally followed by a small status LED, see
+// `led` below) | value (+ optional smaller sub-line) | tail node
 // (histograph or mini bar). This is what keeps every row's columns aligned
 // -- a real <table>, not independently-sized rows.
-function sysRow({ icon, label, value, sub = '', tail = null, tone = 'var(--color-accent)', ring = null }) {
+function sysRow({ icon, label, value, sub = '', tail = null, tone = 'var(--color-accent)', led = null }) {
   const tr = document.createElement('tr');
 
   const iconTd = document.createElement('td');
   iconTd.style.color = tone;
-  iconTd.appendChild(ring ? iconRing(icon, tone, ring) : sysIcon(icon, tone));
+  iconTd.appendChild(sysIcon(icon, tone));
 
   const labelTd = document.createElement('td');
   labelTd.className = 'text-muted tracking-[0.1em] uppercase pl-[0.6vmin] ' +
     'text-[clamp(.44rem,.92vmin,.66rem)] truncate';
-  labelTd.textContent = label;
+  labelTd.append(label, ...(led ? [metricLed(led)] : []));
 
   const valueTd = document.createElement('td');
   valueTd.className = 'num text-right text-ink/90 text-[clamp(.48rem,1.02vmin,.74rem)]';
@@ -333,7 +337,7 @@ function renderCpuMemBat(s) {
     value: `${s.cpu.toFixed(0)}%`,
     sub: [s.temp_c ? `${s.temp_c}°C` : null,
       s.cpu_freq ? `${(s.cpu_freq / 1000).toFixed(1)}GHz` : null].filter(Boolean).join(' · '),
-    ring: { pct: s.cpu },
+    led: { pct: s.cpu },
   }));
   box.appendChild(sysTierRow('30S', ringSince('cpu', 30_000), cpuTone));
   box.appendChild(sysTierRow('5M', historySince('cpu_pct', 5 * 60_000), cpuTone));
@@ -344,7 +348,7 @@ function renderCpuMemBat(s) {
     icon: 'mem', label: 'MEM', tone: memTone,
     value: `${s.mem.pct.toFixed(0)}%`,
     sub: `${bytes(s.mem.used)} / ${bytes(s.mem.total)}`,
-    ring: { pct: s.mem.pct },
+    led: { pct: s.mem.pct },
   }));
   box.appendChild(sysTierRow('30S', ringSince('mem', 30_000), memTone));
   box.appendChild(sysTierRow('5M', historySince('mem_pct', 5 * 60_000), memTone));
@@ -353,8 +357,8 @@ function renderCpuMemBat(s) {
   if (s.battery) {
     const battTone = s.battery.pct < 20 && !s.battery.plugged
       ? 'var(--color-warm)' : 'var(--color-accent)';
-    // Battery's ring ignores pct and reflects a discrete charge state
-    // instead -- "charging" isn't a fill level. Priority: actually
+    // Battery's LED ignores pct and reflects a discrete charge state
+    // instead -- "charging" isn't a glow level. Priority: actually
     // charging beats a low-battery warning (a low battery that's plugged
     // in and recovering isn't the emergency a flashing light implies).
     const ringState = s.battery.charging ? 'charging'
@@ -363,7 +367,7 @@ function renderCpuMemBat(s) {
       icon: 'battery', label: 'BAT', tone: battTone,
       value: `${s.battery.pct}%`,
       sub: !s.battery.plugged && s.battery.secs_left ? dur(s.battery.secs_left) : '',
-      ring: { ringState },
+      led: { ringState },
     }));
     box.appendChild(sysTierRow('30M', historySince('battery_pct', 30 * 60_000), battTone));
     box.appendChild(sysTierRow('4H', historySince('battery_pct', 4 * 3600_000), battTone));
