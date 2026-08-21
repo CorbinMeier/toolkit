@@ -2,6 +2,75 @@
 
 Newest first. No GitHub remote on this project, so this file is the tracker.
 
+## 15. Utilization "power gauge" ring around CPU/MEM/BAT icons; remove CHRG badge
+
+Status: closed
+Source: user request this session
+Date: 2026-08-20
+
+Circle the CPU/MEM/BAT row icons with a two-layer badge: a fixed deep/dark
+red base disc, plus a second same-size disc on top that grows from the
+center and glows brighter (radial gradient + box-shadow) as utilization
+approaches 100%, reading as a status light powering up rather than a
+progress bar. Battery ignores the percentage-driven fill and instead
+reflects a discrete charge state: solid + glowing while charging, dim at
+rest, and flashing (1s on / 1s off) when below 20% and not charging.
+
+The CHRG text badge is removed -- the battery ring now carries that same
+"is it actually charging" signal, so the two would be redundant.
+
+Shipped as specified. DESIGN.md + `.impeccable/design.json` updated (Status
+Badge (CHRG) component replaced with Utilization Ring; Distress Red's role
+expanded to cover the continuous CPU/MEM fill; the now-unused
+`rounded.badge` token dropped). Verified functionally: full lint→test→build
+chain green (32 unit tests + smoke runs including the headless-Chrome
+render pass), plus a manual screenshot against an isolated worktree-local
+server confirming the ring actually renders and scales -- dim at 29% CPU,
+brightly lit and glowing at 87% MEM, dim at 79% battery/discharging. Merged
+to `main`.
+
+Started at: 2026-08-20T17:38:53-07:00
+Ended at: 2026-08-20T17:53:08-07:00
+Time elapsed: 14m 15s
+
+## 14. Standalone metrics collector -- decouple SQLite writes from dashd-serve
+
+Status: closed
+Source: user request this session
+Date: 2026-08-20
+
+dashd-serve currently piggybacks its historical-metrics SQLite write
+(`maybe_sample_metrics`) on the /api/state HTTP poll -- a deliberate choice
+at the time (see its docstring), but it means metrics are only collected
+while some view is actively polling, and mixes a write concern into the
+request-serving path. Split it: a new standalone `bin/dashd-collect`
+script owns every write to `data/metrics.db`, sampling on its own timer
+(`config.json`'s `refresh.metrics_sample_seconds`) independent of whether
+dashd-host has any view open. dashd-serve keeps its fast live psutil poll
+for the "current value" numbers shown in the panel (unchanged, still 5s-
+fresh) and becomes purely a reader against SQLite for `/api/history` --
+per the user's explicit direction, a mix of both: live values stay live,
+past values are queried from what the collector persisted with a
+timestamp.
+
+Shared cpu/mem/battery/net sampling logic (net-throughput delta, real
+charging-vs-plugged-in state, cpu temp) moves into a new `lib/sysinfo.py`
+so dashd-serve and dashd-collect can't drift out of sync on how a metric is
+actually measured.
+
+`bin/dashd-collect` + `lib/sysinfo.py` shipped; `dashd-serve` re-exports the
+moved names for back-compat and is now read-only against `metrics.db`. New
+`systemd/desktop-dashboard-collect.service` is written and linked but
+**not enabled** -- Gatekeeper Protocol, needs explicit approval. Verified
+functionally: full lint→test→build chain green (32 unit tests + 19-check
+smoke run against an isolated port), plus a manual end-to-end run of
+`sysinfo.sample_stats()` through `insert_sample`/`query_history` against
+real hardware data. Merged to `master`.
+
+Started at: 2026-08-20T17:38:53-07:00
+Ended at: 2026-08-20T17:44:56-07:00
+Time elapsed: 6m 3s
+
 ## 13. Document the visual design system (DESIGN.md)
 
 Status: closed
