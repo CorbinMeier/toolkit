@@ -237,7 +237,10 @@ function metricLed({ pct = null, ringState = null } = {}) {
   fill.className = 'icon-led__fill';
   if (ringState) {
     const flash = ringState === 'low';
-    dot.className = `icon-led icon-led--batt-${ringState}${flash ? ' icon-led--flash' : ''}`;
+    // low is the one state that stays the alarm red; charging/dim both
+    // read as green (on mains vs. running fine unplugged).
+    const colorClass = ringState === 'low' ? '' : ' icon-led--green';
+    dot.className = `icon-led icon-led--batt-${ringState}${colorClass}${flash ? ' icon-led--flash' : ''}`;
   } else {
     const clamped = Math.max(0, Math.min(100, pct ?? 0));
     // red is the fill's default color (below) -- only green/yellow need an

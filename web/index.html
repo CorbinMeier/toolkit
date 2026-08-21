@@ -150,7 +150,11 @@
      ignores CPU/MEM's percentage bands entirely and instead uses one of
      the .icon-led--batt-* modifiers, since "charging" is a discrete state
      a glow level alone can't express (replaces the old CHRG text badge --
-     the LED now carries that same signal). */
+     the LED now carries that same signal). Charging and dim both pair
+     with .icon-led--green (on mains or running fine unplugged, at bright
+     vs. dim glow respectively) -- low is the one state that keeps the
+     base red fill and adds the flash, at <=35% unplugged (ISSUES.md #18:
+     red used to mean "plugged in", which read backwards). */
   .icon-led{position:relative;display:inline-block;width:0.85em;height:0.85em;
     border-radius:50%;vertical-align:middle;flex:none}
   .icon-led::before{content:"";position:absolute;inset:0;border-radius:50%;
