@@ -87,7 +87,7 @@ def main() -> int:
                   "-- skipping weather assertions")
         else:
             check("weather has a temperature", isinstance(w.get("temp"), int))
-            check("weather icon is renderable",
+            check("weather icon field is a known kind",
                   w.get("icon", "").split("-")[0] in {
                       "clear", "partly", "cloudy", "fog", "drizzle", "rain",
                       "sleet", "snow", "storm"}, w.get("icon"))

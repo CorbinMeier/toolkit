@@ -51,6 +51,22 @@
     --color-amber-border:  #8a6a12;
     --color-crimson-border:#9c3230;
     --color-online:        #2bfea0;
+    /* Panel-chrome-only crimson (border/underline for .accent-crimson,
+       e.g. Devices/Log): separate from --color-crimson/-border above,
+       which stay semantic red for alert states (offline banner, offline
+       device dot, critical log status) even under Retro Terminal -- #38
+       asked for the panel chrome to go green, not for alerts to lose
+       their signal color. Same values as --color-crimson by default, so
+       night_ops looks unchanged. */
+    --color-crimson-panel:        #e8615a;
+    --color-crimson-panel-border: #9c3230;
+    /* CPU/MEM/BAT utilization-bar spectrum (#31's angled-bar graphic,
+       app.js's spectrumColor()) -- read via getComputedStyle rather than
+       hardcoded in JS so a theme can override them like every other
+       color here (#39). red -> gold -> green by default. */
+    --spectrum-lo:  #e8615a;
+    --spectrum-mid: #fed33f;
+    --spectrum-hi:  #2bfea0;
     /* Safe-area insets so panels don't render under the user's own
        top/bottom bars. Real values come from config.json's
        display.safe_area_* (applied in app.js's apply()); these are just
@@ -98,6 +114,17 @@
     --color-amber-border:   #1c6b3f;
     --color-crimson-border: #7a2a1f;
     --color-online:         #39ff88;
+    /* #38: Devices/Log panel chrome (border/underline) converges on the
+       same green as every other panel; --color-crimson/-border above
+       stay red so alert states (offline banner/dot, critical log) still
+       stand out on the phosphor screen. */
+    --color-crimson-panel:        #39ff88;
+    --color-crimson-panel-border: #1c6b3f;
+    /* #39: CPU/MEM/BAT utilization bars go all-green too -- graduated
+       dim -> bright phosphor instead of the red/gold/green spectrum. */
+    --spectrum-lo:  #145c33;
+    --spectrum-mid: #21a35c;
+    --spectrum-hi:  #39ff88;
   }
   html[data-theme="retro_terminal"] body{
     font-family:"Fira Mono",ui-monospace,monospace;
@@ -132,7 +159,7 @@
      coexist on one page, same as the template's per-component `accent` prop. */
   .accent-cyan   {--panel-accent:var(--color-accent);  --panel-border:var(--color-cyan-border)}
   .accent-amber  {--panel-accent:var(--color-warm);    --panel-border:var(--color-amber-border)}
-  .accent-crimson{--panel-accent:var(--color-crimson); --panel-border:var(--color-crimson-border)}
+  .accent-crimson{--panel-accent:var(--color-crimson-panel); --panel-border:var(--color-crimson-panel-border)}
 
   /* Notched cut-corner card, ported from CyberpunkUIKit's CyberpunkPad --
      solid dark fill, 2px accent-colored border, diagonal corner cut with a
@@ -509,8 +536,15 @@
                  the weather panel doesn't have a label") -- every other
                  panel has one, this one only lost it because "NOW" used
                  to read as enough of a heading on its own. -->
-            <h2 class="sec-head text-faint uppercase tracking-[0.3em] text-[clamp(.55rem,1.15vmin,.8rem)]">
-              Weather</h2>
+            <!-- #40: NOW + temp + H/L summary sits right-aligned in the
+                 header itself, so it's visible without reading the table
+                 below; the NOW row's own sub-line keeps description/
+                 feels-like/stale-age instead. -->
+            <h2 class="sec-head flex items-baseline justify-between gap-[1vmin]
+                 text-faint uppercase tracking-[0.3em] text-[clamp(.55rem,1.15vmin,.8rem)]">
+              <span>Weather</span>
+              <span id="wnow" class="num normal-case tracking-normal text-ink"></span>
+            </h2>
             <!-- Current conditions (NOW) + Wind/Humidity/Rain/UV: one sys-table,
                  all icon | label | value rows -- same treatment as System's
                  CPU/MEM/BAT, no oversized glowing hero readout (user feedback:

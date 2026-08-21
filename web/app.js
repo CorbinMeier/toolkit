@@ -52,80 +52,6 @@ function ringSince(key, ms) {
   return i === -1 ? [] : ring[key].slice(i);
 }
 
-/* ------------------------------------------------------------------ icons */
-/* Hand-rolled so there is zero external asset dependency. */
-function weatherIcon(kind) {
-  const g = el('svg', { viewBox: '0 0 64 64', class: 'w-full h-full' });
-  const sun = (cx, cy, r, col = 'var(--color-warm)') => {
-    g.appendChild(el('circle', { cx, cy, r, fill: col, opacity: '.95' }));
-    for (let i = 0; i < 8; i++) {
-      const a = (i * Math.PI) / 4;
-      g.appendChild(el('line', {
-        x1: cx + Math.cos(a) * (r + 3), y1: cy + Math.sin(a) * (r + 3),
-        x2: cx + Math.cos(a) * (r + 8), y2: cy + Math.sin(a) * (r + 8),
-        stroke: col, 'stroke-width': 3, 'stroke-linecap': 'round', opacity: '.8',
-      }));
-    }
-  };
-  const moon = (cx, cy, r) => {
-    const p = el('path', {
-      d: `M ${cx + r * 0.35} ${cy - r} a ${r} ${r} 0 1 0 ${r * 0.62} ${r * 1.7}
-          a ${r * 0.82} ${r * 0.82} 0 1 1 ${-r * 0.62} ${-r * 1.7} Z`,
-      fill: 'var(--color-ink)', opacity: '.9',
-    });
-    g.appendChild(p);
-  };
-  const cloud = (dx = 0, dy = 0, col = 'var(--color-ink)', op = '.85') => {
-    g.appendChild(el('path', {
-      d: `M ${18 + dx} ${44 + dy} a 10 10 0 0 1 0 -20 a 13 13 0 0 1 25 -4
-          a 9 9 0 0 1 2 24 Z`,
-      fill: col, opacity: op,
-    }));
-  };
-  const drops = (col, n = 3, dash = false) => {
-    for (let i = 0; i < n; i++) {
-      g.appendChild(el('line', {
-        x1: 22 + i * 9, y1: 48, x2: 19 + i * 9, y2: 58,
-        stroke: col, 'stroke-width': 3, 'stroke-linecap': 'round',
-        ...(dash ? { 'stroke-dasharray': '2 4' } : {}),
-      }));
-    }
-  };
-
-  switch (kind) {
-    case 'clear':          sun(32, 30, 13); break;
-    case 'clear-night':    moon(34, 30, 15); break;
-    case 'partly':         sun(24, 24, 9); cloud(6, 4); break;
-    case 'partly-night':   moon(26, 23, 11); cloud(6, 4); break;
-    case 'cloudy':         cloud(2, 0, 'var(--color-muted)'); cloud(8, 6); break;
-    case 'fog':
-      cloud(4, -2, 'var(--color-muted)', '.6');
-      for (let i = 0; i < 3; i++) g.appendChild(el('line', {
-        x1: 14, y1: 46 + i * 6, x2: 50, y2: 46 + i * 6,
-        stroke: 'var(--color-muted)', 'stroke-width': 3, 'stroke-linecap': 'round',
-        opacity: .7 - i * .15 }));
-      break;
-    case 'drizzle': cloud(4, -4); drops('var(--color-accent)', 3, true); break;
-    case 'rain':    cloud(4, -4); drops('var(--color-accent)', 3); break;
-    case 'sleet':   cloud(4, -4); drops('var(--color-accent)', 2);
-                    g.appendChild(el('circle', { cx: 44, cy: 54, r: 3,
-                      fill: 'var(--color-ink)' })); break;
-    case 'snow':
-      cloud(4, -4);
-      for (let i = 0; i < 3; i++) g.appendChild(el('circle', {
-        cx: 21 + i * 10, cy: 53 + (i % 2) * 5, r: 3.2, fill: 'var(--color-ink)',
-        opacity: '.9' }));
-      break;
-    case 'storm':
-      cloud(4, -6, 'var(--color-muted)');
-      g.appendChild(el('path', { d: 'M 34 44 L 27 57 L 33 57 L 29 66 L 41 52 L 34 52 Z',
-        fill: 'var(--color-warm)' }));
-      break;
-    default: sun(32, 30, 13);
-  }
-  return g;
-}
-
 /* ----------------------------------------------------------------- format */
 const bytes = (b) => {
   const u = ['B', 'K', 'M', 'G', 'T']; let i = 0; b = b || 0;
@@ -143,10 +69,10 @@ const POINTS = ['N', 'NNE', 'NE', 'ENE', 'E', 'ESE', 'SE', 'SSE',
 const compass = (deg) => POINTS[Math.round(deg / 22.5) % 16];
 
 /* ------------------------------------------------------------ sys panel */
-/* Hand-rolled system-metric icons -- same zero-dependency philosophy as
- * weatherIcon(). stroke/fill are set once on the root <svg> and inherit
- * down through SVG's normal property cascade; individual shapes only
- * override fill where they're meant to read as solid, not outlined. */
+/* Hand-rolled system-metric icons, zero external asset dependency.
+ * stroke/fill are set once on the root <svg> and inherit down through
+ * SVG's normal property cascade; individual shapes only override fill
+ * where they're meant to read as solid, not outlined. */
 function sysIcon(kind, tone = 'currentColor') {
   const g = el('svg', { viewBox: '0 0 24 24', class: 'sysicon',
     fill: 'none', stroke: tone, 'stroke-width': 1.6,
@@ -254,34 +180,47 @@ function arrowGlyph(dir) {
     <polyline points="${points}"/><line x1="8" y1="${y1}" x2="8" y2="${y2}"/></svg>`;
 }
 
-// Three-stop hex interpolation (crimson -> warm -> online) used to color
-// each segment of utilBars() -- a fixed spectrum across the bar's full
-// length, revealed proportionally by how many segments are filled, the
-// same effect as the reference racing-stat graphic (#31).
+// Three-stop hex interpolation used to color each segment of utilBars() --
+// a spectrum across the bar's full length, revealed proportionally by how
+// many segments are filled, the same effect as the reference racing-stat
+// graphic (#31). Stops come from CSS custom properties (spectrumStops()),
+// not hardcoded, so a theme can override them (#39).
 function lerpHex(a, b, t) {
   const pa = [1, 3, 5].map((i) => parseInt(a.slice(i, i + 2), 16));
   const pb = [1, 3, 5].map((i) => parseInt(b.slice(i, i + 2), 16));
   const c = pa.map((v, i) => Math.round(v + (pb[i] - v) * t));
   return `#${c.map((v) => v.toString(16).padStart(2, '0')).join('')}`;
 }
-function spectrumColor(t) {
-  return t < 0.5 ? lerpHex('#e8615a', '#fed33f', t / 0.5)
-    : lerpHex('#fed33f', '#2bfea0', (t - 0.5) / 0.5);
+// Read once per utilBars() call, not per segment -- getComputedStyle is
+// the theme-aware source (#39), a custom property's raw author value.
+function spectrumStops() {
+  const cs = getComputedStyle(document.documentElement);
+  return {
+    lo: cs.getPropertyValue('--spectrum-lo').trim(),
+    mid: cs.getPropertyValue('--spectrum-mid').trim(),
+    hi: cs.getPropertyValue('--spectrum-hi').trim(),
+  };
+}
+function spectrumColor(t, stops) {
+  return t < 0.5 ? lerpHex(stops.lo, stops.mid, t / 0.5)
+    : lerpHex(stops.mid, stops.hi, (t - 0.5) / 0.5);
 }
 
 /* Angled utilization bar (#31, replacing the status LED -- user
  * feedback: "not working out"). A row of slanted parallelogram segments,
  * same idea as a car-stat readout: segments up to the filled count light up
- * in a fixed red -> gold -> green spectrum across the bar's position (not
- * tied to the metric's own percentage bands), the rest sit dim/unlit as the
- * empty track. Battery has no percentage bands to speak of either -- same
- * fixed spectrum, just fewer segments lit at low charge. */
+ * in a theme-driven spectrum (red -> gold -> green by default, #39) across
+ * the bar's position (not tied to the metric's own percentage bands), the
+ * rest sit dim/unlit as the empty track. Battery has no percentage bands
+ * to speak of either -- same spectrum, just fewer segments lit at low
+ * charge. */
 function utilBars(pct, segments = 10) {
   const clamped = Math.max(0, Math.min(100, pct ?? 0));
   const filled = Math.round((clamped / 100) * segments);
   const svg = el('svg', { viewBox: '0 0 100 20', preserveAspectRatio: 'none',
     class: 'util-bars w-[clamp(3.2rem,8vmin,5.6rem)] h-[clamp(0.7rem,1.6vmin,0.95rem)] shrink-0 ml-auto' });
   const w = 5, gap = 2.2, skew = 2.6, h = 16, top = 2, left = 3;
+  const stops = spectrumStops();
   for (let i = 0; i < segments; i++) {
     const x = left + i * (w + gap);
     const points = [
@@ -290,7 +229,7 @@ function utilBars(pct, segments = 10) {
     const lit = i < filled;
     svg.appendChild(el('polygon', {
       points,
-      fill: lit ? spectrumColor(i / (segments - 1)) : 'oklch(0.32 0.02 260 / .45)',
+      fill: lit ? spectrumColor(i / (segments - 1), stops) : 'oklch(0.32 0.02 260 / .45)',
       opacity: lit ? '0.95' : '1',
     }));
   }
@@ -354,19 +293,21 @@ function stepChart(series, cls) {
   return svg;
 }
 
-/* Fill bar, e.g. a disk row's small fixed-width swatch (default) or
- * Music's full-width progress bar (widthClass override, user request:
- * "make the progress bar span the entire component"). ml-auto is part of
- * the default only -- it pushes a narrow bar to the right edge of a
- * table's tail column; a w-full bar has no room for that to matter.
- * radiusClass defaults to the pill shape every other caller (disk rows)
- * still wants; Music passes 'rounded-none' (user request: "update the
- * progress bar to be square") without affecting those other callers. */
+/* Fill bar, e.g. a disk row's small fixed-width swatch (default, sized to
+ * match utilBars()'s CPU/MEM/BAT scale -- #42) or Music's full-width
+ * progress bar (widthClass/heightClass override, user request: "make the
+ * progress bar span the entire component"). ml-auto is part of the
+ * default only -- it pushes a narrow bar to the right edge of a table's
+ * tail column; a w-full bar has no room for that to matter. radiusClass
+ * defaults to the pill shape every other caller (disk rows) still wants;
+ * Music passes 'rounded-none' (user request: "update the progress bar to
+ * be square") without affecting those other callers. */
 function miniBar(pct, tone = 'var(--color-accent)',
-    widthClass = 'w-[clamp(2.6rem,6.5vmin,4.2rem)] ml-auto',
-    radiusClass = 'rounded-full') {
+    widthClass = 'w-[clamp(3.2rem,8vmin,5.6rem)] ml-auto',
+    radiusClass = 'rounded-full',
+    heightClass = 'h-[clamp(0.7rem,1.6vmin,0.95rem)] min-h-[3px]') {
   const wrap = document.createElement('div');
-  wrap.className = `${widthClass} ${radiusClass} h-[0.5vmin] min-h-[3px] overflow-hidden`;
+  wrap.className = `${widthClass} ${radiusClass} ${heightClass} overflow-hidden`;
   wrap.style.background = 'oklch(0.5 0.02 260/.22)';
   const fill = document.createElement('div');
   // transform:scaleX, not width -- animating width/height/padding/margin
@@ -481,10 +422,9 @@ function renderDisks(disks) {
     box.appendChild(sysRow({
       icon: 'disk', label: label.toUpperCase(), tone: hot(d.pct ?? 0),
       value: d.pct != null ? `${d.pct.toFixed(0)}%` : bytes(d.size),
-      // Square corners (user request), same as Music's bar -- widthClass
-      // stays the default small swatch, only radiusClass changes.
-      tail: miniBar(d.pct, hot(d.pct ?? 0),
-        'w-[clamp(2.6rem,6.5vmin,4.2rem)] ml-auto', 'rounded-none'),
+      // Square corners (user request); width/height use miniBar()'s
+      // default scale, unified with CPU/MEM/BAT's utilBars() (#42).
+      tail: miniBar(d.pct, hot(d.pct ?? 0), undefined, 'rounded-none'),
     }));
   });
 }
@@ -552,7 +492,10 @@ function renderMusic(music) {
   row.append(title, artist);
   box.appendChild(row);
 
-  if (pct != null) box.appendChild(miniBar(pct, 'var(--color-accent)', 'w-full', 'rounded-none'));
+  if (pct != null) {
+    box.appendChild(miniBar(pct, 'var(--color-accent)', 'w-full', 'rounded-none',
+      'h-[0.5vmin] min-h-[3px]'));
+  }
 }
 
 // A small glowing circle -- green/up or crimson/offline -- replacing the
@@ -651,7 +594,9 @@ function renderLog(lines) {
 
 /* -------------------------------------------------------- weather panels */
 function renderWeather(w) {
+  const nowEl = $('wnow');
   if (w.unavailable) {
+    if (nowEl) nowEl.textContent = '';
     $('wstats').replaceChildren(sysRow({
       icon: 'uv', label: 'NOW', tone: 'var(--color-warm)', value: '—',
       sub: 'weather unavailable',
@@ -659,20 +604,27 @@ function renderWeather(w) {
     return;
   }
 
+  // #40: temp + high/low move into the section header (right-aligned,
+  // #wnow) so they're visible without reading the table; description/
+  // wind/etc. stay below. Icons dropped everywhere in this panel (#40,
+  // user feedback) -- no weatherIcon() calls left in here, only sysIcon()'s
+  // generic label icons on Wind/Humidity/Rain/UV.
+  if (nowEl) nowEl.textContent = `NOW ${w.temp}${w.units.temp} H${w.high}° L${w.low}°`;
+
   // Current conditions + Wind/Humidity/Rain/UV: one sys-table of icon |
   // label | value rows, same treatment as System's CPU/MEM/BAT -- no
   // oversized glowing hero temperature/icon readout (user feedback: "not a
   // fan of the LARGE CURRENT WEATHER... more of a fan of layout and
   // organized data, not specialized 'THIS IS TO BE BROUGHT TO YOUR
   // ATTENTION' decisions").
-  const nowIcon = weatherIcon(w.icon);
-  nowIcon.setAttribute('class', 'sysicon');
   const rows = [
+    // No icon (#40) -- sysRow's icon column renders empty (sysIcon() with
+    // no matching kind is a no-op svg), keeping table alignment with the
+    // rows below it.
     sysRow({
-      iconNode: nowIcon, label: 'NOW', tone: 'var(--color-warm)',
+      label: 'NOW', tone: 'var(--color-warm)',
       value: `${w.temp}${w.units.temp}`,
-      sub: `${w.desc} · feels ${w.apparent}${w.units.temp} · `
-        + `H${w.high}° L${w.low}°`
+      sub: `${w.desc} · feels ${w.apparent}${w.units.temp}`
         + (w.stale ? ` · ${Math.round(w.age_seconds / 60)}m old` : ''),
     }),
     sysRow({ icon: 'wind', label: 'Wind', value: `${w.wind}${w.units.wind}`, sub: compass(w.wind_dir) }),
@@ -687,9 +639,9 @@ function renderWeather(w) {
   renderSunMoon(w);
 }
 
-/* Compact hourly strip: time + icon + temp, no chart. Replaces a "Next 24
- * hours" sparkline that was vague and cost far more vertical space than
- * the info was worth (see #8). */
+/* Compact hourly strip: time + temp, no chart, no icon (#40). Replaces a
+ * "Next 24 hours" sparkline that was vague and cost far more vertical
+ * space than the info was worth (see #8). */
 function renderHourly(w) {
   const pts = w.hourly.filter((h) => h.temp != null).slice(0, 6);
   $('hourly').replaceChildren(...pts.map((p) => {
@@ -700,15 +652,11 @@ function renderHourly(w) {
     t.className = 'text-faint num text-[clamp(.48rem,1vmin,.68rem)]';
     t.textContent = hhmm(p.time);
 
-    const ico = document.createElement('div');
-    ico.className = 'w-[clamp(1rem,2.4vmin,1.7rem)] h-[clamp(1rem,2.4vmin,1.7rem)]';
-    ico.appendChild(weatherIcon(p.icon));
-
     const temp = document.createElement('div');
     temp.className = 'num text-ink/90 text-[clamp(.6rem,1.4vmin,1rem)]';
     temp.textContent = `${p.temp}°`;
 
-    cell.append(t, ico, temp);
+    cell.append(t, temp);
     return cell;
   }));
 }
@@ -740,16 +688,12 @@ function renderWeek(w) {
       (isToday ? ' font-medium' : '');
     label.textContent = name;
 
-    const ico = document.createElement('span');
-    ico.className = 'w-[clamp(0.85rem,2vmin,1.4rem)] h-[clamp(0.85rem,2vmin,1.4rem)] shrink-0';
-    ico.appendChild(weatherIcon(d.icon));
-
     const range = document.createElement('span');
     range.className = 'num flex-1 text-right text-[clamp(.55rem,1.2vmin,.88rem)]';
     range.innerHTML = `<span class="text-ink/90">${d.hi}°</span>` +
       `<span class="text-faint ml-[0.7vmin]">${d.lo}°</span>`;
 
-    row.append(label, ico, range);
+    row.append(label, range);
     return row;
   }));
 }
@@ -796,8 +740,14 @@ function renderCalendar(extra) {
     const isToday = day === today;
 
     const cell = document.createElement('div');
+    // #41: a border (not just bolder/brighter text) marks today, so it
+    // reads at a glance rather than needing the subtle weight/color
+    // difference to be noticed.
     cell.className = 'num flex flex-col items-center justify-center gap-[0.1vmin] ' +
-      'text-[clamp(.48rem,1vmin,.7rem)] ' + (isToday ? 'text-ink font-medium' : 'text-muted');
+      'text-[clamp(.48rem,1vmin,.7rem)] rounded-full aspect-square ' +
+      (isToday
+        ? 'text-ink font-medium border border-[var(--color-warm)]'
+        : 'text-muted border border-transparent');
     cell.textContent = String(day);
 
     if (events.has(iso)) {

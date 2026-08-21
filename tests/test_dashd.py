@@ -66,8 +66,11 @@ class TestWeatherCodes(unittest.TestCase):
             self.assertIsInstance(code, int)
             self.assertTrue(desc and icon, code)
 
-    def test_icons_are_known_to_the_renderer(self):
-        # Must stay in sync with the switch in web/app.js weatherIcon().
+    def test_icons_are_known(self):
+        # /api/state's icon field is a fixed vocabulary regardless of
+        # whether the frontend currently renders anything with it (#40
+        # dropped the weather icon graphics, but the field itself stays --
+        # a future consumer, e.g. the mobile control surface, still could).
         known = {"clear", "partly", "cloudy", "fog", "drizzle", "rain",
                  "sleet", "snow", "storm"}
         for code, (_desc, icon) in dashd.WMO.items():
