@@ -765,7 +765,7 @@ function renderCalendar(extra) {
     // square instead of stretching to the column width.
     const num = document.createElement('span');
     num.className = 'num inline-flex items-center justify-center leading-none ' +
-      'text-[clamp(.48rem,1vmin,.7rem)] w-[1.6em] h-[1.6em] box-border ' +
+      'text-[clamp(.48rem,1vmin,.7rem)] p-1 box-border ' +
       (isToday
         ? 'text-ink font-medium border-2 border-[var(--color-warm)]'
         : 'text-muted border-2 border-transparent');
