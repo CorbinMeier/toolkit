@@ -225,6 +225,11 @@
   .sys-table td{vertical-align:middle;padding:0.32vmin 0}
   .sys-table .sysicon{width:1.05em;height:1.05em;display:block}
 
+  /* Weather card's two-column current-conditions grid (no icons, no
+     header row -- see #41). */
+  .weather-grid td{padding-top:0.3vmin}
+  .weather-grid td:last-child{padding-left:1.2vmin}
+
   /* Per-output layout (config.json outputs.<name>.layout, plumbed onto
      <html data-layout> by app.js's apply() -- #3). 'auto' (the
      default, e.g. the 1440x900 laptop) keeps #root's single stacked
@@ -554,27 +559,31 @@
                  the weather panel doesn't have a label") -- every other
                  panel has one, this one only lost it because "NOW" used
                  to read as enough of a heading on its own. -->
-            <!-- #40: NOW + temp + H/L summary sits right-aligned in the
-                 header itself, so it's visible without reading the table
-                 below; the NOW row's own sub-line keeps description/
-                 feels-like/stale-age instead. -->
-            <h2 class="sec-head flex items-baseline justify-between gap-[1vmin]
-                 text-faint uppercase tracking-[0.3em] text-[clamp(.55rem,1.15vmin,.8rem)]">
+            <h2 class="sec-head text-faint uppercase tracking-[0.3em] text-[clamp(.55rem,1.15vmin,.8rem)]">
               <span>Weather</span>
-              <span id="wnow" class="num normal-case tracking-normal text-ink"></span>
             </h2>
-            <!-- Current conditions (NOW) + Wind/Humidity/Rain/UV: one sys-table,
-                 all icon | label | value rows -- same treatment as System's
-                 CPU/MEM/BAT, no oversized glowing hero readout (user feedback:
-                 "not a fan of the LARGE CURRENT WEATHER... more of a fan of
-                 layout and organized data, not specialized 'THIS IS TO BE
-                 BROUGHT TO YOUR ATTENTION' decisions"). -->
-            <table class="sys-table border-collapse">
-              <colgroup>
-                <col class="w-[1.6em]"><col><col><col>
-              </colgroup>
-              <tbody id="wstats"></tbody>
+            <!-- No icons in this card (user request). Two-column, two-row
+                 grid, no header row -- "Weather"/"Feels Like" were data
+                 placeholders in the user's spec (description + apparent
+                 temp), not column labels. Row 1: description | feels-like
+                 temp. Row 2: current temp | today's high/low. Wind/Humid/
+                 Rain/UV drop the value column entirely -- one "LABEL:
+                 value" line each. -->
+            <table class="weather-grid border-collapse w-full">
+              <colgroup><col><col></colgroup>
+              <tbody>
+                <tr>
+                  <td id="wdesc" class="text-muted text-[clamp(.56rem,1.2vmin,.88rem)] align-top"></td>
+                  <td id="wfeels" class="num text-muted text-[clamp(.56rem,1.2vmin,.88rem)] align-top"></td>
+                </tr>
+                <tr>
+                  <td id="wtemp" class="num text-ink text-[clamp(.7rem,1.6vmin,1.05rem)] align-top"></td>
+                  <td id="whilo" class="num text-muted text-[clamp(.6rem,1.3vmin,.9rem)] align-top"></td>
+                </tr>
+              </tbody>
             </table>
+            <div id="wdetails" class="flex flex-col gap-[0.3vmin] num text-ink/90
+                 text-[clamp(.56rem,1.2vmin,.88rem)] tracking-wide"></div>
 
             <!-- Hourly strip hidden -- user feedback: too much dead space on
                  the wallpaper. Markup/render code kept intact (renderHourly()
@@ -587,10 +596,11 @@
               <div id="hourly" class="flex justify-between gap-[0.4vmin]"></div>
             </div>
 
-            <!-- Renamed from "Week" -- renderWeek() now only shows today
-                 + a couple more days (user request), not a full 7-day
-                 week, so that header no longer matched what's shown. -->
-            <div class="pt-[1.1vmin] border-t border-[var(--color-hairline)]">
+            <!-- Upcoming hidden -- removed from this card (user request).
+                 Markup/render code kept intact (renderWeek() in app.js still
+                 runs, just targets a hidden node), same pattern as Hourly/
+                 Sun & Moon below. -->
+            <div class="hidden pt-[1.1vmin] border-t border-[var(--color-hairline)]">
               <h3 class="sec-head text-faint uppercase tracking-[0.3em]
                   text-[clamp(.5rem,1.05vmin,.72rem)] mb-[0.4vmin]">Upcoming</h3>
               <div id="week" class="flex flex-col"></div>

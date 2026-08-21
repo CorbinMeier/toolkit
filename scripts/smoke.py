@@ -150,13 +150,14 @@ def main() -> int:
             return (m.group(1) if m else "").strip()
 
         # No date/clock/location readout -- the user's own system already
-        # shows all three (see #5, #9). Current temperature now
-        # renders as the Forecast panel's "NOW" sys-table row (no more
-        # large standalone hero readout, see #9) -- its label plus
-        # a degree-marked value is the remaining proof the panel rendered.
+        # shows all three (see #5, #9). Current temperature now renders in
+        # the Forecast panel's #wtemp cell of the Weather/Feels Like grid
+        # (no more NOW sys-table row or large standalone hero readout, see
+        # #9, #41) -- a degree-marked value there is the remaining proof
+        # the panel rendered.
         if not w.get("unavailable"):
-            check("temperature rendered", ">NOW<" in dom and "°" in dom,
-                  "missing NOW row or degree value")
+            check("temperature rendered", "°" in text_of("wtemp"),
+                  "missing degree value in #wtemp")
         check("system table rendered", dom.count(">MEM<") >= 1, dom.count(">MEM<"))
         check("disk rows rendered", dom.count("sysicon") >= 3,
               "expected cpu+mem+>=1 disk row")

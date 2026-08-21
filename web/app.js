@@ -610,46 +610,45 @@ function renderLog(lines) {
 }
 
 /* -------------------------------------------------------- weather panels */
+// No icons in this card (user request, #41). A header-less two-row,
+// two-column grid: row1 is description | feels-like temp, row2 is current
+// temp | today's high/low. Wind/Humidity/Rain/UV drop the value column
+// entirely -- one "LABEL: value" line each in #wdetails. Upcoming
+// (renderWeek) is removed from this card (still called, targets a hidden
+// node -- #40's pattern for Hourly/Sun & Moon).
 function renderWeather(w) {
-  const nowEl = $('wnow');
+  const descEl = $('wdesc');
+  const feelsEl = $('wfeels');
+  const tempEl = $('wtemp');
+  const hiloEl = $('whilo');
   if (w.unavailable) {
-    if (nowEl) nowEl.textContent = '';
-    $('wstats').replaceChildren(sysRow({
-      icon: 'uv', label: 'NOW', tone: 'var(--color-warm)', value: '—',
-      sub: 'weather unavailable',
-    }));
+    if (descEl) descEl.textContent = 'weather unavailable';
+    if (feelsEl) feelsEl.textContent = '';
+    if (tempEl) tempEl.textContent = '—';
+    if (hiloEl) hiloEl.textContent = '';
+    $('wdetails').replaceChildren();
     return;
   }
 
-  // #40: temp + high/low move into the section header (right-aligned,
-  // #wnow) so they're visible without reading the table; description/
-  // wind/etc. stay below. Icons dropped everywhere in this panel (#40,
-  // user feedback) -- no weatherIcon() calls left in here, only sysIcon()'s
-  // generic label icons on Wind/Humidity/Rain/UV.
-  if (nowEl) nowEl.textContent = `NOW ${w.temp}${w.units.temp} H${w.high}° L${w.low}°`;
+  if (descEl) {
+    descEl.textContent = w.desc
+      + (w.stale ? ` · ${Math.round(w.age_seconds / 60)}m old` : '');
+  }
+  if (feelsEl) feelsEl.textContent = `feels ${w.apparent}${w.units.temp}`;
+  if (tempEl) tempEl.textContent = `${w.temp}${w.units.temp}`;
+  if (hiloEl) hiloEl.textContent = `H${w.high}° L${w.low}°`;
 
-  // Current conditions + Wind/Humidity/Rain/UV: one sys-table of icon |
-  // label | value rows, same treatment as System's CPU/MEM/BAT -- no
-  // oversized glowing hero temperature/icon readout (user feedback: "not a
-  // fan of the LARGE CURRENT WEATHER... more of a fan of layout and
-  // organized data, not specialized 'THIS IS TO BE BROUGHT TO YOUR
-  // ATTENTION' decisions").
-  const rows = [
-    // No icon (#40) -- sysRow's icon column renders empty (sysIcon() with
-    // no matching kind is a no-op svg), keeping table alignment with the
-    // rows below it.
-    sysRow({
-      label: 'NOW', tone: 'var(--color-warm)',
-      value: `${w.temp}${w.units.temp}`,
-      sub: `${w.desc} · feels ${w.apparent}${w.units.temp}`
-        + (w.stale ? ` · ${Math.round(w.age_seconds / 60)}m old` : ''),
-    }),
-    sysRow({ icon: 'wind', label: 'Wind', value: `${w.wind}${w.units.wind}`, sub: compass(w.wind_dir) }),
-    sysRow({ icon: 'humidity', label: 'Humidity', value: `${w.humidity}%` }),
-    sysRow({ icon: 'rain', label: 'Rain', value: `${w.precip_prob ?? 0}%`, sub: 'today' }),
-    sysRow({ icon: 'uv', label: 'UV', value: w.uv == null ? '—' : `${Math.round(w.uv)}`, sub: 'index' }),
-  ];
-  $('wstats').replaceChildren(...rows);
+  const detailLine = (label, value) => {
+    const div = document.createElement('div');
+    div.textContent = `${label}: ${value}`;
+    return div;
+  };
+  $('wdetails').replaceChildren(
+    detailLine('Wind', `${w.wind}${w.units.wind} ${compass(w.wind_dir)}`),
+    detailLine('Humid', `${w.humidity}%`),
+    detailLine('Rain', `${w.precip_prob ?? 0}%`),
+    detailLine('UV', w.uv == null ? '—' : `${Math.round(w.uv)}`),
+  );
 
   renderHourly(w);
   renderWeek(w);
