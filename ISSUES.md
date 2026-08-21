@@ -2,6 +2,56 @@
 
 Newest first. No GitHub remote on this project, so this file is the tracker.
 
+## 17. System panel polish: drop battery graphs, traffic-light LEDs, floppy storage icon, compact tables
+
+Status: closed
+Source: user request this session
+Date: 2026-08-20
+
+Several related changes to the System panel:
+
+- Remove the Battery tier graphs (30M/4H/24H step charts) entirely -- not
+  needed. The BAT row (icon/label/LED/value) stays.
+- CPU and MEM LED indicators get traffic-light coloring instead of a fixed
+  red: green (dim) for good, yellow (slight bright) approaching limits, red
+  (bright) for danger, flashing red at >=95% utilization. Battery's LED
+  keeps its existing charging/dim/low-flash logic, unchanged.
+- Storage row icons become floppy disks instead of the current disk/circle
+  glyph.
+- Layout: currently too much blank space -- tables stretch to fill their
+  parent panel while their actual content (small right-aligned charts,
+  narrow values) doesn't. Restructure the CPU/MEM/BAT table's main row as
+  LED | ICON | LABEL | PERCENTAGE (LED first -- moved left of the icon per
+  follow-up feedback, reads as the most immediate signal), with CPU/MEM's
+  three time-tier charts (30S/5M/30M) collapsed into a single row of three
+  small side-by-side graphs instead of three stacked full-width rows, each
+  graph carrying its own corner labels (tier name left, value range right)
+  so the standalone label column isn't needed per-tier. All three System
+  tables (cpu/mem/bat, Storage, Network) drop forced full-width stretching
+  and size to their own content instead.
+
+Shipped as specified. Traffic-light bands: green <70%, gold 70-89%, red
+>=90%, flashing >=95% -- brightness climbs continuously with the band too
+(dim green -> brightening gold -> bright red), reusing Standby Green's
+first wired appearance in the system. Along the way, dropping `w-full`
+surfaced a real pre-existing bug: `.sys-table td{padding:0.32vmin 0}`
+(class+element selector) silently zeroed any `pl-*`/`pr-*` Tailwind
+utility class applied to a `<td>`, invisible for years behind the old
+generous percentage-based column widths -- fixed with inline
+`style.paddingLeft`/`paddingRight`, documented as a gotcha in CLAUDE.md.
+DESIGN.md + `.impeccable/design.json` updated throughout (Utilization LED
+rewritten, new Compact Tier Graph component, Standby Green graduated from
+reserved to a wired Status Band). Verified functionally: full
+lint→test→build chain green (32 unit tests + 28-check smoke run including
+the headless-Chrome render pass), plus an iterative screenshot-driven pass
+(borrowing the live desktop's accumulated metrics.db for a meaningful
+preview) that caught and fixed the padding bug before it shipped. Merged
+to `main`.
+
+Started at: 2026-08-20T18:36:59-07:00
+Ended at: 2026-08-20T18:57:22-07:00
+Time elapsed: 20m 23s
+
 ## 16. Shrink the utilization indicator to a small LED beside the label, not behind the icon
 
 Status: closed
