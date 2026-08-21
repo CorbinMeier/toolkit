@@ -741,6 +741,54 @@ function renderSunMoon(w) {
     `${Math.round(w.moon.illumination * 100)}% lit</span>`;
 }
 
+/* ------------------------------------------------------------------ tasks */
+// Source-agnostic (#25): dashd-serve reads data/tasks.json verbatim, so
+// this just renders whatever {"items": [{"text","done","due"}]} shape
+// shows up -- no assumption about what wrote it.
+function renderTasks(tasks) {
+  const root = $('tasks');
+  const items = Array.isArray(tasks?.items) ? tasks.items : [];
+  if (!items.length) {
+    const empty = document.createElement('div');
+    empty.className = 'text-faint text-[clamp(.5rem,1.05vmin,.76rem)]';
+    empty.textContent = 'No tasks';
+    root.replaceChildren(empty);
+    return;
+  }
+  root.replaceChildren(...items.map((t) => {
+    const row = document.createElement('div');
+    row.className = 'flex items-center gap-[0.7vmin] py-[0.15vmin] ' +
+      (t.done ? 'text-faint line-through' : 'text-ink');
+
+    const box = el('svg', { viewBox: '0 0 16 16', class: 'icon-inline shrink-0' });
+    box.appendChild(el('rect', {
+      x: 1, y: 1, width: 14, height: 14, rx: 2, fill: 'none',
+      stroke: t.done ? 'var(--color-faint)' : 'var(--panel-accent, var(--color-accent))',
+      'stroke-width': '1.4',
+    }));
+    if (t.done) {
+      box.appendChild(el('polyline', {
+        points: '4,8.5 7,11.5 12,5', fill: 'none', stroke: 'var(--color-faint)',
+        'stroke-width': '1.6', 'stroke-linecap': 'round', 'stroke-linejoin': 'round',
+      }));
+    }
+
+    const label = document.createElement('span');
+    label.className = 'flex-1 tracking-wide text-[clamp(.52rem,1.1vmin,.82rem)] truncate';
+    label.textContent = t.text || '';
+
+    row.append(box, label);
+
+    if (t.due) {
+      const due = document.createElement('span');
+      due.className = 'num text-faint text-[clamp(.48rem,1vmin,.7rem)]';
+      due.textContent = t.due;
+      row.append(due);
+    }
+    return row;
+  }));
+}
+
 /* ------------------------------------------------------------------ poll */
 /* ------------------------------------------------------- auto-cycle reveal
  * The desktop surface sits below every window with no pointer/keyboard
@@ -818,6 +866,7 @@ function apply(s) {
   renderNetwork(s.sys);
   renderMusic(s.music);
   renderCalendar(s.extra);
+  renderTasks(s.tasks);
   refreshAutoCycles();
 
   const boot = $('boot');

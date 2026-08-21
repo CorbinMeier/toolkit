@@ -9,6 +9,11 @@ Serves web/ as static files and a merged /api/state document:
     music     current MPRIS now-playing state via `playerctl`, or None if
               nothing is playing/paused (lib/sysinfo.py, source-agnostic --
               works with any player that registers over MPRIS)
+    tasks     {"items": [...]} read verbatim from data/tasks.json -- source-
+              agnostic by design (#25): any script/cron/integration writes
+              that file in the {"items": [{"text","done","due"}]} shape and
+              the Tasks panel picks it up on the next poll, no server code
+              involved
     extra     verbatim passthrough of data/extra.json, so cron jobs or other
               scripts can inject arbitrary panels without touching this file
 
@@ -223,6 +228,27 @@ def cached_weather(cfg: dict) -> dict:
 # processes can't measure a metric two different ways (see #14).
 
 
+def load_tasks() -> dict:
+    """{"items": [...]} from data/tasks.json, source-agnostic (#25).
+
+    Any script/cron/integration can write this file directly -- same
+    verbatim-passthrough shape as extra.json -- so picking a concrete task
+    source (Todoist, a local file, etc.) is deferred to whatever writes it.
+    Missing file means no tasks yet, not an error.
+    """
+    path = DATA / "tasks.json"
+    if not path.exists():
+        return {"items": []}
+    try:
+        loaded = json.loads(path.read_text())
+    except (json.JSONDecodeError, OSError) as exc:
+        return {"items": [], "_error": str(exc)}
+    if not isinstance(loaded, dict) or not isinstance(loaded.get("items"), list):
+        return {"items": [],
+                "_error": "tasks.json must be an object with an items array"}
+    return loaded
+
+
 def build_state(cfg: dict) -> dict:
     extra = {}
     extra_path = DATA / "extra.json"
@@ -246,6 +272,7 @@ def build_state(cfg: dict) -> dict:
         "weather": cached_weather(cfg),
         "sys": sys_stats,
         "music": now_playing(),
+        "tasks": load_tasks(),
         "extra": extra,
     }
 

@@ -70,8 +70,10 @@ def main() -> int:
 
         state = json.loads(get("/api/state"))
         check("state has all top-level keys",
-              {"ts", "config", "weather", "sys", "extra"} <= state.keys(),
+              {"ts", "config", "weather", "sys", "tasks", "extra"} <= state.keys(),
               str(sorted(state.keys())))
+        check("tasks has an items list",
+              isinstance(state["tasks"].get("items"), list), state["tasks"])
 
         w = state["weather"]
         if w.get("unavailable"):
@@ -155,6 +157,7 @@ def main() -> int:
         check("storage section rendered", ">Storage<" in dom, "missing Storage header")
         check("network section rendered", ">Network<" in dom and ">NET<" in dom,
               "missing Network header/row")
+        check("tasks section rendered", ">Tasks<" in dom, "missing Tasks header")
         # #34: trend graphs are deliberately not shown on the
         # wallpaper anymore (collection continues server-side) -- assert
         # they stay gone rather than silently reappearing on a regression.

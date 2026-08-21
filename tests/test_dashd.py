@@ -287,10 +287,43 @@ class TestBuildState(unittest.TestCase):
             st = dashd.build_state(cfg)
         finally:
             dashd.cached_weather = orig
-        for key in ("ts", "config", "weather", "sys", "music", "extra"):
+        for key in ("ts", "config", "weather", "sys", "music", "tasks", "extra"):
             self.assertIn(key, st)
         for key in ("units", "display", "location", "poll", "metrics_retain_hours"):
             self.assertIn(key, st["config"])
+
+
+class TestLoadTasks(unittest.TestCase):
+    """load_tasks() reads data/tasks.json verbatim -- source-agnostic (#25)."""
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self._orig_data = dashd.DATA
+        dashd.DATA = Path(self._tmp.name)
+
+    def tearDown(self):
+        dashd.DATA = self._orig_data
+        self._tmp.cleanup()
+
+    def test_missing_file_returns_empty_items(self):
+        self.assertEqual(dashd.load_tasks(), {"items": []})
+
+    def test_valid_file_round_trips(self):
+        payload = {"items": [{"text": "Buy milk", "done": False}]}
+        (dashd.DATA / "tasks.json").write_text(json.dumps(payload))
+        self.assertEqual(dashd.load_tasks(), payload)
+
+    def test_malformed_json_reports_error_without_crashing(self):
+        (dashd.DATA / "tasks.json").write_text("{not json")
+        out = dashd.load_tasks()
+        self.assertEqual(out["items"], [])
+        self.assertIn("_error", out)
+
+    def test_wrong_shape_reports_error_without_crashing(self):
+        (dashd.DATA / "tasks.json").write_text(json.dumps({"items": "nope"}))
+        out = dashd.load_tasks()
+        self.assertEqual(out["items"], [])
+        self.assertIn("_error", out)
 
 
 class TestMetricsStore(unittest.TestCase):

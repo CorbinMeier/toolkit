@@ -349,6 +349,21 @@
         </div>
       </div>
     </section>
+
+    <!-- ============ TASKS ============ -->
+    <!-- Reuses System's teal accent (#25) -- DESIGN.md commits the palette
+         to three accents total (teal/gold/red), and Tasks is utility data
+         like System, not weather, so it shares teal rather than inventing
+         a fourth. Source-agnostic: dashd-serve reads data/tasks.json
+         verbatim (see bin/dashd-serve), so whatever writes that file
+         (local script, cron, a future integration) is free to change
+         without touching this panel. -->
+    <section class="accent-cyan flex flex-col min-h-0 self-start justify-self-start">
+      <div class="panel px-[2vmin] py-[1.5vmin] flex flex-col gap-[0.6vmin]">
+        <h2 class="sec-head text-faint uppercase tracking-[0.3em] text-[clamp(.55rem,1.15vmin,.8rem)]">Tasks</h2>
+        <div id="tasks" class="flex flex-col gap-[0.3vmin]"></div>
+      </div>
+    </section>
   </main>
 
   <script src="app.js"></script>

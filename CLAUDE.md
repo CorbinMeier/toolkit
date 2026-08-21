@@ -9,7 +9,8 @@ wallpaper image on a timer: a real WebKit view with CSS animation and JS,
 one surface per monitor, sitting below the windows. No digital clock,
 date, or location readout -- the user's own system already shows all
 three (#5, #9). Two halves: System (left) | Forecast — current
-conditions, hourly, week, sun/moon, all one panel (right, #10).
+conditions, hourly, week, sun/moon, all one panel (right, #10) — plus a
+third, source-agnostic Tasks panel stacked below (#25).
 
 Three processes:
 
@@ -61,7 +62,9 @@ web/index.html      panel structure (Tailwind utility classes); System
                     stacked rows; Battery has none (#17). Music (#26) is a
                     fourth System sub-section below Network, same
                     icon|label|value|tail row shape, hidden entirely when
-                    nothing is playing/paused
+                    nothing is playing/paused. Third panel, Tasks, renders
+                    state.tasks.items as checkbox|text|due rows, empty state
+                    "No tasks" (#25)
 web/app.js          all rendering; pure function of last good state.
                     Two independent trend sources feed the step charts: an
                     in-memory ring buffer (this session's own /api/state
@@ -343,6 +346,17 @@ any other script can add panels without touching the server.
   `cosmic-bg`'s wallpaper, backdrop blur included — but it reads poorly
   against the current black-hole wallpaper, so it was reverted. One-key flip
   in `config.json` plus a host restart if revisited against calmer imagery.
+- #25 (2026-08-20): new Tasks component, a third stacked panel below System/
+  Forecast. Source-agnostic per the issue -- `bin/dashd-serve` reads
+  `data/tasks.json` (`{"items": [{"text","done","due"}]}`) verbatim and
+  merges it into `/api/state` as `tasks`, same read-only passthrough
+  pattern as `extra.json`; no task source/API was wired up, so the panel
+  shows "No tasks" until something (a script, cron, a future integration)
+  writes that file. Reuses System's teal accent rather than adding a
+  fourth color, per DESIGN.md's three-accent palette. Functionally
+  verified (smoke stage against an isolated worktree-local server, port
+  temporarily reassigned) but not visually — same "yours to eyeball"
+  convention as recent System/Forecast work.
 - #17 (2026-08-20): System panel polish. Battery's tier graphs (30M/4H/24H)
   removed entirely -- not needed, its LED already signals charge state.
   CPU/MEM's LED is now traffic-light banded off percentage (green below
