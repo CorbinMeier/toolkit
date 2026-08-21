@@ -50,6 +50,7 @@ CONFIG = ROOT / "config.json"
 
 sys.path.insert(0, str(ROOT / "lib"))
 import devices  # noqa: E402 -- needs ROOT on sys.path first
+import logsrc  # noqa: E402
 import metrics  # noqa: E402
 import sysinfo  # noqa: E402,F401 -- ditto; tests patch dashd.sysinfo.subprocess
 from sysinfo import (  # noqa: E402,F401 -- re-exported for tests/back-compat
@@ -328,6 +329,7 @@ def build_state(cfg: dict) -> dict:
         "music": now_playing(),
         "tasks": load_tasks(),
         "devices": cached_devices(cfg),
+        "logs": logsrc.read_log_lines(cfg),
         "extra": extra,
     }
 

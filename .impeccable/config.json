@@ -80,6 +80,42 @@
         "value": "#22303c",
         "createdAt": "2026-08-21T04:07:30.379Z",
         "reason": "web/control is a standalone mobile config form (#30), deliberately not styled to DESIGN.md's Night Ops HUD -- it's a phone-viewed utility page, not the wallpaper surface"
+      },
+      {
+        "rule": "design-system-color",
+        "value": "rgb(70 22 22 / .45)",
+        "createdAt": "2026-08-21T04:40:43.329Z",
+        "reason": "pre-existing Cyberpunk UIKit restyle color (commit 01fac0d), predates this merge session, unrelated to any change made here"
+      },
+      {
+        "rule": "design-system-color",
+        "value": "oklch(0.32 0.09 265 / .55)",
+        "createdAt": "2026-08-21T04:40:43.383Z",
+        "reason": "pre-existing Cyberpunk UIKit restyle color (commit 01fac0d), predates this merge session, unrelated to any change made here"
+      },
+      {
+        "rule": "design-system-color",
+        "value": "oklch(0.34 0.10 200 / .40)",
+        "createdAt": "2026-08-21T04:40:43.438Z",
+        "reason": "pre-existing Cyberpunk UIKit restyle color (commit 01fac0d), predates this merge session, unrelated to any change made here"
+      },
+      {
+        "rule": "design-system-color",
+        "value": "oklch(0.30 0.08 300 / .38)",
+        "createdAt": "2026-08-21T04:40:43.492Z",
+        "reason": "pre-existing Cyberpunk UIKit restyle color (commit 01fac0d), predates this merge session, unrelated to any change made here"
+      },
+      {
+        "rule": "design-system-color",
+        "value": "oklch(0.55 0.17 25/.30)",
+        "createdAt": "2026-08-21T04:40:43.548Z",
+        "reason": "pre-existing Cyberpunk UIKit restyle color (commit 01fac0d), predates this merge session, unrelated to any change made here"
+      },
+      {
+        "rule": "design-system-color",
+        "value": "oklch(0.35 0.02 260)",
+        "createdAt": "2026-08-21T04:40:47.679Z",
+        "reason": "pre-existing app.js color, predates this merge session, unrelated to any change made here"
       }
     ]
   }

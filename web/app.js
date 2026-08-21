@@ -568,6 +568,37 @@ function renderDevices(devices) {
   });
 }
 
+// Log highlighter (#28): filtered/highlighted lines only (see
+// lib/logsrc.py) -- not a full tail. Status -> accent color, matching the
+// System panel's traffic-light language (critical=crimson, warn=amber,
+// ok=online-green, anything else=faint).
+const LOG_TONE = {
+  critical: 'var(--color-crimson)',
+  warn: 'var(--color-warm)',
+  ok: 'var(--color-online)',
+};
+function renderLog(lines) {
+  const box = $('logbox');
+  box.replaceChildren();
+  if (!lines || !lines.length) {
+    const row = document.createElement('div');
+    row.className = 'text-faint';
+    row.textContent = 'no highlighted lines';
+    box.appendChild(row);
+    return;
+  }
+  lines.slice(-12).reverse().forEach((line) => {
+    const tone = LOG_TONE[line.status] || 'var(--color-faint)';
+    const row = document.createElement('div');
+    row.style.color = tone;
+    row.style.borderLeft = `2px solid ${tone}`;
+    row.className = 'pl-[0.6vmin] truncate';
+    row.title = line.text;
+    row.textContent = `${line.label ? `[${line.label}] ` : ''}${line.text}`;
+    box.appendChild(row);
+  });
+}
+
 /* -------------------------------------------------------- weather panels */
 function renderWeather(w) {
   if (w.unavailable) {
@@ -957,6 +988,7 @@ function apply(s) {
   renderTasks(s.tasks);
   renderSchedule((s.extra && s.extra.schedule) || []);
   renderDevices(s.devices);
+  renderLog(s.logs);
   refreshAutoCycles();
 
   const boot = $('boot');

@@ -281,17 +281,21 @@ class TestBuildState(unittest.TestCase):
 
     def test_contains_the_keys_the_page_reads(self):
         cfg = dashd.load_config()
-        orig_weather, orig_devices = dashd.cached_weather, dashd.cached_devices
+        orig_weather, orig_devices, orig_logs = (
+            dashd.cached_weather, dashd.cached_devices, dashd.logsrc.read_log_lines)
         dashd.cached_weather = lambda _c: {"stale": False, "unavailable": True}
         dashd.cached_devices = lambda _c: []
+        dashd.logsrc.read_log_lines = lambda _c: []
         try:
             st = dashd.build_state(cfg)
         finally:
             dashd.cached_weather = orig_weather
             dashd.cached_devices = orig_devices
-        for key in ("ts", "config", "weather", "sys", "music", "tasks", "devices", "extra"):
+            dashd.logsrc.read_log_lines = orig_logs
+        for key in ("ts", "config", "weather", "sys", "music", "tasks", "devices", "logs", "extra"):
             self.assertIn(key, st)
         self.assertEqual(st["devices"], [])
+        self.assertEqual(st["logs"], [])
         for key in ("units", "display", "location", "poll", "metrics_retain_hours"):
             self.assertIn(key, st["config"])
 
@@ -415,6 +419,57 @@ class TestDevices(unittest.TestCase):
         with patch.object(dashd.devices.subprocess, "run",
                            side_effect=FileNotFoundError("no nmap")):
             self.assertEqual(dashd.devices.scan_devices("192.168.1.0/24"), [])
+
+
+class TestLogSource(unittest.TestCase):
+    """dashd.logsrc is lib/logsrc.py (#28)."""
+
+    def test_only_matching_lines_are_returned_with_status_and_label(self):
+        cfg = {"logs": {"source_type": "journalctl", "journalctl_unit": "ssh",
+                         "max_lines": 50, "patterns": [
+                             {"regex": "Failed password", "status": "critical",
+                              "label": "Failed login"}]}}
+        fake = type("R", (), {"stdout":
+            "2026-08-20T10:00:00-07:00 Failed password for root\n"
+            "2026-08-20T10:00:01-07:00 ordinary line, no match\n"})()
+        with patch.object(dashd.logsrc.subprocess, "run", return_value=fake):
+            rows = dashd.logsrc.read_log_lines(cfg)
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0]["status"], "critical")
+        self.assertEqual(rows[0]["label"], "Failed login")
+        self.assertEqual(rows[0]["ts"], "2026-08-20T10:00:00-07:00")
+
+    def test_file_source_tails_and_filters(self):
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".log", delete=False) as fh:
+            fh.write("plain line\n")
+            fh.write("2026-08-20T09:00:00 Failed password for admin\n")
+            path = fh.name
+        try:
+            cfg = {"logs": {"source_type": "file", "file_path": path,
+                             "max_lines": 10, "patterns": [
+                                 {"regex": "Failed password", "status": "critical",
+                                  "label": "Failed login"}]}}
+            rows = dashd.logsrc.read_log_lines(cfg)
+        finally:
+            Path(path).unlink()
+        self.assertEqual(len(rows), 1)
+        self.assertIn("admin", rows[0]["text"])
+
+    def test_no_patterns_configured_returns_empty(self):
+        cfg = {"logs": {"source_type": "journalctl", "journalctl_unit": "ssh"}}
+        self.assertEqual(dashd.logsrc.read_log_lines(cfg), [])
+
+    def test_missing_file_source_config_returns_empty(self):
+        cfg = {"logs": {"source_type": "file", "file_path": None,
+                         "patterns": [{"regex": "x", "status": "info", "label": ""}]}}
+        self.assertEqual(dashd.logsrc.read_log_lines(cfg), [])
+
+    def test_missing_journalctl_binary_returns_empty_not_an_error(self):
+        cfg = {"logs": {"source_type": "journalctl", "journalctl_unit": "ssh",
+                         "patterns": [{"regex": "x", "status": "info", "label": ""}]}}
+        with patch.object(dashd.logsrc.subprocess, "run",
+                           side_effect=FileNotFoundError("no journalctl")):
+            self.assertEqual(dashd.logsrc.read_log_lines(cfg), [])
 
 
 class TestConfig(unittest.TestCase):
