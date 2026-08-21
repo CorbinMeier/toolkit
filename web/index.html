@@ -185,7 +185,14 @@
         grid grid-cols-1 lg:grid-cols-2 grid-rows-1">
 
     <!-- ============ LEFT HALF: system ============ -->
-    <section class="accent-cyan flex flex-col min-h-0">
+    <!-- self-start (ISSUES.md #35): without it, #root's grid default
+         align-items:stretch forces this <section> to fill the row's full
+         height (matched to the taller Forecast section) even though the
+         visible .panel card inside it already hugs its own content --
+         an invisible stretched box with a content-sized card floating at
+         its top. self-start collapses the whole section to its content
+         height instead, so the SYSTEM container is actually a card. -->
+    <section class="accent-cyan flex flex-col min-h-0 self-start">
       <div class="panel px-[2vmin] py-[1.5vmin] flex flex-col gap-[0.6vmin]">
         <h2 class="sec-head text-faint uppercase tracking-[0.3em] text-[clamp(.55rem,1.15vmin,.8rem)]">
           System</h2>
