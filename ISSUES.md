@@ -2,6 +2,42 @@
 
 Newest first. No GitHub remote on this project, so this file is the tracker.
 
+## 13. Document the visual design system (DESIGN.md)
+
+Status: closed
+Source: user request this session (`/impeccable document`)
+Date: 2026-08-20
+
+Generate `DESIGN.md` (plus its `.impeccable/design.json` sidecar) capturing
+the visual design system that emerged across issues #4-#12 -- the
+CyberpunkUIKit-derived accent triad, notched panels, step-line charts,
+table-aligned metric rows -- so future AI-driven design work on this
+project stays on-brand instead of re-deriving conventions from scratch.
+
+Ran in scan mode (existing rendered code, no PRODUCT.md needed for a
+scoped docs-generation command). Extracted the full token set from
+`web/index.html`'s dual `@theme`/`:root` blocks and cross-checked actual
+usage in `web/app.js` -- found `--color-online` and `--font-mono` are both
+declared but never consumed anywhere, documented as reserved rather than
+silently dropped or invented a use for. Confirmed qualitative direction
+with the user in two rounds: North Star "The Night Ops HUD", tactical/
+utilitarian voice, "Night Signal" color naming (Signal Teal / Ember Gold /
+Distress Red), flat elevation as a hard invariant, no rounded-corner/
+soft-card look as a standing Don't. Wrote both the canonical 8-section
+DESIGN.md and its `.impeccable/design.json` sidecar (tonal ramps, shadow/
+motion/breakpoint extensions, 6 component HTML/CSS snippets: Panel,
+Metric Row, Step-Line Chart, Section Header, CHRG Badge, Status Dot +
+Offline Banner).
+
+Corrected a process error mid-task: the two files were first written
+directly in the main checkout, outside the §8 worktree flow. Deleted them
+before committing anything, filed this issue, and redid the same writes
+inside `issue-13-design-md`.
+
+Started at: 2026-08-20T17:17:55-07:00
+Ended at: 2026-08-20T17:20:45-07:00
+Time elapsed: 2m 50s
+
 ## 12. Multi-tier step-line charts for CPU/MEM/BAT; dedicated Storage/Network sections
 
 Status: closed
