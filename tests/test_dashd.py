@@ -11,8 +11,11 @@ from __future__ import annotations
 import importlib.machinery
 import importlib.util
 import json
+import socket
 import sqlite3
+import subprocess
 import tempfile
+import threading
 import time
 import unittest
 from datetime import UTC, datetime, timedelta
@@ -284,7 +287,7 @@ class TestBuildState(unittest.TestCase):
         orig_weather, orig_devices, orig_logs = (
             dashd.cached_weather, dashd.cached_devices, dashd.logsrc.read_log_lines)
         dashd.cached_weather = lambda _c: {"stale": False, "unavailable": True}
-        dashd.cached_devices = lambda _c: []
+        dashd.cached_devices = lambda _c: {"gateway": None, "devices": []}
         dashd.logsrc.read_log_lines = lambda _c: []
         try:
             st = dashd.build_state(cfg)
@@ -293,9 +296,11 @@ class TestBuildState(unittest.TestCase):
             dashd.cached_devices = orig_devices
             dashd.logsrc.read_log_lines = orig_logs
         for key in ("ts", "config", "weather", "sys", "music", "tasks", "devices",
-                    "logs", "extra"):
+                    "devices_gateway", "devices_scanning", "logs", "extra"):
             self.assertIn(key, st)
         self.assertEqual(st["devices"], [])
+        self.assertIsNone(st["devices_gateway"])
+        self.assertFalse(st["devices_scanning"])
         self.assertEqual(st["logs"], [])
         for key in ("units", "display", "location", "poll", "metrics_retain_hours"):
             self.assertIn(key, st["config"])
@@ -399,7 +404,14 @@ class TestMetricsStore(unittest.TestCase):
 
 class TestDevices(unittest.TestCase):
     """dashd.devices is lib/devices.py (#27), re-exported the same way
-    dashd.sysinfo is -- patch the subprocess module it actually imported."""
+    dashd.sysinfo is -- patch the subprocess module it actually imported.
+
+    target_is_local() is patched True in most of these: they're testing
+    the grepable-output parser and the subprocess-failure fallback, not
+    the local-subnet safety check (that's TestDevicesTargetIsLocal /
+    TestDevicesRefusesNonLocalTarget below) -- without the patch, whether
+    192.168.1.0/24 happens to overlap the machine actually running the
+    test suite would make these flaky by environment."""
 
     _GREP_OUTPUT = (
         "Host: 192.168.1.5 (router.lan)\tStatus: Up\n"
@@ -409,17 +421,422 @@ class TestDevices(unittest.TestCase):
 
     def test_parses_up_hosts_from_grepable_output(self):
         fake = type("R", (), {"stdout": self._GREP_OUTPUT})()
-        with patch.object(dashd.devices.subprocess, "run", return_value=fake):
+        with patch.object(dashd.devices, "target_is_local", return_value=True), \
+                patch.object(dashd.devices, "arp_table", return_value={}), \
+                patch.object(dashd.devices, "_reverse_dns", return_value=""), \
+                patch.object(dashd.devices, "_mdns_resolve", return_value=""), \
+                patch.object(dashd.devices.subprocess, "run", return_value=fake):
             found = dashd.devices.scan_devices("192.168.1.0/24")
         self.assertEqual(found, [
-            {"ip": "192.168.1.5", "hostname": "router.lan", "status": "up"},
-            {"ip": "192.168.1.9", "hostname": "", "status": "up"},
+            {"ip": "192.168.1.5", "mac": None,
+             "hostname": "router.lan", "status": "up"},
+            {"ip": "192.168.1.9", "mac": None, "hostname": "", "status": "up"},
         ])
 
+    def test_missing_hostname_falls_back_to_reverse_dns(self):
+        fake = type("R", (), {"stdout": self._GREP_OUTPUT})()
+        with patch.object(dashd.devices, "target_is_local", return_value=True), \
+                patch.object(dashd.devices, "arp_table",
+                              return_value={"192.168.1.9": "aa:bb:cc:dd:ee:ff"}), \
+                patch.object(dashd.devices, "_reverse_dns", return_value="nas.local"), \
+                patch.object(dashd.devices.subprocess, "run", return_value=fake):
+            found = dashd.devices.scan_devices("192.168.1.0/24")
+        self.assertEqual(found[1], {
+            "ip": "192.168.1.9", "mac": "aa:bb:cc:dd:ee:ff",
+            "hostname": "nas.local", "status": "up"})
+
+    def test_reverse_dns_miss_falls_back_to_mdns(self):
+        # Real-world case (user report: "the devices are not reporting
+        # their names") -- this network's router doesn't run PTR records
+        # for DHCP clients at all, so _reverse_dns() alone found nothing
+        # for anything but this machine and the gateway; mDNS/avahi picks
+        # up phones/printers/etc that DNS never will.
+        fake = type("R", (), {"stdout": self._GREP_OUTPUT})()
+        with patch.object(dashd.devices, "target_is_local", return_value=True), \
+                patch.object(dashd.devices, "arp_table", return_value={}), \
+                patch.object(dashd.devices, "_reverse_dns", return_value=""), \
+                patch.object(dashd.devices, "_mdns_resolve",
+                              return_value="phone.local"), \
+                patch.object(dashd.devices.subprocess, "run", return_value=fake):
+            found = dashd.devices.scan_devices("192.168.1.0/24")
+        self.assertEqual(found[1]["hostname"], "phone.local")
+
+    def test_no_resolver_finds_anything_hostname_stays_empty(self):
+        fake = type("R", (), {"stdout": self._GREP_OUTPUT})()
+        with patch.object(dashd.devices, "target_is_local", return_value=True), \
+                patch.object(dashd.devices, "arp_table", return_value={}), \
+                patch.object(dashd.devices, "_reverse_dns", return_value=""), \
+                patch.object(dashd.devices, "_mdns_resolve", return_value=""), \
+                patch.object(dashd.devices.subprocess, "run", return_value=fake):
+            found = dashd.devices.scan_devices("192.168.1.0/24")
+        self.assertEqual(found[1]["hostname"], "")
+
     def test_missing_nmap_returns_empty_list_not_an_error(self):
-        with patch.object(dashd.devices.subprocess, "run",
-                           side_effect=FileNotFoundError("no nmap")):
+        with patch.object(dashd.devices, "target_is_local", return_value=True), \
+                patch.object(dashd.devices.subprocess, "run",
+                              side_effect=FileNotFoundError("no nmap")):
             self.assertEqual(dashd.devices.scan_devices("192.168.1.0/24"), [])
+
+
+class TestDevicesArpAndGateway(unittest.TestCase):
+    """arp_table() / default_gateway() -- parse `ip neigh show` / `ip route
+    show default` output. Patches devices._run (the shared subprocess
+    helper) rather than shelling out for real, so these don't depend on
+    the test machine's actual network state."""
+
+    _NEIGH_OUTPUT = (
+        "10.1.1.1 dev wlo1 lladdr 2c:f0:5d:f9:bc:f6 REACHABLE\n"
+        "10.1.1.15 dev wlo1 lladdr e0:51:63:01:f8:0a STALE\n"
+        "10.1.1.4 dev wlo1  FAILED\n"  # no lladdr -- unresolved, must be skipped
+    )
+    _ROUTE_OUTPUT = (
+        "default via 10.1.1.1 dev wlo1 proto dhcp src 10.1.1.38 metric 600\n")
+
+    def test_arp_table_parses_lladdr_and_skips_unresolved(self):
+        with patch.object(dashd.devices, "_run", return_value=self._NEIGH_OUTPUT):
+            table = dashd.devices.arp_table()
+        self.assertEqual(table, {
+            "10.1.1.1": "2c:f0:5d:f9:bc:f6",
+            "10.1.1.15": "e0:51:63:01:f8:0a",
+        })
+
+    def test_default_gateway_resolves_mac_from_arp_table(self):
+        def fake_run(cmd, timeout=5):
+            if cmd[:2] == ["ip", "route"]:
+                return self._ROUTE_OUTPUT
+            return self._NEIGH_OUTPUT
+        with patch.object(dashd.devices, "_run", side_effect=fake_run):
+            gw = dashd.devices.default_gateway()
+        self.assertEqual(
+            gw, {"ip": "10.1.1.1", "mac": "2c:f0:5d:f9:bc:f6", "iface": "wlo1"})
+
+    def test_no_default_route_returns_none(self):
+        with patch.object(dashd.devices, "_run", return_value=""):
+            self.assertIsNone(dashd.devices.default_gateway())
+
+
+class TestMdnsResolve(unittest.TestCase):
+    """_mdns_resolve() -- parses `avahi-resolve -a` output, the fallback
+    name source added after user report ("the devices are not reporting
+    their names"): this network's router has no DNS PTR records for DHCP
+    clients at all, but several devices answer mDNS instead."""
+
+    def test_parses_successful_resolution(self):
+        fake = type("R", (), {
+            "returncode": 0, "stdout": "10.1.1.18\tAndroid_2MECJMIY.local\n"})()
+        with patch.object(dashd.devices.subprocess, "run", return_value=fake):
+            self.assertEqual(
+                dashd.devices._mdns_resolve("10.1.1.18"), "Android_2MECJMIY.local")
+
+    def test_failed_resolution_is_empty_string(self):
+        fake = type("R", (), {"returncode": 1, "stdout": ""})()
+        with patch.object(dashd.devices.subprocess, "run", return_value=fake):
+            self.assertEqual(dashd.devices._mdns_resolve("10.1.1.99"), "")
+
+    def test_missing_avahi_resolve_binary_is_empty_not_an_error(self):
+        with patch.object(dashd.devices.subprocess, "run",
+                           side_effect=FileNotFoundError("no avahi-resolve")):
+            self.assertEqual(dashd.devices._mdns_resolve("10.1.1.18"), "")
+
+    def test_hang_is_bounded_by_timeout_not_left_running(self):
+        with patch.object(dashd.devices.subprocess, "run",
+                           side_effect=subprocess.TimeoutExpired("avahi-resolve", 1.5)):
+            self.assertEqual(dashd.devices._mdns_resolve("10.1.1.18"), "")
+
+
+class TestDevicesRegistry(unittest.TestCase):
+    """load_registry()/merge_scan()/devices_for_network() -- the "remember
+    devices" behavior (user request): a device missing from a scan is
+    marked offline, not dropped, and everything is scoped per-network so
+    hopping networks doesn't leak one network's devices into another's."""
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.path = Path(self._tmp.name) / "devices.json"
+
+    def tearDown(self):
+        self._tmp.cleanup()
+
+    def test_load_registry_missing_file_is_empty(self):
+        self.assertEqual(dashd.devices.load_registry(self.path), {"networks": {}})
+
+    def test_load_registry_tolerates_corrupt_json(self):
+        self.path.write_text("{not json")
+        self.assertEqual(dashd.devices.load_registry(self.path), {"networks": {}})
+
+    def test_load_registry_tolerates_pre_registry_flat_shape(self):
+        self.path.write_text(json.dumps({"devices": [], "fetched_at": 1.0}))
+        self.assertEqual(dashd.devices.load_registry(self.path), {"networks": {}})
+
+    def test_network_key_prefers_gateway_mac(self):
+        self.assertEqual(
+            dashd.devices.network_key({"ip": "10.1.1.1", "mac": "aa:bb:cc:dd:ee:ff"}),
+            "aa:bb:cc:dd:ee:ff")
+
+    def test_network_key_falls_back_to_gateway_ip(self):
+        self.assertEqual(
+            dashd.devices.network_key({"ip": "10.1.1.1", "mac": None}), "gw:10.1.1.1")
+
+    def test_network_key_none_without_a_gateway(self):
+        self.assertIsNone(dashd.devices.network_key(None))
+
+    def test_device_missing_from_a_later_scan_goes_offline_not_dropped(self):
+        gw = {"ip": "10.1.1.1", "mac": "aa:aa:aa:aa:aa:aa"}
+        registry = {"networks": {}}
+        dashd.devices.merge_scan(registry, gw, [
+            {"ip": "10.1.1.5", "mac": "11:11:11:11:11:11", "hostname": "phone"},
+        ], now=1000.0)
+        dashd.devices.merge_scan(registry, gw, [], now=2000.0)  # phone didn't answer
+
+        found = dashd.devices.devices_for_network(registry, gw)
+        self.assertEqual(len(found), 1)
+        self.assertEqual(found[0]["status"], "offline")
+        self.assertEqual(found[0]["first_seen"], 1000.0)
+        self.assertEqual(found[0]["last_seen"], 1000.0)  # unchanged -- not seen again
+
+    def test_device_seen_again_goes_back_to_up(self):
+        gw = {"ip": "10.1.1.1", "mac": "aa:aa:aa:aa:aa:aa"}
+        registry = {"networks": {}}
+        found = [{"ip": "10.1.1.5", "mac": "11:11:11:11:11:11", "hostname": "phone"}]
+        dashd.devices.merge_scan(registry, gw, found, now=1000.0)
+        dashd.devices.merge_scan(registry, gw, [], now=2000.0)
+        dashd.devices.merge_scan(registry, gw, found, now=3000.0)
+
+        result = dashd.devices.devices_for_network(registry, gw)
+        self.assertEqual(result[0]["status"], "up")
+        self.assertEqual(result[0]["last_seen"], 3000.0)
+
+    def test_devices_scoped_to_current_network_only(self):
+        gw_home = {"ip": "10.1.1.1", "mac": "aa:aa:aa:aa:aa:aa"}
+        gw_cafe = {"ip": "192.168.5.1", "mac": "bb:bb:bb:bb:bb:bb"}
+        registry = {"networks": {}}
+        dashd.devices.merge_scan(registry, gw_home, [
+            {"ip": "10.1.1.5", "mac": "11:11:11:11:11:11", "hostname": "phone"},
+        ], now=1000.0)
+
+        # Hopping to a different network must not show home's devices,
+        # remembered as offline or otherwise.
+        self.assertEqual(dashd.devices.devices_for_network(registry, gw_cafe), [])
+        self.assertEqual(len(dashd.devices.devices_for_network(registry, gw_home)), 1)
+
+    def test_devices_for_network_sorts_up_before_offline_then_by_ip(self):
+        gw = {"ip": "10.1.1.1", "mac": "aa:aa:aa:aa:aa:aa"}
+        registry = {"networks": {}}
+        dashd.devices.merge_scan(registry, gw, [
+            {"ip": "10.1.1.20", "mac": "22:22:22:22:22:22", "hostname": ""},
+            {"ip": "10.1.1.5", "mac": "11:11:11:11:11:11", "hostname": ""},
+        ], now=1000.0)
+        dashd.devices.merge_scan(registry, gw, [
+            {"ip": "10.1.1.5", "mac": "11:11:11:11:11:11", "hostname": ""},
+        ], now=2000.0)  # .20 now offline
+
+        ordered = dashd.devices.devices_for_network(registry, gw)
+        self.assertEqual([(d["ip"], d["status"]) for d in ordered],
+                          [("10.1.1.5", "up"), ("10.1.1.20", "offline")])
+
+    def test_devices_for_network_empty_without_a_gateway(self):
+        self.assertEqual(dashd.devices.devices_for_network({"networks": {}}, None), [])
+
+
+class TestDevicesSelf(unittest.TestCase):
+    """self_device() / devices_for_network()'s self-pinning -- user
+    request: "Devices should show THIS device on the first line ... it's
+    technically on and connected". Fakes psutil.net_if_addrs() and
+    socket.gethostname() (applied for every test via enterContext, since
+    all of them need this same identity) so this doesn't depend on the
+    test machine's real interfaces/hostname."""
+
+    _GATEWAY = {"ip": "10.1.1.1", "mac": "aa:aa:aa:aa:aa:aa", "iface": "wlo1"}
+    _MY_ADDRS = {"wlo1": [type("A", (), {
+        "family": socket.AF_INET, "address": "10.1.1.38",
+        "netmask": "255.255.254.0"})()]}
+
+    def setUp(self):
+        self.enterContext(patch.object(
+            dashd.devices.psutil, "net_if_addrs", return_value=self._MY_ADDRS))
+        self.enterContext(patch.object(
+            dashd.devices.socket, "gethostname", return_value="cim-hp-flip"))
+
+    def test_self_device_reads_the_gateways_interface(self):
+        me = dashd.devices.self_device(self._GATEWAY)
+        self.assertEqual(me, {"ip": "10.1.1.38", "hostname": "cim-hp-flip"})
+
+    def test_self_device_none_without_gateway_or_interface(self):
+        self.assertIsNone(dashd.devices.self_device(None))
+        self.assertIsNone(dashd.devices.self_device({"ip": "10.1.1.1", "iface": None}))
+
+    def test_self_device_leads_the_list_even_though_ip_sorts_later(self):
+        registry = {"networks": {}}
+        dashd.devices.merge_scan(registry, self._GATEWAY, [
+            {"ip": "10.1.1.5", "mac": "11:11:11:11:11:11", "hostname": "phone"},
+        ], now=1000.0)
+        result = dashd.devices.devices_for_network(registry, self._GATEWAY)
+        self.assertEqual([d["ip"] for d in result], ["10.1.1.38", "10.1.1.5"])
+        self.assertEqual(result[0]["status"], "up")
+
+    def test_self_device_forced_up_even_if_scan_marked_it_offline(self):
+        registry = {"networks": {}}
+        dashd.devices.merge_scan(registry, self._GATEWAY, [
+            {"ip": "10.1.1.38", "mac": None, "hostname": "cim-hp-flip"},
+        ], now=1000.0)
+        dashd.devices.merge_scan(registry, self._GATEWAY, [], now=2000.0)  # -> offline
+
+        result = dashd.devices.devices_for_network(registry, self._GATEWAY)
+        self.assertEqual(result[0]["ip"], "10.1.1.38")
+        self.assertEqual(result[0]["status"], "up")
+
+    def test_self_device_synthesized_when_no_scan_has_run_yet(self):
+        result = dashd.devices.devices_for_network({"networks": {}}, self._GATEWAY)
+        self.assertEqual(result, [{
+            "ip": "10.1.1.38", "hostname": "cim-hp-flip", "status": "up",
+            "first_seen": result[0]["first_seen"], "last_seen": result[0]["last_seen"],
+        }])
+
+
+class TestDevicesTargetIsLocal(unittest.TestCase):
+    """target_is_local() / local_networks() -- the safety check added after
+    a real incident: the shipped scan_target (192.168.1.0/24) didn't match
+    the machine's actual network, so it ping-swept a subnet the user isn't
+    even on. Fakes psutil.net_if_addrs() so this is deterministic
+    regardless of whatever network the test suite actually runs on."""
+
+    _FAKE_ADDRS = {
+        "lo": [type("A", (), {"family": socket.AF_INET,
+                               "address": "127.0.0.1", "netmask": "255.0.0.0"})()],
+        "wlan0": [type("A", (), {
+            "family": socket.AF_INET, "address": "10.1.1.38",
+            "netmask": "255.255.254.0"})()],
+    }
+
+    def test_local_networks_excludes_loopback(self):
+        with patch.object(dashd.devices.psutil, "net_if_addrs",
+                           return_value=self._FAKE_ADDRS):
+            nets = dashd.devices.local_networks()
+        self.assertEqual([str(n) for n in nets], ["10.1.0.0/23"])
+
+    def test_target_within_local_subnet_is_local(self):
+        with patch.object(dashd.devices.psutil, "net_if_addrs",
+                           return_value=self._FAKE_ADDRS):
+            self.assertTrue(dashd.devices.target_is_local("10.1.1.0/24"))
+
+    def test_target_outside_every_local_subnet_is_not_local(self):
+        with patch.object(dashd.devices.psutil, "net_if_addrs",
+                           return_value=self._FAKE_ADDRS):
+            self.assertFalse(dashd.devices.target_is_local("192.168.1.0/24"))
+
+    def test_unparseable_target_is_unknown_not_rejected(self):
+        with patch.object(dashd.devices.psutil, "net_if_addrs",
+                           return_value=self._FAKE_ADDRS):
+            self.assertIsNone(dashd.devices.target_is_local("10.1.1.1-50"))
+
+
+class TestDevicesRefusesNonLocalTarget(unittest.TestCase):
+    """scan_devices() must never even invoke nmap against a target it can
+    positively confirm isn't local -- the actual fix for the incident, not
+    just the detection logic."""
+
+    def test_nmap_never_runs_for_a_non_local_target(self):
+        with patch.object(dashd.devices, "target_is_local", return_value=False), \
+                patch.object(dashd.devices.subprocess, "run") as run:
+            found = dashd.devices.scan_devices("192.168.1.0/24")
+        run.assert_not_called()
+        self.assertEqual(found, [])
+
+
+class TestDevicesScanning(unittest.TestCase):
+    """devices_scanning() backs the Devices panel's spinner (#27 follow-up)
+    -- true only while cached_devices()'s background nmap thread is
+    actually in flight, false again once it's written the cache file.
+    default_gateway() is patched throughout: cached_devices() now calls it
+    on every request (#27 "remember devices" follow-up), and the real
+    function shells out to `ip route`, which would make these tests depend
+    on whatever network the suite happens to run on."""
+
+    _GATEWAY = {"ip": "10.1.1.1", "mac": "aa:aa:aa:aa:aa:aa", "iface": "wlo1"}
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self._orig_data = dashd.DATA
+        dashd.DATA = Path(self._tmp.name)
+        self._orig_scan = dashd.devices.scan_devices
+        self._orig_gateway = dashd.devices.default_gateway
+        self._orig_self = dashd.devices.self_device
+        dashd.devices.default_gateway = lambda: self._GATEWAY
+        # These tests aren't about self-pinning (TestDevicesSelf owns
+        # that) -- without this, self_device() would read the REAL test
+        # machine's psutil.net_if_addrs() for the fake "wlo1" interface
+        # above and (on a machine that actually has one, like the dev box
+        # this suite runs on) silently add an extra row to every result.
+        dashd.devices.self_device = lambda _gw: None
+        dashd._devices_scanning = False
+
+    def tearDown(self):
+        dashd.DATA = self._orig_data
+        dashd.devices.scan_devices = self._orig_scan
+        dashd.devices.default_gateway = self._orig_gateway
+        dashd.devices.self_device = self._orig_self
+        dashd._devices_scanning = False
+        self._tmp.cleanup()
+
+    def test_true_while_scan_in_flight_false_after(self):
+        started = threading.Event()
+        release = threading.Event()
+
+        def fake_scan(_target, timeout=30):
+            started.set()
+            release.wait(timeout=2)
+            return [{"ip": "10.1.1.5", "mac": "11:11:11:11:11:11",
+                      "hostname": "", "status": "up"}]
+
+        dashd.devices.scan_devices = fake_scan
+        cfg = {"devices": {"scan_target": "10.1.1.0/24",
+                            "scan_interval_seconds": 300}}
+
+        self.assertFalse(dashd.devices_scanning())
+        dashd.cached_devices(cfg)  # no cache on disk yet -> kicks off a scan
+        self.assertTrue(started.wait(timeout=2), "scan never started")
+        self.assertTrue(dashd.devices_scanning())
+
+        release.set()
+        for _ in range(50):
+            if not dashd.devices_scanning():
+                break
+            time.sleep(0.05)
+        self.assertFalse(dashd.devices_scanning())
+
+        # And the scan result actually landed in the registry, scoped to
+        # this network, picked up on the very next call.
+        result = dashd.cached_devices(cfg)
+        self.assertEqual(result["gateway"], self._GATEWAY)
+        self.assertEqual(len(result["devices"]), 1)
+        self.assertEqual(result["devices"][0]["ip"], "10.1.1.5")
+        self.assertEqual(result["devices"][0]["status"], "up")
+
+    def test_no_gateway_means_no_scan_and_empty_devices(self):
+        dashd.devices.default_gateway = lambda: None
+        cfg = {"devices": {"scan_target": "10.1.1.0/24"}}
+
+        with patch.object(dashd.devices, "scan_devices") as run:
+            result = dashd.cached_devices(cfg)
+        self.assertIsNone(result["gateway"])
+        self.assertEqual(result["devices"], [])
+        run.assert_not_called()
+
+    def test_a_different_networks_devices_dont_leak_in(self):
+        # Pre-seed the registry as if the machine had previously been on a
+        # different network -- cached_devices() must not surface that.
+        other_gw = {"ip": "192.168.5.1", "mac": "bb:bb:bb:bb:bb:bb"}
+        registry = {"networks": {}}
+        dashd.devices.merge_scan(registry, other_gw, [
+            {"ip": "192.168.5.9", "mac": "22:22:22:22:22:22", "hostname": "laptop"},
+        ], now=1.0)
+        path = dashd.DATA / "devices.json"
+        path.write_text(json.dumps(registry))
+
+        cfg = {"devices": {"scan_target": "10.1.1.0/24",
+                            "scan_interval_seconds": 99999}}
+        result = dashd.cached_devices(cfg)
+        self.assertEqual(result["devices"], [])
 
 
 class TestLogSource(unittest.TestCase):

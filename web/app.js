@@ -196,19 +196,6 @@ function sysIcon(kind, tone = 'currentColor') {
       g.appendChild(el('line', { x1: 15.5, y1: 3, x2: 20, y2: 5.5 }));
       g.appendChild(el('circle', { cx: 12, cy: 17.5, r: 3.2, fill: tone }));
       break;
-    // Networked-devices row icon (#27): a small node with radiating links,
-    // reads as "host on the network" at a glance, same hand-drawn language
-    // as the rest of this glyph set.
-    case 'device':
-      g.appendChild(el('circle', { cx: 12, cy: 12, r: 3 }));
-      [0, 1, 2, 3].forEach((i) => {
-        const a = (i * Math.PI) / 2 + Math.PI / 4;
-        g.appendChild(el('line', {
-          x1: 12 + Math.cos(a) * 5, y1: 12 + Math.sin(a) * 5,
-          x2: 12 + Math.cos(a) * 10, y2: 12 + Math.sin(a) * 10,
-        }));
-      });
-      break;
     // Weather stat icons -- same hand-rolled stroke language as the System
     // icons above (no emoji, no external asset), for the Wind/Humidity/
     // Rain/UV rows and the sunrise/sunset readout (#9, Forecast
@@ -250,12 +237,6 @@ function sysIcon(kind, tone = 'currentColor') {
       g.appendChild(el('line', { x1: 2, y1: 20, x2: 22, y2: 20 }));
       g.appendChild(el('line', { x1: 12, y1: 6, x2: 12, y2: 16 }));
       g.appendChild(el('polyline', { points: '8,11 12,16 16,11' }));
-      break;
-    case 'schedule':
-      g.appendChild(el('rect', { x: 3, y: 5, width: 18, height: 16, rx: 1.5 }));
-      g.appendChild(el('line', { x1: 3, y1: 9.5, x2: 21, y2: 9.5 }));
-      g.appendChild(el('line', { x1: 7.5, y1: 2.5, x2: 7.5, y2: 6.5 }));
-      g.appendChild(el('line', { x1: 16.5, y1: 2.5, x2: 16.5, y2: 6.5 }));
       break;
     default: break;
   }
@@ -373,17 +354,26 @@ function stepChart(series, cls) {
   return svg;
 }
 
-/* Short, fixed-width fill bar for a disk row -- deliberately not a
- * full-width bar (the previous design): a partition's percentage reads
- * fine as a small swatch next to its number. */
-function miniBar(pct, tone = 'var(--color-accent)') {
+/* Fill bar, e.g. a disk row's small fixed-width swatch (default) or
+ * Music's full-width progress bar (widthClass override, user request:
+ * "make the progress bar span the entire component"). ml-auto is part of
+ * the default only -- it pushes a narrow bar to the right edge of a
+ * table's tail column; a w-full bar has no room for that to matter.
+ * radiusClass defaults to the pill shape every other caller (disk rows)
+ * still wants; Music passes 'rounded-none' (user request: "update the
+ * progress bar to be square") without affecting those other callers. */
+function miniBar(pct, tone = 'var(--color-accent)',
+    widthClass = 'w-[clamp(2.6rem,6.5vmin,4.2rem)] ml-auto',
+    radiusClass = 'rounded-full') {
   const wrap = document.createElement('div');
-  wrap.className = 'w-[clamp(2.6rem,6.5vmin,4.2rem)] h-[0.5vmin] min-h-[3px] ' +
-    'rounded-full overflow-hidden ml-auto';
+  wrap.className = `${widthClass} ${radiusClass} h-[0.5vmin] min-h-[3px] overflow-hidden`;
   wrap.style.background = 'oklch(0.5 0.02 260/.22)';
   const fill = document.createElement('div');
-  fill.style.cssText = `width:${Math.min(100, pct ?? 0)}%;background:${tone};` +
-    'height:100%;border-radius:inherit;transition:width .6s ease';
+  // transform:scaleX, not width -- animating width/height/padding/margin
+  // triggers layout on every frame; scaleX is compositor-only.
+  fill.style.cssText = `background:${tone};width:100%;height:100%;` +
+    `border-radius:inherit;transform-origin:left;` +
+    `transform:scaleX(${Math.min(100, pct ?? 0) / 100});transition:transform .6s ease`;
   wrap.appendChild(fill);
   return wrap;
 }
@@ -491,7 +481,10 @@ function renderDisks(disks) {
     box.appendChild(sysRow({
       icon: 'disk', label: label.toUpperCase(), tone: hot(d.pct ?? 0),
       value: d.pct != null ? `${d.pct.toFixed(0)}%` : bytes(d.size),
-      tail: miniBar(d.pct, hot(d.pct ?? 0)),
+      // Square corners (user request), same as Music's bar -- widthClass
+      // stays the default small swatch, only radiusClass changes.
+      tail: miniBar(d.pct, hot(d.pct ?? 0),
+        'w-[clamp(2.6rem,6.5vmin,4.2rem)] ml-auto', 'rounded-none'),
     }));
   });
 }
@@ -515,38 +508,95 @@ function renderNetwork(s) {
   }));
 }
 
-// Music: its own dedicated area below Network, only shown while something
-// is actually playing/paused (#26). Source-agnostic -- whatever
+// Music: its own top-level component, pinned to the bottom-right corner of
+// the viewport (position:fixed in index.html), source-agnostic -- whatever
 // dashd-serve's now_playing() picked up from MPRIS, be it a local player
-// or a browser tab. The section collapses entirely when idle rather than
-// showing a permanent empty row.
+// or a browser tab (#26). Stays visible and sits idle when nothing is
+// playing/paused, rather than disappearing (user report: "it should not
+// disappear just because no media is playing, should just sit idle" --
+// it previously collapsed the whole section, which read as the panel
+// itself being broken/missing rather than "no track right now").
+//
+// Layout per user requests across a couple of rounds: the note icon and
+// the PLAYING/PAUSED status label are both dropped from the render
+// entirely (the commented-out `status` line below is kept, not deleted,
+// in case it's wanted back); title and artist/album sit in one row, title
+// floated left and artist/album floated right; the progress bar spans the
+// full panel width with square (not pill) corners.
 function renderMusic(music) {
-  const section = $('musicSection');
   const box = $('music');
   box.replaceChildren();
   if (!music) {
-    section.classList.add('hidden');
+    const idle = document.createElement('div');
+    idle.className = 'text-faint text-[clamp(.5rem,1.05vmin,.76rem)]';
+    idle.textContent = 'Nothing playing';
+    box.appendChild(idle);
     return;
   }
-  section.classList.remove('hidden');
+
+  // const status = music.playing ? 'PLAYING' : 'PAUSED';
+
   const pct = music.length_secs
     ? Math.min(100, ((music.position_secs ?? 0) / music.length_secs) * 100)
     : null;
-  box.appendChild(sysRow({
-    icon: 'music', label: music.playing ? 'PLAYING' : 'PAUSED',
-    tone: music.playing ? 'var(--color-accent)' : 'var(--color-muted)',
-    value: music.title,
-    sub: [music.artist, music.album].filter(Boolean).join(' · '),
-    tail: pct != null ? miniBar(pct, 'var(--color-accent)') : null,
-  }));
+
+  const row = document.createElement('div');
+  row.className = 'flex items-baseline justify-between gap-[0.8vmin]';
+  const title = document.createElement('div');
+  title.className = 'text-ink tracking-wide truncate text-[clamp(.52rem,1.1vmin,.8rem)]';
+  title.textContent = music.title || '';
+  const artist = document.createElement('div');
+  artist.className = 'text-faint tracking-wide truncate text-right shrink-0 ' +
+    'max-w-[45%] text-[clamp(.46rem,.95vmin,.7rem)]';
+  artist.textContent = [music.artist, music.album].filter(Boolean).join(' · ');
+  row.append(title, artist);
+  box.appendChild(row);
+
+  if (pct != null) box.appendChild(miniBar(pct, 'var(--color-accent)', 'w-full', 'rounded-none'));
 }
 
-// Networked devices (#27): one row per host nmap's ping sweep found up,
-// same icon|label|value|tail sys-table shape as everything else in System.
+// A small glowing circle -- green/up or crimson/offline -- replacing the
+// old node-glyph icon (user feedback: "the icon you used here is odd").
+// Reuses .dot (same status-dot CSS the offline banner already uses), just
+// colored per-row instead of the banner's fixed crimson.
+function statusDot(status) {
+  const dot = document.createElement('span');
+  dot.className = 'dot';
+  const color = status === 'up' ? 'var(--color-online)' : 'var(--color-crimson)';
+  dot.style.background = color;
+  dot.style.boxShadow = `0 0 4px ${color}`;
+  return dot;
+}
+
+// Networked devices (#27): one row per remembered device -- status dot |
+// IP | device name (user request), same sys-table shape as everything
+// else in System. Devices are remembered per-network now (lib/devices.py's
+// registry, keyed by the default gateway's identity), not just whatever
+// the last scan happened to find: a device that doesn't answer this round
+// shows "offline" (red dot) instead of disappearing, and hopping onto a
+// different network shows that network's own remembered devices, not a
+// pile of stale entries from wherever the laptop was before.
 // scan_target/scan_interval_seconds live in config.json, editable from the
 // Control Backend (#30) -- this panel just renders whatever dashd-serve's
-// cached_devices() last found.
-function renderDevices(devices) {
+// cached_devices() last found. `scanning` (state.devices_scanning) toggles
+// the header spinner while a background nmap sweep is actually running.
+// `gateway` (state.devices_gateway) is the current network's identity,
+// shown top-right in the header as "which profile we're connecting to"
+// (user request) -- just its IP, since there's no named-profile/SSID
+// lookup here, only the gateway itself.
+function renderDevices(devices, scanning, gateway) {
+  const spinner = $('devicesSpinner');
+  if (spinner) spinner.classList.toggle('hidden', !scanning);
+
+  const netLabel = $('devicesNetwork');
+  if (netLabel) netLabel.textContent = gateway ? gateway.ip : '';
+
+  // Device count in parens right after the "Devices" label (user
+  // request) -- total remembered rows, up + offline alike, matching what
+  // actually renders below rather than just the "up" subset.
+  const count = $('devicesCount');
+  if (count) count.textContent = devices && devices.length ? ` (${devices.length})` : '';
+
   const box = $('devices');
   box.replaceChildren();
   if (!devices || !devices.length) {
@@ -554,16 +604,16 @@ function renderDevices(devices) {
     const td = document.createElement('td');
     td.colSpan = 4;
     td.className = 'text-faint text-[clamp(.42rem,.85vmin,.6rem)] py-[0.2vmin]';
-    td.textContent = 'no devices found';
+    td.textContent = gateway ? 'no devices found' : 'no network connection';
     tr.appendChild(td);
     box.appendChild(tr);
     return;
   }
   devices.forEach((d) => {
     box.appendChild(sysRow({
-      icon: 'device', label: (d.hostname || d.ip).toUpperCase(),
-      tone: 'var(--color-online)',
-      value: d.hostname ? d.ip : 'up',
+      iconNode: statusDot(d.status),
+      label: d.ip,
+      value: d.hostname || '—',
     }));
   });
 }
@@ -664,8 +714,20 @@ function renderHourly(w) {
 }
 
 function renderWeek(w) {
-  const today = new Date().toISOString().slice(0, 10);
-  $('week').replaceChildren(...w.daily.slice(0, 7).map((d) => {
+  // Local date, not toISOString() (UTC) -- same fix renderCalendar()
+  // already needed. In the evening Pacific time this bug made
+  // *tomorrow* match "today" instead, so today's own row never got the
+  // "Today" label/emphasis and just looked like a muted past day (user
+  // report: "remove yesterday's weather", when the actual bug was
+  // today's row being mislabeled, not an extra past day in the data).
+  const now = new Date();
+  const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-` +
+    `${String(now.getDate()).padStart(2, '0')}`;
+  // Drop anything before today (defensive) and cap at today + a couple
+  // more days (user request: "just need today and the next couple of
+  // days", not the full week).
+  const days = w.daily.filter((d) => d.date >= today).slice(0, 3);
+  $('week').replaceChildren(...days.map((d) => {
     const isToday = d.date === today;
     const row = document.createElement('div');
     row.className = 'flex items-center gap-[0.8vmin] py-[0.15vmin] ' +
@@ -751,43 +813,6 @@ function renderCalendar(extra) {
   host.replaceChildren(title, grid);
 }
 
-// Schedule (#23): source-agnostic today's-agenda list -- reads
-// state.extra.schedule, the same data/extra.json passthrough any script can
-// already populate (see CLAUDE.md's Data section) without touching the
-// server. Each item is {time: "HH:MM", title}; items whose time has already
-// passed today render dimmed, same muted/ink treatment renderWeek() uses for
-// past vs. current days. No source is wired up yet, so this renders the
-// empty state until something writes extra.json.
-function renderSchedule(items) {
-  const box = $('schedule');
-  if (!items || !items.length) {
-    box.replaceChildren(sysRow({
-      icon: 'schedule', label: 'TODAY', tone: 'var(--color-faint)', value: '—',
-      sub: 'no scheduled items',
-    }));
-    return;
-  }
-
-  const nowHM = new Date().toTimeString().slice(0, 5);
-  box.replaceChildren(...items.map((item) => {
-    const past = item.time && item.time < nowHM;
-    const row = document.createElement('div');
-    row.className = 'flex items-center gap-[0.8vmin] py-[0.15vmin] ' +
-      (past ? 'text-faint' : 'text-ink');
-
-    const time = document.createElement('span');
-    time.className = 'num w-[3.6em] shrink-0 text-[clamp(.5rem,1.05vmin,.78rem)]';
-    time.textContent = item.time || '';
-
-    const title = document.createElement('span');
-    title.className = 'flex-1 truncate tracking-wide text-[clamp(.52rem,1.1vmin,.82rem)]';
-    title.textContent = item.title || '';
-
-    row.append(time, title);
-    return row;
-  }));
-}
-
 function renderSunMoon(w) {
   const svg = $('sunarc');
   svg.replaceChildren();
@@ -853,54 +878,6 @@ function renderSunMoon(w) {
   $('moontext').innerHTML =
     `${w.moon.name}<br><span class="text-muted num">` +
     `${Math.round(w.moon.illumination * 100)}% lit</span>`;
-}
-
-/* ------------------------------------------------------------------ tasks */
-// Source-agnostic (#25): dashd-serve reads data/tasks.json verbatim, so
-// this just renders whatever {"items": [{"text","done","due"}]} shape
-// shows up -- no assumption about what wrote it.
-function renderTasks(tasks) {
-  const root = $('tasks');
-  const items = Array.isArray(tasks?.items) ? tasks.items : [];
-  if (!items.length) {
-    const empty = document.createElement('div');
-    empty.className = 'text-faint text-[clamp(.5rem,1.05vmin,.76rem)]';
-    empty.textContent = 'No tasks';
-    root.replaceChildren(empty);
-    return;
-  }
-  root.replaceChildren(...items.map((t) => {
-    const row = document.createElement('div');
-    row.className = 'flex items-center gap-[0.7vmin] py-[0.15vmin] ' +
-      (t.done ? 'text-faint line-through' : 'text-ink');
-
-    const box = el('svg', { viewBox: '0 0 16 16', class: 'icon-inline shrink-0' });
-    box.appendChild(el('rect', {
-      x: 1, y: 1, width: 14, height: 14, rx: 2, fill: 'none',
-      stroke: t.done ? 'var(--color-faint)' : 'var(--panel-accent, var(--color-accent))',
-      'stroke-width': '1.4',
-    }));
-    if (t.done) {
-      box.appendChild(el('polyline', {
-        points: '4,8.5 7,11.5 12,5', fill: 'none', stroke: 'var(--color-faint)',
-        'stroke-width': '1.6', 'stroke-linecap': 'round', 'stroke-linejoin': 'round',
-      }));
-    }
-
-    const label = document.createElement('span');
-    label.className = 'flex-1 tracking-wide text-[clamp(.52rem,1.1vmin,.82rem)] truncate';
-    label.textContent = t.text || '';
-
-    row.append(box, label);
-
-    if (t.due) {
-      const due = document.createElement('span');
-      due.className = 'num text-faint text-[clamp(.48rem,1vmin,.7rem)]';
-      due.textContent = t.due;
-      row.append(due);
-    }
-    return row;
-  }));
 }
 
 /* ------------------------------------------------------------------ poll */
@@ -985,9 +962,7 @@ function apply(s) {
   renderNetwork(s.sys);
   renderMusic(s.music);
   renderCalendar(s.extra);
-  renderTasks(s.tasks);
-  renderSchedule((s.extra && s.extra.schedule) || []);
-  renderDevices(s.devices);
+  renderDevices(s.devices, s.devices_scanning, s.devices_gateway);
   renderLog(s.logs);
   refreshAutoCycles();
 

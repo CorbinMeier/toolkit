@@ -76,6 +76,9 @@ def main() -> int:
               isinstance(state["tasks"].get("items"), list), state["tasks"])
         check("devices is a list", isinstance(state["devices"], list),
               state["devices"])
+        check("devices_scanning is a bool",
+              isinstance(state.get("devices_scanning"), bool),
+              state.get("devices_scanning"))
         check("logs is a list", isinstance(state["logs"], list), state["logs"])
 
         w = state["weather"]
@@ -160,13 +163,22 @@ def main() -> int:
         check("storage section rendered", ">Storage<" in dom, "missing Storage header")
         check("network section rendered", ">Network<" in dom and ">NET<" in dom,
               "missing Network header/row")
-        check("tasks section rendered", ">Tasks<" in dom, "missing Tasks header")
-        # "Monitor" (not ">Monitor<") -- its <h2> wraps across two lines in
-        # the source, same as System's own header, so the text never sits
-        # flush against the closing '>' the way single-line h3s do below.
-        check("monitor section rendered",
-              "Monitor" in dom and ">Devices<" in dom and ">Log<" in dom,
-              "missing Monitor/Devices/Log headers (#27/#28)")
+        # Tasks and Schedule panels were removed (deleted "for now").
+        # Log moved out of the old combined "Monitor" section into its own
+        # panel up front (top-right in the wide 2-col layout); Devices now
+        # stands alone in what used to be the Monitor section.
+        # "Log" (not ">Log<") -- its <h2> wraps across two lines in the
+        # source, same as System's own header, so the text never sits flush
+        # against the closing '>' the way single-line h3s do elsewhere.
+        check("log section rendered", "Log</h2>" in dom, "missing Log header")
+        # Devices' header is now "<span>Devices<span id=devicesCount ...>
+        # ...</span></span><span id=devicesSpinner ...>" (flex row, plus
+        # the device-count suffix) rather than plain text directly in the
+        # <h2>, so just check the label text itself is present.
+        check("devices section rendered", ">Devices<" in dom,
+              "missing Devices header (#27)")
+        check("devices spinner markup present", 'id="devicesSpinner"' in dom,
+              "missing devices scan spinner (#27 follow-up)")
         # #34: trend graphs are deliberately not shown on the
         # wallpaper anymore (collection continues server-side) -- assert
         # they stay gone rather than silently reappearing on a regression.

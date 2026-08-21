@@ -208,6 +208,21 @@
   .icon-inline{width:0.9em;height:0.9em;display:inline-block;vertical-align:-0.15em}
   .icon-inline-sm{width:0.8em;height:0.8em;display:inline-block;vertical-align:-0.08em}
 
+  /* Devices panel scan spinner (#27 follow-up) -- shown while dashd-serve's
+     background nmap sweep is in flight (state.devices_scanning). A plain
+     rotating ring, not another hand-rolled sysIcon glyph: every other icon
+     here is a static line-art symbol, and "in progress" is motion, not a
+     shape, so borrowing that language would just be a slower-reading
+     static icon. transform, not a layout property, same reasoning as the
+     miniBar fix elsewhere in this file. */
+  .spinner{
+    width:0.85em;height:0.85em;border-radius:50%;
+    border:2px solid color-mix(in oklab, var(--panel-accent, var(--color-accent)) 30%, transparent);
+    border-top-color:var(--panel-accent, var(--color-accent));
+    animation:spin .8s linear infinite;
+  }
+  @keyframes spin{to{transform:rotate(360deg)}}
+
   /* Angled utilization bar (#31, replacing the retired status
      LED -- user feedback: "not working out"). A row of slanted parallelogram
      <polygon> segments built in app.js's utilBars(); this rule just gives
@@ -294,22 +309,31 @@
         pt-[calc(2.2vmin+var(--safe-top))] pb-[calc(2.2vmin+var(--safe-bottom))]
         grid grid-cols-1">
 
-    <!-- ============ SYSTEM ============ -->
-    <!-- self-start (#35): without it, #root's grid default
-         align-items:stretch forces this <section> to fill the row's full
-         height (matched to the taller Forecast section) even though the
-         visible .panel card inside it already hugs its own content --
-         an invisible stretched box with a content-sized card floating at
-         its top. self-start collapses the whole section to its content
-         height instead, so the SYSTEM container is actually a card.
-         justify-self-start is the same fix on the other axis: grid items
-         default to justify-self:stretch (inline axis) same as
-         align-items:stretch (block axis), so without it this section still
-         stretched to the full grid column width (half the screen) even
-         though its .panel/.sys-table content is already sized to its own
-         content -- the stretch was happening one level up, at the
-         section/column boundary, not inside the panel. -->
-    <section class="accent-cyan flex flex-col min-h-0 self-start justify-self-start">
+    <!-- ============ TOP ROW: System (left) + Calendar/Weather/Music/Log (right) ============ -->
+    <!-- col-span-full: always spans the FULL grid width as row 1, on every
+         output -- not just the wide 2-col Dell layout, where row-major
+         auto-placement happened to land things in the same row only by
+         coincidence of DOM order. On the single-column "auto" layout
+         (this laptop) that coincidence doesn't hold -- each direct grid
+         child gets its own full-width row, which is what broke "top
+         right" the first time this was fixed (see the right-side stack's
+         own comment below for the full history). Wrapping the two
+         top-level groups in their own flex row, spanning the grid
+         unconditionally, makes "System top-left, everything else
+         top-right" true regardless of the auto/wide toggle. items-start
+         (not the grid self-start/justify-self-start pair #35 used to
+         need) is the flex equivalent: without it, flex's default
+         align-items:stretch would force both sides to match each other's
+         height instead of each hugging its own content. -->
+    <div class="col-span-full flex items-start justify-between gap-[1.8vmin]">
+    <!-- System + Devices, stacked -- Devices sits directly under System
+         (user request) rather than its previous fixed bottom-center
+         anchor. A plain flex-col wrapper is enough here (no position:fixed
+         needed): "under System" just means normal top-to-bottom DOM flow
+         within System's own column of the top row, not a literal
+         screen-corner position the way Log/Music/Calendar+Weather are. -->
+    <div class="flex flex-col gap-[1.8vmin]">
+    <section class="accent-cyan flex flex-col min-h-0">
       <div class="panel px-[2vmin] py-[1.5vmin] flex flex-col gap-[0.6vmin]">
         <h2 class="sec-head text-faint uppercase tracking-[0.3em] text-[clamp(.55rem,1.15vmin,.8rem)]">
           System</h2>
@@ -355,135 +379,54 @@
           </table>
         </div>
 
-        <!-- Music: MPRIS now-playing (#26), source-agnostic -- local player
-             or browser tab, whatever registers over MPRIS. Hidden by
-             default; renderMusic() in app.js only reveals it while
-             something is actually playing/paused. -->
-        <div id="musicSection" class="hidden pt-[0.6vmin] border-t border-[var(--color-hairline)]">
-          <h3 class="sec-head text-faint uppercase tracking-[0.3em]
-              text-[clamp(.48rem,1vmin,.68rem)] mb-[0.35vmin]">Music</h3>
-          <table class="sys-table border-collapse">
-            <colgroup>
-              <col class="w-[1.7em]"><col><col><col>
-            </colgroup>
-            <tbody id="music"></tbody>
-          </table>
-        </div>
-
         <div id="sysfoot" class="text-faint num tracking-wide
              text-[clamp(.46rem,.95vmin,.68rem)] pt-[0.55vmin]
              border-t border-[var(--color-hairline)]">—</div>
       </div>
     </section>
 
-    <!-- ============ FORECAST: current, hourly, week, sun/moon ============ -->
-    <section class="accent-amber flex flex-col min-h-0 self-start justify-self-start">
-      <div class="panel px-[2.4vmin] py-[1.8vmin] flex flex-col gap-[1.3vmin]">
-        <!-- Current conditions (NOW) + Wind/Humidity/Rain/UV: one sys-table,
-             all icon | label | value rows -- same treatment as System's
-             CPU/MEM/BAT, no oversized glowing hero readout (user feedback:
-             "not a fan of the LARGE CURRENT WEATHER... more of a fan of
-             layout and organized data, not specialized 'THIS IS TO BE
-             BROUGHT TO YOUR ATTENTION' decisions"). -->
-        <table class="sys-table border-collapse">
-          <colgroup>
-            <col class="w-[1.6em]"><col><col><col>
-          </colgroup>
-          <tbody id="wstats"></tbody>
-        </table>
-
-        <!-- Hourly strip hidden -- user feedback: too much dead space on
-             the wallpaper. Markup/render code kept intact (renderHourly()
-             in app.js still runs, just targets a hidden node) in case it
-             comes back, same pattern as the retired CPU/MEM trend graphs
-             (#34). -->
-        <div class="hidden pt-[1.1vmin] border-t border-[var(--color-hairline)]">
-          <h3 class="sec-head text-faint uppercase tracking-[0.3em]
-              text-[clamp(.5rem,1.05vmin,.72rem)] mb-[0.6vmin]">Hourly</h3>
-          <div id="hourly" class="flex justify-between gap-[0.4vmin]"></div>
-        </div>
-
-        <div class="pt-[1.1vmin] border-t border-[var(--color-hairline)]">
-          <h3 class="sec-head text-faint uppercase tracking-[0.3em]
-              text-[clamp(.5rem,1.05vmin,.72rem)] mb-[0.4vmin]">Week</h3>
-          <div id="week" class="flex flex-col"></div>
-        </div>
-
-        <!-- Calendar (#22): current-month grid, today highlighted. Source-
-             agnostic -- optional event dots come from state.extra.calendar
-             (data/extra.json, same pass-through pattern as everything else
-             under "extra"), so a future ICS/CalDAV sync script can populate
-             it without touching the server or this file. -->
-        <div class="pt-[1.1vmin] border-t border-[var(--color-hairline)]">
-          <h3 class="sec-head text-faint uppercase tracking-[0.3em]
-              text-[clamp(.5rem,1.05vmin,.72rem)] mb-[0.4vmin]">Calendar</h3>
-          <div id="calendar" class="flex flex-col"></div>
-        </div>
-
-        <!-- Sun & Moon hidden -- same "too much dead space" feedback as
-             Hourly. Markup/render code kept intact (renderSunMoon() in
-             app.js still runs, just targets hidden nodes), same pattern as
-             the retired CPU/MEM trend graphs (#34). -->
-        <div class="hidden pt-[1.1vmin] border-t border-[var(--color-hairline)]">
-          <h3 class="sec-head text-faint uppercase tracking-[0.3em]
-              text-[clamp(.5rem,1.05vmin,.72rem)] mb-[0.7vmin]">Sun &amp; Moon</h3>
-          <svg id="sunarc" viewBox="0 0 300 96" class="w-full"></svg>
-          <div class="flex items-center justify-between mt-[0.9vmin]">
-            <div id="suntimes" class="num text-muted flex items-center gap-[1.2vmin]
-                 text-[clamp(.56rem,1.2vmin,.88rem)] tracking-wide"></div>
-            <div class="flex items-center gap-[1vmin]">
-              <svg id="moon" viewBox="0 0 100 100"
-                   class="w-[clamp(1.3rem,3.4vmin,2.3rem)] h-[clamp(1.3rem,3.4vmin,2.3rem)]"></svg>
-              <div id="moontext" class="text-faint leading-tight
-                   text-[clamp(.5rem,1.05vmin,.76rem)]"></div>
-            </div>
-          </div>
-        </div>
-      </div>
-    </section>
-
-    <!-- ============ TASKS ============ -->
-    <!-- Reuses System's teal accent (#25) -- DESIGN.md commits the palette
-         to three accents total (teal/gold/red), and Tasks is utility data
-         like System, not weather, so it shares teal rather than inventing
-         a fourth. Source-agnostic: dashd-serve reads data/tasks.json
-         verbatim (see bin/dashd-serve), so whatever writes that file
-         (local script, cron, a future integration) is free to change
-         without touching this panel. -->
-    <section class="accent-cyan flex flex-col min-h-0 self-start justify-self-start">
+    <!-- DEVICES: networked-device presence sweep (#27), now "remembered"
+         per-network (user request) -- lib/devices.py's registry keys
+         devices by MAC (stable across DHCP/IP changes) and marks a
+         previously-seen device "offline" instead of dropping it when a
+         scan doesn't find it, scoped to the current default gateway's
+         identity so hopping networks doesn't show a pile of some other
+         network's stale devices. Was combined with Log under a "Monitor"
+         heading; Log moved up front so this stood alone with a fixed
+         bottom-center anchor for a while, now moved again to sit directly
+         under System. Each row is status-dot | IP | device name (user
+         request) -- see statusDot()/renderDevices() in app.js, no more
+         node-glyph icon. Scan target/interval are set via the Control
+         Backend (#30); this just renders dashd-serve's cached sweep
+         result. #devicesCount (user request) shows the device count in
+         parens right after the "Devices" label. The header's right side
+         shows #devicesNetwork (the current gateway's IP -- "which profile
+         we're connecting to", user request) and #devicesSpinner (hidden
+         by default) while state.devices_scanning is true -- an nmap sweep
+         can take real seconds, so this is the "still working" signal
+         instead of a panel that silently doesn't update for a while. -->
+    <section class="accent-crimson flex flex-col">
       <div class="panel px-[2vmin] py-[1.5vmin] flex flex-col gap-[0.6vmin]">
-        <h2 class="sec-head text-faint uppercase tracking-[0.3em] text-[clamp(.55rem,1.15vmin,.8rem)]">Tasks</h2>
-        <div id="tasks" class="flex flex-col gap-[0.3vmin]"></div>
-      </div>
-    </section>
-
-    <!-- ============ SCHEDULE ============ -->
-    <!-- Distinct from Calendar (#23): a compact today's-agenda/upcoming-items
-         list, not a calendar grid. Source-agnostic -- reads state.extra.schedule
-         (an array of {time, title} rows), the same data/extra.json passthrough
-         cron or any other script already uses to add ad-hoc panels (see
-         CLAUDE.md's Data section). No source is wired up yet, so the panel
-         renders its empty state until something populates extra.json. -->
-    <section class="accent-crimson flex flex-col min-h-0 self-start justify-self-start">
-      <div class="panel px-[2vmin] py-[1.5vmin] flex flex-col gap-[0.6vmin]">
-        <h2 class="sec-head text-faint uppercase tracking-[0.3em] text-[clamp(.55rem,1.15vmin,.8rem)]">
-          Schedule</h2>
-        <div id="schedule" class="flex flex-col gap-[0.15vmin]"></div>
-      </div>
-    </section>
-
-    <!-- ============ MONITOR: networked devices (#27) + log highlighter (#28) ============ -->
-    <section class="accent-crimson flex flex-col min-h-0 self-start justify-self-start">
-      <div class="panel px-[2vmin] py-[1.5vmin] flex flex-col gap-[0.6vmin]">
-        <h2 class="sec-head text-faint uppercase tracking-[0.3em] text-[clamp(.55rem,1.15vmin,.8rem)]">
-          Monitor</h2>
-
-        <!-- Devices: same icon|label|value sys-table shape as System.
-             Scan target/interval are set via the Control Backend (#30);
-             this just renders dashd-serve's cached nmap sweep result. -->
-        <div>
-          <h3 class="sec-head text-faint uppercase tracking-[0.3em]
-              text-[clamp(.48rem,1vmin,.68rem)] mb-[0.35vmin]">Devices</h3>
+        <h2 class="sec-head text-faint uppercase tracking-[0.3em] text-[clamp(.55rem,1.15vmin,.8rem)]
+             flex items-center justify-between gap-[0.8vmin]">
+          <span class="shrink-0">Devices<span id="devicesCount" class="text-faint"></span></span>
+          <span class="flex items-center gap-[0.6vmin] min-w-0">
+            <span id="devicesNetwork" class="normal-case tracking-normal text-faint num
+                 min-w-0 truncate text-[clamp(.44rem,.92vmin,.66rem)]"></span>
+            <span id="devicesSpinner" class="hidden spinner shrink-0"></span>
+          </span>
+        </h2>
+        <!-- Clamped + auto-cycle (#29): the remembered-devices list (this
+             device, the gateway, everything the registry has ever seen on
+             this network, up or offline) can run well past what fits in
+             the panel -- user report: "it's going off screen already".
+             max-h-[22vmin] gives it a real box to overflow, auto-cycle
+             (see app.js's refreshAutoCycles(), already built generically
+             for exactly this and explicitly name-checked "networked
+             devices" as a future user -- this is that) then passively
+             scrolls through the rest over time, since there's no pointer
+             on this surface to grab a scrollbar with. -->
+        <div class="max-h-[22vmin] auto-cycle">
           <table class="sys-table border-collapse">
             <colgroup>
               <col class="w-[1.6em]"><col><col><col>
@@ -491,18 +434,188 @@
             <tbody id="devices"></tbody>
           </table>
         </div>
+      </div>
+    </section>
+    </div>
 
-        <!-- Log highlighter: filtered/status-colored lines, not a full
-             tail. Source (journalctl unit or file) + patterns are
-             config.logs, editable via the Control Backend (#30). -->
-        <div class="pt-[0.6vmin] border-t border-[var(--color-hairline)]">
-          <h3 class="sec-head text-faint uppercase tracking-[0.3em]
-              text-[clamp(.48rem,1vmin,.68rem)] mb-[0.35vmin]">Log</h3>
+    <!-- ============ RIGHT STACK: Calendar + Weather, Music, Log ============ -->
+    <!-- Moved here from a fixed bottom-right anchor (user request: "keeping
+         the same layout for the calendar, weather, and music, move it to
+         the top right (where the log is placed)") -- this whole group is
+         now a plain flex item of the top row wrapper (col-span-full
+         above), the exact same "System top-left, this top-right" flex
+         arrangement Log used alone before. No position:fixed needed here
+         anymore: that was only ever necessary to guarantee a literal
+         screen-corner position independent of sibling heights (see the
+         top-row wrapper's own comment for that history), and this group
+         sits in the SAME slot Log used to, via the SAME mechanism.
+         flex-col order is top-to-bottom in DOM order -- Calendar+Weather's
+         row first, Music second (satisfies "weather above the player"
+         without hardcoding Music's height, which varies: hidden... no,
+         idle-but-visible now, or one row when playing), Log last (user
+         request: "move the log below the music player"). items-stretch:
+         Music is meant to match the Calendar+Weather row's full width
+         (user request: "expand the media player to fit the size of both
+         of those components") -- align-items:stretch on an intrinsically-
+         sized flex column makes every child fill the width of the widest
+         one, which also keeps every child's right edge flush against the
+         same left edge (originally "these should border the right side"
+         when this was screen-edge-anchored; now it just means flush
+         against each other, which items-stretch still gives for free). -->
+    <div class="flex flex-col items-stretch gap-[1.8vmin]">
+
+      <!-- Calendar (left) + Weather/Forecast (right). grid grid-cols-2 (not
+           flex) + items-stretch: user request "expand the calendar to be
+           the same size as the weather component" needs Calendar's box to
+           match Weather's, in both height AND width, while Weather itself
+           stays at its own natural size. items-stretch (the grid default,
+           stated explicitly) handles height -- the shorter Calendar
+           stretches to Weather's row height. Width needs grid specifically:
+           two 1fr columns in a grid whose own width is intrinsic (this row
+           isn't given an explicit width) resolve BOTH columns to the
+           WIDER column's max-content size, not a forced 50/50 split of
+           some externally-set width -- exactly "Calendar grows to match
+           Weather," not "both meet in the middle." A plain flex row with
+           flex-1 on both sides would do the latter instead, which isn't
+           what was asked. -->
+      <div class="grid grid-cols-2 items-stretch gap-[1.8vmin]">
+        <!-- CALENDAR (#22): current-month grid. Reuses Forecast's amber
+             accent (date/schedule data, same family as weather) rather
+             than inventing a fourth color, same reasoning System/Devices/
+             Log share teal/crimson. Source-agnostic -- optional event dots
+             come from state.extra.calendar (data/extra.json, same
+             pass-through pattern as everything else under "extra"), so a
+             future ICS/CalDAV sync script can populate it without
+             touching the server or this file. -->
+        <section class="accent-amber flex flex-col">
+          <!-- justify-start (not -center): the calendar grid is shorter
+             than Weather's box, and centering it split the leftover space
+             evenly above and below -- top-heavy dead space plus a
+             bottom gap. User request: shift the content to the top of the
+             box and leave the leftover space at the bottom only, since
+             it's earmarked for more content later. -->
+          <div class="panel px-[2vmin] py-[1.5vmin] flex flex-col justify-start
+               gap-[0.6vmin] h-full">
+            <h2 class="sec-head text-faint uppercase tracking-[0.3em] text-[clamp(.55rem,1.15vmin,.8rem)]">
+              Calendar</h2>
+            <div id="calendar" class="flex flex-col"></div>
+          </div>
+        </section>
+
+        <!-- WEATHER/FORECAST: current conditions + week. -->
+        <section class="accent-amber flex flex-col">
+          <div class="panel px-[2.4vmin] py-[1.8vmin] flex flex-col gap-[1.3vmin]">
+            <!-- Weather had no header at all (user feedback: "seems like
+                 the weather panel doesn't have a label") -- every other
+                 panel has one, this one only lost it because "NOW" used
+                 to read as enough of a heading on its own. -->
+            <h2 class="sec-head text-faint uppercase tracking-[0.3em] text-[clamp(.55rem,1.15vmin,.8rem)]">
+              Weather</h2>
+            <!-- Current conditions (NOW) + Wind/Humidity/Rain/UV: one sys-table,
+                 all icon | label | value rows -- same treatment as System's
+                 CPU/MEM/BAT, no oversized glowing hero readout (user feedback:
+                 "not a fan of the LARGE CURRENT WEATHER... more of a fan of
+                 layout and organized data, not specialized 'THIS IS TO BE
+                 BROUGHT TO YOUR ATTENTION' decisions"). -->
+            <table class="sys-table border-collapse">
+              <colgroup>
+                <col class="w-[1.6em]"><col><col><col>
+              </colgroup>
+              <tbody id="wstats"></tbody>
+            </table>
+
+            <!-- Hourly strip hidden -- user feedback: too much dead space on
+                 the wallpaper. Markup/render code kept intact (renderHourly()
+                 in app.js still runs, just targets a hidden node) in case it
+                 comes back, same pattern as the retired CPU/MEM trend graphs
+                 (#34). -->
+            <div class="hidden pt-[1.1vmin] border-t border-[var(--color-hairline)]">
+              <h3 class="sec-head text-faint uppercase tracking-[0.3em]
+                  text-[clamp(.5rem,1.05vmin,.72rem)] mb-[0.6vmin]">Hourly</h3>
+              <div id="hourly" class="flex justify-between gap-[0.4vmin]"></div>
+            </div>
+
+            <!-- Renamed from "Week" -- renderWeek() now only shows today
+                 + a couple more days (user request), not a full 7-day
+                 week, so that header no longer matched what's shown. -->
+            <div class="pt-[1.1vmin] border-t border-[var(--color-hairline)]">
+              <h3 class="sec-head text-faint uppercase tracking-[0.3em]
+                  text-[clamp(.5rem,1.05vmin,.72rem)] mb-[0.4vmin]">Upcoming</h3>
+              <div id="week" class="flex flex-col"></div>
+            </div>
+
+            <!-- Sun & Moon hidden -- same "too much dead space" feedback as
+                 Hourly. Markup/render code kept intact (renderSunMoon() in
+                 app.js still runs, just targets hidden nodes), same pattern as
+                 the retired CPU/MEM trend graphs (#34). -->
+            <div class="hidden pt-[1.1vmin] border-t border-[var(--color-hairline)]">
+              <h3 class="sec-head text-faint uppercase tracking-[0.3em]
+                  text-[clamp(.5rem,1.05vmin,.72rem)] mb-[0.7vmin]">Sun &amp; Moon</h3>
+              <svg id="sunarc" viewBox="0 0 300 96" class="w-full"></svg>
+              <div class="flex items-center justify-between mt-[0.9vmin]">
+                <div id="suntimes" class="num text-muted flex items-center gap-[1.2vmin]
+                     text-[clamp(.56rem,1.2vmin,.88rem)] tracking-wide"></div>
+                <div class="flex items-center gap-[1vmin]">
+                  <svg id="moon" viewBox="0 0 100 100"
+                       class="w-[clamp(1.3rem,3.4vmin,2.3rem)] h-[clamp(1.3rem,3.4vmin,2.3rem)]"></svg>
+                  <div id="moontext" class="text-faint leading-tight
+                       text-[clamp(.5rem,1.05vmin,.76rem)]"></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+      </div>
+
+      <!-- MUSIC (#26): MPRIS now-playing. Source-agnostic -- local player or
+           browser tab, whatever registers over MPRIS. Hidden by default;
+           renderMusic() in app.js only reveals it while something is
+           actually playing/paused -- the wrapper's flex-col sizing means
+           the whole stack just shrinks up when it's hidden, no gap left
+           behind. No explicit width class needed to "fit the size of both
+           [Calendar and Weather]" (user request) -- this section is a
+           direct child of the outer items-stretch wrapper, so it's
+           already stretched to the Calendar+Weather row's width (the
+           widest sibling); its own .panel div then fills that via the
+           section's own default (unset) align-items:stretch on its single
+           flex-col child, same mechanism every other panel here already
+           relies on for height. -->
+      <section id="musicSection" class="accent-cyan flex flex-col">
+        <div class="panel px-[2vmin] py-[1.5vmin] flex flex-col gap-[0.6vmin]">
+          <h2 class="sec-head text-faint uppercase tracking-[0.3em] text-[clamp(.55rem,1.15vmin,.8rem)]">
+            Music</h2>
+          <!-- No sys-table, no note icon (both dropped on user request) --
+               renderMusic() in app.js builds either a title-left/artist-
+               right row + full-width square progress bar (square corners
+               also a user request, see miniBar()'s radiusClass param),
+               or, when nothing is playing/paused, an idle placeholder.
+               The section itself is never hidden anymore -- user report:
+               "it should not disappear just because no media is playing,
+               should just sit idle" (it briefly WAS null/idle when that
+               was reported, which is normal, just previously invisible). -->
+          <div id="music" class="flex flex-col gap-[0.5vmin]"></div>
+        </div>
+      </section>
+
+      <!-- LOG: filtered/status-colored journalctl or file tail (#28).
+           Source (journalctl unit or file) + patterns are config.logs,
+           editable via the Control Backend (#30). Moved below Music (user
+           request) -- was the sole occupant of this top-right slot before
+           Calendar/Weather/Music joined it here. shrink-0 -- this stack's
+           main axis is vertical now (flex-col), so shrink-0 here means
+           "don't compress Log's height to make room," same protective
+           intent as before just applied to the axis that actually matters
+           in this new arrangement. -->
+      <section class="accent-crimson flex flex-col min-h-0 shrink-0">
+        <div class="panel px-[2vmin] py-[1.5vmin] flex flex-col gap-[0.6vmin]">
+          <h2 class="sec-head text-faint uppercase tracking-[0.3em] text-[clamp(.55rem,1.15vmin,.8rem)]">
+            Log</h2>
           <div id="logbox" class="flex flex-col gap-[0.25vmin]
                text-[clamp(.42rem,.85vmin,.6rem)] num"></div>
         </div>
-      </div>
-    </section>
+      </section>
+    </div>
+    </div>
   </main>
 
   <script src="app.js"></script>
