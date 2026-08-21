@@ -153,8 +153,11 @@ def main() -> int:
         check("storage section rendered", ">Storage<" in dom, "missing Storage header")
         check("network section rendered", ">Network<" in dom and ">NET<" in dom,
               "missing Network header/row")
-        check("cpu/mem trend graphs rendered", dom.count(">30M<") >= 2,
-              "expected a 30M trend graph for both cpu and mem")
+        # ISSUES.md #34: trend graphs are deliberately not shown on the
+        # wallpaper anymore (collection continues server-side) -- assert
+        # they stay gone rather than silently reappearing on a regression.
+        check("cpu/mem trend graphs stay hidden", ">30M<" not in dom,
+              "trend graph markup should not render")
         check("tailwind compiled utilities",
               "--color-ink" in dom and ".text-faint" in dom,
               "vendor bundle may not have run")

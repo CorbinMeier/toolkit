@@ -2,11 +2,15 @@
  *
  * No date/clock/location readout -- the user's own system already shows
  * all three (see ISSUES.md #5, #9). Everything redraws from /api/state on
- * a poll, plus a slower, independent poll of /api/history for the CPU/
- * Memory/Battery step-line-chart tiers (see ISSUES.md #12). Render is a
- * pure function of the last good state, so a failed poll just keeps the
- * previous frame up and raises the offline banner instead of blanking the
- * wallpaper.
+ * a poll. Render is a pure function of the last good state, so a failed
+ * poll just keeps the previous frame up and raises the offline banner
+ * instead of blanking the wallpaper.
+ *
+ * ISSUES.md #34: the CPU/Memory trend graphs (and the /api/history poll
+ * that fed them) were removed from this file -- not wanted on the
+ * wallpaper. Collection is untouched (dashd-collect still writes
+ * data/metrics.db every config.metrics_sample_seconds, and dashd-serve
+ * still exposes /api/history) in case a future view wants them back.
  */
 'use strict';
 
@@ -24,21 +28,12 @@ const STATIC = params.get('static') === '1';
 let state = null;
 let failures = 0;
 
-// Rows from /api/history (SQLite-backed, ~30s resolution -- see
-// lib/metrics.py), refreshed by the slow pollHistory() poll below. Feeds
-// the 5-minute-and-longer step-chart tiers for CPU/Memory/Battery, and
-// persists across a page reload since it's server-side. Named
-// `trendHistory`, not `history` -- that's a reserved browser global
-// (Window.history).
-let trendHistory = [];
 // A window's worth of *this browser session's* /api/state polls (default
-// every 5s), independent of trendHistory. This is what makes a genuine
-// "30 second" chart possible at all -- /api/history's own samples are ~30s
-// apart, so a 30s window of *those* would be 0-1 points. Also backs the
-// Network chart, which wants the finer resolution regardless of window
-// (throughput bursts are brief; 30s-resolution DB samples would flatten
-// them). Capped by wall-clock age, not point count, so it self-adjusts to
-// whatever the configured poll interval actually is.
+// every 5s). Backs the Network chart, which wants finer resolution than
+// the server-side history DB offers (throughput bursts are brief; 30s-
+// resolution DB samples would flatten them). Capped by wall-clock age, not
+// point count, so it self-adjusts to whatever the configured poll interval
+// actually is.
 const RING_WINDOW_MS = 5 * 60 * 1000;
 let ring = { t: [], down: [], up: [] };
 function pushRing(s) {
@@ -53,11 +48,6 @@ function ringSince(key, ms) {
   const cutoff = Date.now() - ms;
   const i = ring.t.findIndex((t) => t >= cutoff);
   return i === -1 ? [] : ring[key].slice(i);
-}
-function historySince(key, ms) {
-  const cutoff = Date.now() - ms;
-  return trendHistory.filter((r) => r.ts * 1000 >= cutoff && r[key] != null)
-    .map((r) => r[key]);
 }
 
 /* ------------------------------------------------------------------ icons */
@@ -252,11 +242,10 @@ function utilBars(pct, segments = 10) {
  * between two readings that were never actually in between. Accepts one
  * or more {values, tone, fill} series sharing one x/y scale, so the
  * Network chart can plot download and upload as two lines without them
- * fighting over independent scales. `fill: true` (used by graphCell() for
- * CPU/MEM, ISSUES.md #17 revised) additionally fills the area under the
- * step line with a gradient fading to transparent -- more visual presence
- * at wallpaper viewing distance than a bare stroke, without adding any
- * more information than the line already carries. Deliberately
+ * fighting over independent scales. `fill: true` additionally fills the
+ * area under the step line with a gradient fading to transparent -- more
+ * visual presence at wallpaper viewing distance than a bare stroke, without
+ * adding any more information than the line already carries. Deliberately
  * preserveAspectRatio="none": these are bare paths with no text/marker
  * children to distort (see CLAUDE.md's gotcha on that attribute), so
  * stretching to exactly fill a fixed small box is exactly what's wanted
@@ -358,58 +347,14 @@ function sysRow({ icon, label, value, sub = '', tail = null, tone = 'var(--color
   return tr;
 }
 
-// One trend graph: window label top-left, its value range top-right --
-// decodes the step chart's otherwise-unlabeled auto-scaled y-axis, so a
-// standalone label column isn't needed. Filled (ISSUES.md #17 revised,
-// replacing the earlier three-tier row) so the trend reads with more
-// visual presence at a glance than a bare line.
-function graphCell(label, values, tone) {
-  const wrap = document.createElement('div');
-  wrap.className = 'graph-cell';
-  const labels = document.createElement('div');
-  labels.className = 'graph-cell__labels';
-  const left = document.createElement('span');
-  left.textContent = label;
-  const right = document.createElement('span');
-  if (values.length) {
-    const lo = Math.min(...values), hi = Math.max(...values);
-    right.textContent = Math.round(lo) === Math.round(hi)
-      ? `${Math.round(lo)}` : `${Math.round(lo)}–${Math.round(hi)}`;
-  }
-  labels.append(left, right);
-  wrap.append(labels, stepChart([{ values, tone, fill: true }], 'graph-cell__chart'));
-  return wrap;
-}
-
-// One full-width trend graph beneath a CPU/MEM row (ISSUES.md #17 revised
-// -- was three side-by-side 30S/5M/30M tiers, collapsed to a single
-// 30-minute window per user feedback: three independently-auto-scaled
-// mini charts made magnitude impossible to compare across tiers and the
-// 30S tier was near-flat dead space at this size). Rendered into its own
-// #sysgraphs container, a sibling of the value-row <table>, not a colspan
-// row inside it (ISSUES.md #33): the graph-cell's internal width:100%
-// chart was forcing the table's auto layout to blow out the value/tail
-// columns it shared, spreading every row edge-to-edge. Indented to
-// roughly clear the icon+label columns above it.
-function metricGraphRow(label, values, tone) {
-  const wrap = document.createElement('div');
-  wrap.className = 'graph-row-indent';
-  wrap.appendChild(graphCell(label, values, tone));
-  return wrap;
-}
-
-// CPU/Memory: one filled trend graph each, the last 30 minutes
-// (SQLite-backed /api/history, which survives a page reload) -- revised
-// from #17's original 30S/5M/30M three-tier row per user feedback (the
-// tiers weren't independently comparable and 30S was near-flat dead
-// space at this size). Battery has no trend graph at all (#17 -- not
-// needed). Each row's tail column is now an angled utilization-bar graphic
-// (#31, replacing the status LED) instead of a trend chart.
+// CPU/Memory/Battery value rows. Trend graphs used to render here (ISSUES.md
+// #17, #33) but were removed (#34) -- not wanted on the wallpaper. Metrics
+// collection is untouched (dashd-collect, metrics.db, /api/history all still
+// live) for possible later use. Each row's tail column is an angled
+// utilization-bar graphic (#31, replacing the retired status LED).
 function renderCpuMemBat(s) {
   const box = $('sys');
   box.replaceChildren();
-  const graphs = $('sysgraphs');
-  graphs.replaceChildren();
   const hot = (p) => p > 88 ? 'var(--color-warm)' : 'var(--color-accent)';
   const pad2 = (n) => String(Math.round(n)).padStart(2, '0');
 
@@ -421,7 +366,6 @@ function renderCpuMemBat(s) {
       s.cpu_freq ? `${(s.cpu_freq / 1000).toFixed(1)}GHz` : null].filter(Boolean).join(' · '),
     tail: utilBars(s.cpu),
   }));
-  graphs.appendChild(metricGraphRow('30M', historySince('cpu_pct', 30 * 60_000), cpuTone));
 
   const memTone = hot(s.mem.pct);
   box.appendChild(sysRow({
@@ -430,7 +374,6 @@ function renderCpuMemBat(s) {
     sub: `${bytes(s.mem.used)} / ${bytes(s.mem.total)}`,
     tail: utilBars(s.mem.pct),
   }));
-  graphs.appendChild(metricGraphRow('30M', historySince('mem_pct', 30 * 60_000), memTone));
 
   if (s.battery) {
     const battTone = s.battery.pct <= 35 && !s.battery.plugged
@@ -648,7 +591,6 @@ function apply(s) {
   root.setProperty('--safe-top', `${disp.safe_area_top || 0}px`);
   root.setProperty('--safe-bottom', `${disp.safe_area_bottom || 0}px`);
 
-  historyHours = s.config.metrics_retain_hours || historyHours;
   pushRing(s.sys);
   renderWeather(s.weather);
   renderCpuMemBat(s.sys);
@@ -697,23 +639,6 @@ async function poll() {
   }
 }
 
-// Separate, slower poll for the 5-minute-and-longer step-chart tiers --
-// history.db samples every ~30s (config.refresh.metrics_sample_seconds),
-// so polling it on the same 5s cadence as /api/state would be pure waste.
-// Fetches the *entire* retention window in one call and lets
-// historySince() slice it per tier client-side, rather than one fetch per
-// tier -- cheap on loopback, and keeps this to a single request. Failure
-// just keeps showing the last-known history, same philosophy as poll().
-let historyHours = 24; // refined from state.config.metrics_retain_hours in apply()
-const HISTORY_POLL_MS = 60_000;
-async function pollHistory() {
-  try {
-    const r = await fetch(`/api/history?hours=${historyHours}`, { cache: 'no-store' });
-    if (r.ok) ({ samples: trendHistory } = await r.json());
-  } catch { /* keep the last-known history */ }
-  finally { setTimeout(pollHistory, HISTORY_POLL_MS); }
-}
-
 // SVG geometry is computed from measured pixel sizes, so a monitor change or
 // layout reflow has to redraw rather than just rescale.
 let resizeTimer;
@@ -723,4 +648,3 @@ addEventListener('resize', () => {
 });
 
 poll();
-pollHistory();

@@ -148,27 +148,6 @@
   .util-bars polygon{transition:fill .6s ease}
   .util-bars{filter:drop-shadow(0 0 1.5px rgb(0 0 0 / .4))}
 
-  /* Trend graph beneath a CPU/MEM row (ISSUES.md #17, revised): one
-     full-width filled step chart with its own corner labels (window
-     length left, value range right) -- was three side-by-side 30S/5M/30M
-     tiers, collapsed to a single 30-minute window per user feedback.
-     Lives in its own #sysgraphs container now, a sibling of the value-row
-     <table> rather than a colspan row inside it (ISSUES.md #33) -- the
-     chart's width:100% was forcing that table's auto layout to blow out
-     the value/tail columns it shared, spreading every row edge-to-edge.
-     .graph-row-indent's padding-left approximates clearing the icon+label
-     columns above it (can't align exactly without sharing table columns,
-     but doesn't need to -- it's a supporting chart, not tabular data). */
-  .graph-row-indent{display:flex;gap:1vmin;padding:0.2vmin 0 0.3vmin;
-    padding-left:2.6em}
-  .graph-cell{position:relative;flex:1 1 0;min-width:3.2rem;display:flex;
-    flex-direction:column;gap:0.15em}
-  .graph-cell__labels{display:flex;justify-content:space-between;gap:0.4em;
-    color:var(--color-faint);letter-spacing:0.04em;line-height:1;
-    font-size:clamp(.38rem,.72vmin,.5rem);font-variant-numeric:tabular-nums}
-  .graph-cell__labels span:last-child{overflow:hidden;text-overflow:clip;white-space:nowrap}
-  .graph-cell__chart{display:block;width:100%;height:clamp(1.1rem,2.4vmin,1.6rem)}
-
   /* slow drifting light so a static desktop still feels alive --
      crimson/cyan, matching CyberpunkEnvironment's reddish ambient glow */
   .glow{position:fixed;border-radius:50%;filter:blur(110px);pointer-events:none;z-index:-1}
@@ -215,19 +194,16 @@
              matches Storage/Network -- icon, label, value, tail -- since the
              leading status LED was retired). Compact, not w-full (#17) --
              sized to its own content, not stretched to fill the panel.
-             #33: the 30-minute trend graph used to live inside this same
-             table (colspan cells sharing the value/tail columns), but its
-             internal width:100% chart forced those columns to blow out to
-             fill the panel, spreading the value row edge-to-edge. It now
-             renders in its own sysgraphs container below, decoupled from
-             this table's column widths entirely. -->
+             The 30-minute trend graph that used to render beneath these
+             rows (#17, #33) was removed (#34) -- not wanted on the
+             wallpaper. Metrics collection is untouched (dashd-collect,
+             metrics.db, /api/history) for possible later use. -->
         <table class="sys-table border-collapse">
           <colgroup>
             <col class="w-[1.6em]"><col><col><col>
           </colgroup>
           <tbody id="sys"></tbody>
         </table>
-        <div id="sysgraphs" class="flex flex-col"></div>
 
         <!-- Storage: its own visually separated area, not mixed into the
              cpu/mem/bat metric rows above. -->
