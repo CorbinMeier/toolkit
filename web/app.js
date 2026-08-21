@@ -63,6 +63,14 @@ const dur = (s) => {
   const m = Math.floor((s % 3600) / 60);
   return d ? `${d}d ${h}h` : h ? `${h}h ${m}m` : `${m}m`;
 };
+// Zero-padded HH:MM:SS, not dur()'s variable-width "1h 2m" -- Music's
+// elapsed/total readout needs a fixed digit count so it doesn't visibly
+// jump around every second (paired with .num's tabular-nums).
+const clockTime = (s) => {
+  s = Math.max(0, Math.floor(s || 0));
+  const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), sec = s % 60;
+  return [h, m, sec].map((n) => String(n).padStart(2, '0')).join(':');
+};
 const hhmm = (iso) => (iso || '').slice(11, 16);
 const POINTS = ['N', 'NNE', 'NE', 'ENE', 'E', 'ESE', 'SE', 'SSE',
   'S', 'SSW', 'SW', 'WSW', 'W', 'WNW', 'NW', 'NNW'];
@@ -460,13 +468,22 @@ function renderNetwork(s) {
 // Layout per user requests across a couple of rounds: the note icon and
 // the PLAYING/PAUSED status label are both dropped from the render
 // entirely (the commented-out `status` line below is kept, not deleted,
-// in case it's wanted back); title and artist/album sit in one row, title
-// floated left and artist/album floated right; the progress bar spans the
-// full panel width with square (not pill) corners.
+// in case it's wanted back). Cover art (musicArt, a static <img> in
+// index.html) sits left of the title/artist/progress stack (musicBody).
+// Row one: title left, artist/album right. Row two: elapsed | progress
+// bar | total, HH:MM:SS via clockTime() so the digits don't reflow every
+// second. Title gets flex-1 + w-0 + min-w-0 (its absence used to let a
+// long song name stretch the whole row -- "it scales with the name of
+// the song" -- see the w-0 comment below) plus auto-cycle-x so a clamped
+// title scrolls to reveal itself instead of just truncating silently.
 function renderMusic(music) {
-  const box = $('music');
+  const art = $('musicArt');
+  const box = $('musicBody');
   box.replaceChildren();
   if (!music) {
+    art.classList.add('hidden');
+    art.removeAttribute('src');
+    delete art.dataset.artUrl;
     const idle = document.createElement('div');
     idle.className = 'text-faint text-[clamp(.5rem,1.05vmin,.76rem)]';
     idle.textContent = 'Nothing playing';
@@ -476,25 +493,64 @@ function renderMusic(music) {
 
   // const status = music.playing ? 'PLAYING' : 'PAUSED';
 
-  const pct = music.length_secs
-    ? Math.min(100, ((music.position_secs ?? 0) / music.length_secs) * 100)
-    : null;
+  // Native MPRIS art_url (playerctl), proxied/redirected by dashd-serve
+  // (see bin/dashd-serve's music_art_response()) -- a file:// URL can't be
+  // loaded directly from this http-origin page. Only touch .src when the
+  // art actually changed, so a same-track poll doesn't reload/flicker it;
+  // onerror hides a stale or unreadable art_url instead of showing a
+  // broken-image icon.
+  if (music.art_url) {
+    if (art.dataset.artUrl !== music.art_url) {
+      art.onerror = () => art.classList.add('hidden');
+      art.src = `/api/music/art?t=${encodeURIComponent(music.art_url)}`;
+      art.dataset.artUrl = music.art_url;
+    }
+    art.classList.remove('hidden');
+  } else {
+    art.classList.add('hidden');
+    art.removeAttribute('src');
+    delete art.dataset.artUrl;
+  }
 
   const row = document.createElement('div');
-  row.className = 'flex items-baseline justify-between gap-[0.8vmin]';
+  row.className = 'flex items-baseline gap-[0.8vmin]';
   const title = document.createElement('div');
-  title.className = 'text-ink tracking-wide truncate text-[clamp(.52rem,1.1vmin,.8rem)]';
+  // w-0 (not just min-w-0) is load-bearing: this row's ancestors size
+  // themselves shrink-to-fit (Music's panel width tracks the Calendar+
+  // Weather row -- see index.html), and a flex item's *intrinsic*
+  // contribution to that kind of auto-width ancestor is its max-content
+  // size regardless of min-width:0/flex-basis:0%. Only an explicit
+  // definite width (0) removes the content from that calculation, which
+  // is what let a long title silently stretch the whole panel before --
+  // "it scales with the name of the song".
+  title.className = 'auto-cycle-x flex-1 w-0 min-w-0 text-ink tracking-wide ' +
+    'text-[clamp(.52rem,1.1vmin,.8rem)]';
   title.textContent = music.title || '';
   const artist = document.createElement('div');
-  artist.className = 'text-faint tracking-wide truncate text-right shrink-0 ' +
-    'max-w-[45%] text-[clamp(.46rem,.95vmin,.7rem)]';
+  artist.className = 'text-faint tracking-wide shrink-0 text-right ' +
+    'text-[clamp(.46rem,.95vmin,.7rem)]';
   artist.textContent = [music.artist, music.album].filter(Boolean).join(' · ');
   row.append(title, artist);
   box.appendChild(row);
 
-  if (pct != null) {
-    box.appendChild(miniBar(pct, 'var(--color-accent)', 'w-full', 'rounded-none',
+  if (music.length_secs) {
+    const elapsed = music.position_secs ?? 0;
+    const pct = Math.min(100, (elapsed / music.length_secs) * 100);
+
+    const timeRow = document.createElement('div');
+    timeRow.className = 'flex items-center gap-[0.6vmin]';
+    const elapsedEl = document.createElement('span');
+    elapsedEl.className = 'num text-faint shrink-0 text-[clamp(.42rem,.85vmin,.62rem)]';
+    elapsedEl.textContent = clockTime(elapsed);
+    const totalEl = document.createElement('span');
+    totalEl.className = 'num text-faint shrink-0 text-[clamp(.42rem,.85vmin,.62rem)]';
+    totalEl.textContent = clockTime(music.length_secs);
+    const barWrap = document.createElement('div');
+    barWrap.className = 'flex-1';
+    barWrap.appendChild(miniBar(pct, 'var(--color-accent)', 'w-full', 'rounded-none',
       'h-[0.5vmin] min-h-[3px]'));
+    timeRow.append(elapsedEl, barWrap, totalEl);
+    box.appendChild(timeRow);
   }
 }
 
@@ -858,8 +914,9 @@ function renderSunMoon(w) {
  * user could ever grab. Any element marked class="auto-cycle" (with a CSS
  * height/max-height so it can actually overflow) opts into a passive
  * scroll-dwell-reset loop that reveals the rest of its content over time.
- * refreshAutoCycles() is called every apply() and is the only integration
- * point a future panel (networked devices, log highlighter, tasks, ...)
+ * class="auto-cycle-x" is the same idea on the horizontal axis (scrollLeft
+ * instead of scrollTop) -- Music's song-title marquee. refreshAutoCycles()
+ * is called every apply() and is the only integration point a future panel
  * needs -- it doesn't touch anything that already fits its box.
  */
 const autoCycles = new WeakMap();
@@ -869,22 +926,23 @@ function stopAutoCycle(el) {
   if (!c) return;
   clearTimeout(c.timer);
   autoCycles.delete(el);
-  el.scrollTop = 0;
+  if (c.axis === 'x') el.scrollLeft = 0; else el.scrollTop = 0;
 }
 
-function driveAutoCycle(el, overflow, { stepPx = 1, stepMs = 45, dwellMs = 2600 } = {}) {
-  const c = { overflow, timer: null };
+function driveAutoCycle(el, overflow, axis, { stepPx = 1, stepMs = 45, dwellMs = 2600 } = {}) {
+  const c = { overflow, axis, timer: null };
   autoCycles.set(el, c);
+  const scrollProp = axis === 'x' ? 'scrollLeft' : 'scrollTop';
   const step = () => {
-    const max = el.scrollHeight - el.clientHeight;
-    if (el.scrollTop >= max - 0.5) {
+    const max = axis === 'x' ? el.scrollWidth - el.clientWidth : el.scrollHeight - el.clientHeight;
+    if (el[scrollProp] >= max - 0.5) {
       c.timer = setTimeout(() => {
-        el.scrollTop = 0;
+        el[scrollProp] = 0;
         c.timer = setTimeout(step, dwellMs);
       }, dwellMs);
       return;
     }
-    el.scrollTop = Math.min(max, el.scrollTop + stepPx);
+    el[scrollProp] = Math.min(max, el[scrollProp] + stepPx);
     c.timer = setTimeout(step, stepMs);
   };
   c.timer = setTimeout(step, dwellMs);
@@ -895,8 +953,11 @@ function refreshAutoCycles() {
   // prefers-reduced-motion both want a single settled frame, not a
   // perpetually running timer chain.
   const skipMotion = STATIC || matchMedia('(prefers-reduced-motion: reduce)').matches;
-  document.querySelectorAll('.auto-cycle').forEach((box) => {
-    const overflow = box.scrollHeight - box.clientHeight;
+  document.querySelectorAll('.auto-cycle, .auto-cycle-x').forEach((box) => {
+    const axis = box.classList.contains('auto-cycle-x') ? 'x' : 'y';
+    const overflow = axis === 'x'
+      ? box.scrollWidth - box.clientWidth
+      : box.scrollHeight - box.clientHeight;
     const running = autoCycles.get(box);
     if (overflow <= 2 || skipMotion) {
       if (running) stopAutoCycle(box);
@@ -904,9 +965,9 @@ function refreshAutoCycles() {
     }
     // Same shape as the in-flight cycle -- let it keep going instead of
     // yanking back to the top on every ~5s poll.
-    if (running && Math.abs(running.overflow - overflow) < 4) return;
+    if (running && running.axis === axis && Math.abs(running.overflow - overflow) < 4) return;
     if (running) stopAutoCycle(box);
-    driveAutoCycle(box, overflow);
+    driveAutoCycle(box, overflow, axis);
   });
 }
 

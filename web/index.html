@@ -336,7 +336,12 @@
      element a height/max-height so it can actually overflow, add
      class="auto-cycle", and app.js's refreshAutoCycles() drives it through
      a passive scroll-dwell-reset loop -- there is no scrollbar a user could
-     ever grab on this surface. No-op on an element that already fits. */
+     ever grab on this surface. No-op on an element that already fits.
+     auto-cycle-x is the same mechanism on the horizontal axis (scrollLeft
+     instead of scrollTop) -- Music's song-title marquee (#26 follow-up) is
+     its first user: a track title too long for its clamped column scrolls
+     to reveal the rest instead of just truncating silently. */
+  .auto-cycle-x{overflow-x:hidden;white-space:nowrap}
   .auto-cycle{overflow-y:hidden}
 
   /* CRT fx layer (#32): a component-independent overlay above panel
@@ -704,15 +709,32 @@
           <h2 class="sec-head text-faint uppercase tracking-[0.3em] text-[clamp(.55rem,1.15vmin,.8rem)]">
             Music</h2>
           <!-- No sys-table, no note icon (both dropped on user request) --
-               renderMusic() in app.js builds either a title-left/artist-
-               right row + full-width square progress bar (square corners
-               also a user request, see miniBar()'s radiusClass param),
-               or, when nothing is playing/paused, an idle placeholder.
-               The section itself is never hidden anymore -- user report:
-               "it should not disappear just because no media is playing,
-               should just sit idle" (it briefly WAS null/idle when that
-               was reported, which is normal, just previously invisible). -->
-          <div id="music" class="flex flex-col gap-[0.5vmin]"></div>
+               renderMusic() in app.js builds cover art (musicArt, left,
+               hidden unless the player's MPRIS metadata has an art_url --
+               proxied/redirected through GET /api/music/art since a
+               file://-sourced art_url can't be loaded directly from this
+               http-origin page) beside a two-row musicBody: title
+               (clamped to the remaining space, w-0 + min-w-0 + auto-cycle-x
+               so a too-long title scrolls to reveal itself instead of
+               silently truncating -- w-0 is load-bearing, not just
+               min-w-0: this row's own ancestors size shrink-to-fit, so a
+               flex item's *intrinsic* contribution to that still uses its
+               max-content size regardless of min-width/flex-basis, which
+               is what let a long title stretch the whole panel before)
+               left, artist/album right on row one; elapsed time | progress
+               bar | total time (HH:MM:SS, .num tabular-nums so the digits
+               don't jump around) on row two, square-corner bar per an
+               earlier user request. When nothing is playing/paused: an idle
+               placeholder, art hidden. The section itself is never hidden
+               -- user report: "it should not disappear just because no
+               media is playing, should just sit idle". -->
+          <div id="music" class="flex gap-[0.8vmin] items-start">
+            <img id="musicArt" alt=""
+                 class="hidden shrink-0 object-cover"
+                 style="width:clamp(2.4rem,6vmin,4.2rem);height:clamp(2.4rem,6vmin,4.2rem);
+                        border:1px solid var(--panel-accent, var(--color-accent));" />
+            <div id="musicBody" class="flex-1 min-w-0 flex flex-col gap-[0.5vmin]"></div>
+          </div>
         </div>
       </section>
 

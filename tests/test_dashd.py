@@ -184,6 +184,56 @@ class TestNowPlaying(unittest.TestCase):
         self.assertTrue(music["playing"])
 
 
+class TestMusicArt(unittest.TestCase):
+    """GET /api/music/art's logic, factored out as music_art_response() so
+    it's testable without a live HTTP handler -- see now_playing() note
+    above for why dashd.now_playing (re-exported) is the patch target."""
+
+    def test_nothing_playing_returns_none(self):
+        with patch.object(dashd, "now_playing", return_value=None):
+            self.assertIsNone(dashd.music_art_response())
+
+    def test_no_art_url_returns_none(self):
+        with patch.object(dashd, "now_playing", return_value={"art_url": None}):
+            self.assertIsNone(dashd.music_art_response())
+
+    def test_remote_art_url_is_a_redirect(self):
+        music = {"art_url": "https://example/cover.jpg"}
+        with patch.object(dashd, "now_playing", return_value=music):
+            art = dashd.music_art_response()
+        self.assertEqual(art, {"redirect": "https://example/cover.jpg"})
+
+    def test_local_file_art_url_is_read_and_typed(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "cover.png"
+            path.write_bytes(b"\x89PNG\r\n\x1a\n" + b"fake png bytes")
+            music = {"art_url": path.as_uri()}
+            with patch.object(dashd, "now_playing", return_value=music):
+                art = dashd.music_art_response()
+        self.assertEqual(art["content_type"], "image/png")
+        self.assertEqual(art["data"], b"\x89PNG\r\n\x1a\n" + b"fake png bytes")
+
+    def test_local_file_with_no_extension_is_sniffed(self):
+        # Chromium's MPRIS bridge hands out extension-less temp paths.
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / ".org.chromium.Chromium.z0Ffbp"
+            path.write_bytes(b"\xff\xd8\xff" + b"fake jpeg bytes")
+            music = {"art_url": path.as_uri()}
+            with patch.object(dashd, "now_playing", return_value=music):
+                art = dashd.music_art_response()
+        self.assertEqual(art["content_type"], "image/jpeg")
+
+    def test_missing_local_file_returns_none(self):
+        music = {"art_url": "file:///nonexistent/path/cover.jpg"}
+        with patch.object(dashd, "now_playing", return_value=music):
+            self.assertIsNone(dashd.music_art_response())
+
+    def test_unsupported_scheme_returns_none(self):
+        music = {"art_url": "data:image/png;base64,abc123"}
+        with patch.object(dashd, "now_playing", return_value=music):
+            self.assertIsNone(dashd.music_art_response())
+
+
 class TestBatteryCharging(unittest.TestCase):
     def setUp(self):
         self._tmp = tempfile.TemporaryDirectory()
