@@ -1,0 +1,184 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-08-20T17:15:00-07:00",
+  "title": "Design System: Desktop Dashboard",
+  "extensions": {
+    "colorMeta": {
+      "signal-white": {
+        "role": "neutral",
+        "displayName": "Signal White",
+        "canonical": "oklch(0.96 0.01 250)",
+        "tonalRamp": ["oklch(0.15 0.02 260)", "oklch(0.30 0.02 260)", "oklch(0.45 0.02 258)", "oklch(0.52 0.03 258)", "oklch(0.60 0.03 256)", "oklch(0.70 0.03 255)", "oklch(0.85 0.02 252)", "oklch(0.96 0.01 250)"]
+      },
+      "console-grey": {
+        "role": "neutral",
+        "displayName": "Console Grey",
+        "canonical": "oklch(0.70 0.03 255)",
+        "tonalRamp": ["oklch(0.15 0.02 260)", "oklch(0.30 0.02 260)", "oklch(0.45 0.02 258)", "oklch(0.52 0.03 258)", "oklch(0.60 0.03 256)", "oklch(0.70 0.03 255)", "oklch(0.85 0.02 252)", "oklch(0.96 0.01 250)"]
+      },
+      "recessed-grey": {
+        "role": "neutral",
+        "displayName": "Recessed Grey",
+        "canonical": "oklch(0.52 0.03 258)",
+        "tonalRamp": ["oklch(0.15 0.02 260)", "oklch(0.30 0.02 260)", "oklch(0.45 0.02 258)", "oklch(0.52 0.03 258)", "oklch(0.60 0.03 256)", "oklch(0.70 0.03 255)", "oklch(0.85 0.02 252)", "oklch(0.96 0.01 250)"]
+      },
+      "deep-console": {
+        "role": "neutral",
+        "displayName": "Deep Console",
+        "canonical": "oklch(0.19 0.015 260 / 0.88)",
+        "tonalRamp": ["oklch(0.12 0.02 255)", "oklch(0.16 0.03 265)", "oklch(0.19 0.015 260)", "oklch(0.25 0.02 260)", "oklch(0.32 0.02 260)", "oklch(0.40 0.02 260)", "oklch(0.55 0.02 260)", "oklch(0.70 0.02 260)"]
+      },
+      "hairline-grey": {
+        "role": "neutral",
+        "displayName": "Hairline Grey",
+        "canonical": "oklch(0.70 0.04 260 / 0.14)",
+        "tonalRamp": ["oklch(0.15 0.02 260)", "oklch(0.30 0.02 260)", "oklch(0.45 0.02 258)", "oklch(0.52 0.03 258)", "oklch(0.60 0.03 256)", "oklch(0.70 0.03 255)", "oklch(0.85 0.02 252)", "oklch(0.96 0.01 250)"]
+      },
+      "signal-teal": {
+        "role": "primary",
+        "displayName": "Signal Teal",
+        "canonical": "oklch(0.83 0.14 195)",
+        "tonalRamp": ["oklch(0.15 0.05 195)", "oklch(0.30 0.08 195)", "oklch(0.45 0.11 195)", "oklch(0.60 0.13 195)", "oklch(0.70 0.14 195)", "oklch(0.83 0.14 195)", "oklch(0.90 0.10 195)", "oklch(0.95 0.05 195)"]
+      },
+      "ember-gold": {
+        "role": "secondary",
+        "displayName": "Ember Gold",
+        "canonical": "oklch(0.88 0.17 95)",
+        "tonalRamp": ["oklch(0.15 0.03 95)", "oklch(0.30 0.06 95)", "oklch(0.45 0.10 95)", "oklch(0.60 0.14 95)", "oklch(0.72 0.16 95)", "oklch(0.80 0.17 95)", "oklch(0.88 0.17 95)", "oklch(0.95 0.08 95)"]
+      },
+      "distress-red": {
+        "role": "tertiary",
+        "displayName": "Distress Red",
+        "canonical": "oklch(0.65 0.17 25)",
+        "tonalRamp": ["oklch(0.15 0.03 25)", "oklch(0.30 0.07 25)", "oklch(0.45 0.12 25)", "oklch(0.55 0.15 25)", "oklch(0.65 0.17 25)", "oklch(0.75 0.14 25)", "oklch(0.85 0.08 25)", "oklch(0.95 0.03 25)"]
+      },
+      "signal-teal-dim": {
+        "role": "primary-border",
+        "displayName": "Signal Teal, Dim",
+        "canonical": "#1f6a6e",
+        "tonalRamp": ["oklch(0.15 0.03 195)", "oklch(0.25 0.05 195)", "oklch(0.35 0.06 195)", "oklch(0.42 0.07 195)", "oklch(0.50 0.07 195)", "oklch(0.60 0.06 195)", "oklch(0.72 0.05 195)", "oklch(0.85 0.03 195)"]
+      },
+      "ember-gold-dim": {
+        "role": "secondary-border",
+        "displayName": "Ember Gold, Dim",
+        "canonical": "#8a6a12",
+        "tonalRamp": ["oklch(0.12 0.02 95)", "oklch(0.22 0.04 95)", "oklch(0.32 0.06 95)", "oklch(0.42 0.08 95)", "oklch(0.52 0.09 95)", "oklch(0.64 0.09 95)", "oklch(0.78 0.07 95)", "oklch(0.90 0.04 95)"]
+      },
+      "distress-red-dim": {
+        "role": "tertiary-border",
+        "displayName": "Distress Red, Dim",
+        "canonical": "#9c3230",
+        "tonalRamp": ["oklch(0.12 0.02 25)", "oklch(0.22 0.05 25)", "oklch(0.32 0.08 25)", "oklch(0.42 0.10 25)", "oklch(0.50 0.12 25)", "oklch(0.60 0.13 25)", "oklch(0.75 0.10 25)", "oklch(0.90 0.05 25)"]
+      },
+      "standby-green": {
+        "role": "reserved",
+        "displayName": "Standby Green",
+        "canonical": "oklch(0.87 0.19 155)",
+        "tonalRamp": ["oklch(0.15 0.04 155)", "oklch(0.30 0.08 155)", "oklch(0.45 0.12 155)", "oklch(0.60 0.16 155)", "oklch(0.72 0.18 155)", "oklch(0.80 0.19 155)", "oklch(0.87 0.19 155)", "oklch(0.95 0.08 155)"]
+      }
+    },
+    "typographyMeta": {
+      "display": { "displayName": "Display", "purpose": "The current-temperature readout only. One glow-text hero element per screen." },
+      "headline": { "displayName": "Headline", "purpose": "The four weather-stat numbers (Wind/Humidity/Rain/UV)." },
+      "title": { "displayName": "Title", "purpose": "Weather description line; a lighter variant covers the week list's day names and hi/lo ranges." },
+      "body": { "displayName": "Body", "purpose": "Every live metric readout -- system-table values, hourly temps, footer stats. Always tabular-nums." },
+      "label": { "displayName": "Label", "purpose": "Section headers and row labels. Tracking width (0.1em row label vs 0.3em section header) signals hierarchy level." }
+    },
+    "shadows": [
+      { "name": "glow-accent-tab", "value": "0 0 6px var(--panel-accent)", "purpose": "Panel corner-tab and section-header underline glow -- the constant 'this region is live' signal, present at rest." },
+      { "name": "glow-chrg-active", "value": "0 0 9px 1px var(--color-crimson), 0 0 2px var(--color-crimson)", "purpose": "CHRG badge's active (currently-charging) state glow." },
+      { "name": "text-glow-display", "value": "-6px -4px 26px var(--panel-accent)", "purpose": "text-shadow on the Display-role hero temperature readout -- emphasis, reserved for exactly one element per screen." }
+    ],
+    "motion": [
+      { "name": "duration-state", "value": "0.4s", "purpose": "CHRG badge color/background/box-shadow cross-fade between inert and active states." },
+      { "name": "duration-value", "value": "0.6s", "purpose": "Width transition when a bar-style value changes (e.g. the Storage mini-bar fill)." },
+      { "name": "duration-entrance", "value": "0.6s", "purpose": "Per-panel fade+rise entrance on first load, staggered 60ms per panel, capped at 1.6s total; always stripped back off so visibility never depends on the animation completing." },
+      { "name": "duration-ambient-1", "value": "42s", "purpose": "Slow drift cycle for the first ambient background glow blob (g1)." },
+      { "name": "duration-ambient-2", "value": "55s", "purpose": "Slow drift cycle for the second ambient background glow blob (g2) -- deliberately different from g1 so the two never visibly sync." },
+      { "name": "ease-standard", "value": "ease", "purpose": "Default transition easing used across value/state transitions." }
+    ],
+    "breakpoints": [
+      { "name": "lg", "value": "1024px" }
+    ]
+  },
+  "components": [
+    {
+      "name": "Panel (Notched Container)",
+      "kind": "card",
+      "refersTo": "panel",
+      "description": "The one recurring surface in the system -- a chamfered-corner container with a glowing accent corner tab. Every region (System, Forecast, offline banner) wraps its content in this.",
+      "html": "<div class=\"ds-panel ds-panel--teal\"><h2 class=\"ds-sec-head\">System</h2><p style=\"margin:0;color:var(--color-ink);font-size:0.8rem\">42% CPU</p></div>",
+      "css": ".ds-panel{position:relative;background:var(--color-panel);border:2px solid var(--panel-border);backdrop-filter:blur(6px);clip-path:polygon(0 0,100% 0,100% calc(100% - 1.15rem),calc(100% - 1.15rem) 100%,0 100%);padding:1.5vmin 2vmin;font-family:\"Fira Sans\",system-ui,sans-serif}.ds-panel::after{content:\"\";position:absolute;right:-2px;bottom:0.62rem;width:1.55rem;height:3px;background:var(--panel-accent);box-shadow:0 0 6px var(--panel-accent);transform:rotate(-45deg);transform-origin:right center}.ds-panel--teal{--panel-accent:var(--color-accent);--panel-border:var(--color-cyan-border)}.ds-panel--amber{--panel-accent:var(--color-warm);--panel-border:var(--color-amber-border)}.ds-panel--crimson{--panel-accent:var(--color-crimson);--panel-border:var(--color-crimson-border)}"
+    },
+    {
+      "name": "Metric Row",
+      "kind": "custom",
+      "refersTo": "metric-row",
+      "description": "One line of the System table: icon, uppercase label, right-aligned tabular value with an optional sub-line, and a chart/badge column. The signature 'instrument cluster' primitive -- every table in System (cpu/mem/bat, Storage, Network) is built from this row.",
+      "html": "<table class=\"ds-metric-table\"><colgroup><col class=\"ds-col-icon\"><col><col class=\"ds-col-value\"><col class=\"ds-col-chart\"></colgroup><tbody><tr><td class=\"ds-metric-icon\" style=\"color:var(--color-accent)\"><svg viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.6\" stroke-linecap=\"round\" stroke-linejoin=\"round\" width=\"16\" height=\"16\"><rect x=\"6\" y=\"6\" width=\"12\" height=\"12\" rx=\"1.2\"/><rect x=\"9.5\" y=\"9.5\" width=\"5\" height=\"5\" rx=\"0.6\"/><line x1=\"9\" y1=\"1.5\" x2=\"9\" y2=\"6\"/><line x1=\"12\" y1=\"1.5\" x2=\"12\" y2=\"6\"/><line x1=\"15\" y1=\"1.5\" x2=\"15\" y2=\"6\"/><line x1=\"9\" y1=\"18\" x2=\"9\" y2=\"22.5\"/><line x1=\"12\" y1=\"18\" x2=\"12\" y2=\"22.5\"/><line x1=\"15\" y1=\"18\" x2=\"15\" y2=\"22.5\"/><line x1=\"1.5\" y1=\"9\" x2=\"6\" y2=\"9\"/><line x1=\"1.5\" y1=\"12\" x2=\"6\" y2=\"12\"/><line x1=\"1.5\" y1=\"15\" x2=\"6\" y2=\"15\"/><line x1=\"18\" y1=\"9\" x2=\"22.5\" y2=\"9\"/><line x1=\"18\" y1=\"12\" x2=\"22.5\" y2=\"12\"/><line x1=\"18\" y1=\"15\" x2=\"22.5\" y2=\"15\"/></svg></td><td class=\"ds-metric-label\">CPU</td><td class=\"ds-metric-value\">42%<div class=\"ds-metric-sub\">58°C · 3.4GHz</div></td><td class=\"ds-metric-chart\"><svg viewBox=\"0 0 100 30\" preserveAspectRatio=\"none\" width=\"56\" height=\"14\"><path d=\"M 0 20 L 25 20 L 25 14 L 50 14 L 50 18 L 75 18 L 75 8 L 100 8\" fill=\"none\" stroke=\"var(--color-accent)\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" opacity=\"0.85\"/></svg></td></tr></tbody></table>",
+      "css": ".ds-metric-table{width:100%;border-collapse:collapse;font-family:\"Fira Sans\",system-ui,sans-serif}.ds-col-icon{width:1.7em}.ds-col-value{width:24%}.ds-col-chart{width:36%}.ds-metric-table td{vertical-align:middle;padding:0.32vmin 0}.ds-metric-icon svg{display:block}.ds-metric-label{color:var(--color-muted);text-transform:uppercase;letter-spacing:0.1em;font-size:0.6rem;padding-left:0.6vmin}.ds-metric-value{text-align:right;font-variant-numeric:tabular-nums;color:var(--color-ink);opacity:.9;font-size:0.68rem;padding-left:0.6vmin}.ds-metric-sub{color:var(--color-faint);font-size:0.5rem;line-height:1.2}.ds-metric-chart{padding-left:0.6vmin}"
+    },
+    {
+      "name": "Step-Line Chart",
+      "kind": "custom",
+      "refersTo": "step-chart",
+      "description": "A compact 'staircase' (step-after) inline chart -- fits on one text line next to its time-tier label. Multi-series capable: the Network chart plots download and upload as two lines on one shared scale.",
+      "html": "<div class=\"ds-stepchart\"><svg viewBox=\"0 0 100 30\" preserveAspectRatio=\"none\" width=\"64\" height=\"16\"><path class=\"ds-stepchart-line ds-stepchart-line--down\" d=\"M0 24 L20 24 L20 20 L40 20 L40 22 L60 22 L60 12 L80 12 L80 16 L100 16\"/><path class=\"ds-stepchart-line ds-stepchart-line--up\" d=\"M0 27 L20 27 L20 26 L40 26 L40 25 L60 25 L60 23 L80 23 L80 24 L100 24\"/></svg></div>",
+      "css": ".ds-stepchart{display:inline-block}.ds-stepchart-line{fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;vector-effect:non-scaling-stroke;opacity:.85}.ds-stepchart-line--down{stroke:var(--color-accent)}.ds-stepchart-line--up{stroke:var(--color-warm)}"
+    },
+    {
+      "name": "Section Header",
+      "kind": "custom",
+      "refersTo": "sec-head",
+      "description": "Uppercase, wide-tracked label with a glowing accent underline -- marks every sub-section (System, Storage, Network, Hourly, Week, Sun & Moon).",
+      "html": "<h3 class=\"ds-sec-head\" style=\"--panel-accent:var(--color-accent)\">Network</h3>",
+      "css": ".ds-sec-head{position:relative;padding-bottom:0.65vmin;margin:0;color:var(--color-faint);text-transform:uppercase;letter-spacing:0.3em;font-size:0.68rem;font-weight:400;font-family:\"Fira Sans\",system-ui,sans-serif}.ds-sec-head::after{content:\"\";position:absolute;left:0;bottom:0;width:100%;height:1px;background:var(--panel-accent);box-shadow:0 0 6px var(--panel-accent)}"
+    },
+    {
+      "name": "Status Badge (CHRG)",
+      "kind": "chip",
+      "refersTo": "chrg-badge",
+      "description": "Non-interactive charge-state indicator. Deep inert red at rest; switches to full Distress Red with a glow only while the battery is genuinely charging (not merely plugged in and full).",
+      "html": "<span class=\"ds-chrg-badge\">CHRG</span> <span class=\"ds-chrg-badge ds-chrg-badge--active\">CHRG</span>",
+      "css": ".ds-chrg-badge{display:inline-flex;align-items:center;justify-content:center;padding:0.15em 0.55em;border-radius:2px;line-height:1;font-size:0.68em;letter-spacing:0.14em;font-weight:600;color:oklch(0.62 0.05 25);background:oklch(0.22 0.03 25);border:1px solid var(--color-crimson-border);transition:color .4s ease,background .4s ease,box-shadow .4s ease;font-family:\"Fira Sans\",system-ui,sans-serif}.ds-chrg-badge--active{color:oklch(0.99 0.02 25);background:var(--color-crimson);border-color:var(--color-crimson);box-shadow:0 0 9px 1px var(--color-crimson),0 0 2px var(--color-crimson)}"
+    },
+    {
+      "name": "Status Dot + Offline Banner",
+      "kind": "custom",
+      "refersTo": "offline-banner",
+      "description": "Fixed top-center notified banner shown only after two consecutive failed polls (debounced so one dropped request never flashes it). The only place Distress Red appears as a background fill rather than an accent line.",
+      "html": "<div class=\"ds-offline-banner\"><span class=\"ds-status-dot\"></span>data feed unreachable — showing last known values</div>",
+      "css": ".ds-offline-banner{display:inline-flex;align-items:center;background:var(--color-panel);border:2px solid var(--color-crimson-border);backdrop-filter:blur(6px);clip-path:polygon(0 0,100% 0,100% calc(100% - 1.15rem),calc(100% - 1.15rem) 100%,0 100%);padding:0.5rem 1.25rem;color:var(--color-crimson);font-size:0.875rem;letter-spacing:0.02em;font-family:\"Fira Sans\",system-ui,sans-serif}.ds-status-dot{display:inline-block;width:0.55em;height:0.55em;border-radius:50%;background:var(--color-crimson);vertical-align:middle;margin-right:0.6em;flex:none}"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Night Ops HUD",
+    "overview": "This is not a wallpaper image -- it's a live console rendered as the desktop background: an always-on heads-up display watching CPU, memory, battery, disk, network, and the sky outside, sitting one layer above the desktop background and one layer below every window. The philosophy is tactical and utilitarian: every glowing edge, every uppercase label, every accent color means something specific. Nothing lights up decoratively. Glow is a status signal (a battery actually charging, a metric running hot, a data feed gone stale), not an ambient effect applied for its own sake.\n\nThe system is precise and instrumented -- icon, label, value, and chart line up in real table columns so a glance reads cleanly, numerals never jitter thanks to tabular-nums everywhere. It's also quiet and restrained at rest: panels sit low-contrast against a dark gradient void, and the only things that actively call for attention are the ones that should (an offline banner, a hot CPU, a charging battery). And it's dense and confident -- a huge amount of live, frequently-updating data (three time-tiered charts per metric, a full partition list, network throughput) packed into roughly half the screen without padding it out or apologizing for the density.\n\nThe signature visual device, inherited from the CyberpunkUIKit template this system started from, is the notch: every panel's bottom-right corner is diagonally chamfered and capped with a small glowing accent tab, standing in for a border-radius the system otherwise never uses. There is no rounded-card language here -- the notch is the corner language.",
+    "keyCharacteristics": [
+      "Notched, chamfered-corner panels -- never rounded corners -- each carrying a single committed accent (teal, gold, or red)",
+      "Flat surfaces at rest; glow (text-shadow / box-shadow used as light emission, never elevation) is reserved for real status",
+      "Dense, table-aligned metric rows: icon -> label -> value -> chart or badge, every column locked to the same width across every table in the system",
+      "Tabular numerals everywhere a value updates, so nothing visually jitters on refresh",
+      "A dark, slowly-drifting ambient gradient background (42s/55s cycles, deliberately desynced) is the only 'alive' surface that isn't tied to real data"
+    ],
+    "rules": [
+      { "name": "The One Accent Per Region Rule", "body": "Every panel commits to exactly one accent -- border, corner-tab glow, and section-header underline all read from the same --panel-accent/--panel-border pair. Accents never mix within a single panel.", "section": "colors" },
+      { "name": "The Status-Only Glow Rule", "body": "Glow (box-shadow-as-light, text-shadow) never decorates a resting element. It appears only when something is true: a metric is hot, the battery is actually charging, the feed is offline. A panel's corner tab and section-header underline are the one standing exception -- they're the system's constant 'this region is live' signature, not a status readout.", "section": "colors" },
+      { "name": "The Tabular Numerals Rule", "body": "Every element carrying a value that updates on a poll gets font-variant-numeric: tabular-nums. A refreshing CPU percentage or download rate never shifts its neighbors horizontally.", "section": "typography" },
+      { "name": "The Flat-By-Default Rule", "body": "No element receives a drop shadow for hierarchy. If something needs to stand out, it gets an accent-colored glow (glow = 'this is live/important'), not a lift (lift = 'this is above the surface').", "section": "elevation" }
+    ],
+    "dos": [
+      "Do give every panel exactly one accent (border + corner-tab glow + section-header underline all match) -- see the One Accent Per Region Rule.",
+      "Do use font-variant-numeric: tabular-nums on any text that holds a value which updates on a poll.",
+      "Do let a panel's content determine its height; leave unused vertical space rather than stretching rows to fill it.",
+      "Do reserve glow (box-shadow-as-light, text-shadow) for a real status condition -- hot, charging, offline, or the panel corner tab's constant 'this region is live' signal.",
+      "Do keep every metric table's colgroup proportions identical (icon / label / value / chart) so columns line up within and across tables in the same region."
+    ],
+    "donts": [
+      "Don't use large rounded corners or a soft-card look anywhere. The notch (pentagon clip-path, 1.15rem chamfer) is this system's entire corner language; a border-radius: 8px+ card would read as a different design system grafted on.",
+      "Don't add a drop shadow for hierarchy or lift. This system has no elevation model -- depth comes from blur and ambient background layering only (see the Flat-By-Default Rule).",
+      "Don't mix two accents on one panel, or apply an accent color to an element outside its region.",
+      "Don't add an interactive affordance (button, input, hover-driven control) -- this is a read-only, no-input wallpaper surface. If a status element (like CHRG) looks like it could be a button, that's a bug, not an invitation to wire up a click handler."
+    ]
+  }
+}

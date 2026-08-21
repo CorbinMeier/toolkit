@@ -16,6 +16,12 @@ Two processes:
 
 Both run as **enabled** systemd user units (see *Current state* below).
 
+`DESIGN.md` (plus its `.impeccable/design.json` sidecar) documents the
+visual system — "The Night Ops HUD": the teal/gold/red accent triad,
+notched-panel corners, flat-plus-glow elevation, and table-aligned metric
+rows. Read it before any visual change; it's the normative reference, not
+this file (#13).
+
 ## Layout
 
 ```
