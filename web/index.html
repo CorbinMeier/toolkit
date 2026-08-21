@@ -139,6 +139,16 @@
   .sys-table td{vertical-align:middle;padding:0.32vmin 0}
   .sys-table .sysicon{width:1.05em;height:1.05em;display:block}
 
+  /* Per-output layout (config.json outputs.<name>.layout, plumbed onto
+     <html data-layout> by app.js's apply() -- #3). 'auto' (the
+     default, e.g. the 1440x900 laptop) keeps #root's single stacked
+     column; 'wide' (the 2560px Dell ultrawide, which has room to spare)
+     switches back to the System | Forecast side-by-side split. The ID
+     selector on #root outweighs Tailwind's grid-cols-1 utility class
+     regardless of source order, same specificity rule as the sys-table
+     td gotcha above. */
+  [data-layout="wide"] #root{grid-template-columns:repeat(2, minmax(0, 1fr))}
+
   /* Small inline sysIcon variants for spots that aren't a sys-table row --
      the sun/moon rise/set readout and the Network row's down/up glyphs.
      Same hand-rolled-SVG philosophy as .sysicon (no emoji, no external
