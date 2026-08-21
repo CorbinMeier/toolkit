@@ -1,8 +1,9 @@
 # Desktop Dashboard
 
 Live HTML rendered as the desktop wallpaper on COSMIC/Wayland — weather,
-forecast, sun/moon, system stats (with SQLite-backed history for cpu/mem/
-battery trends, rendered as multi-tier step-line charts, #12). Not a
+forecast, sun/moon, system stats (with SQLite-backed history for cpu/mem
+trends, CPU and Memory each rendering a compact three-tier step-line graph
+row; battery has no graphs, #12, #17). Not a
 wallpaper image on a timer: a real WebKit view with CSS animation and JS,
 one surface per monitor, sitting below the windows. No digital clock,
 date, or location readout -- the user's own system already shows all
@@ -46,9 +47,13 @@ lib/sysinfo.py      shared psutil sampling (system_stats() for dashd-serve's
 lib/metrics.py      SQLite historical-metrics store (cpu/mem/battery_pct);
                     self-migrates ALTER TABLE ADD COLUMN for an older DB
 web/index.html      panel structure (Tailwind utility classes); System
-                    renders as three <table>s (cpu/mem/bat, Storage, Network),
-                    each icon|label|value|chart-or-badge, plus a step-line-
-                    chart sub-row per time tier under CPU/Memory/Battery
+                    renders as three compact <table>s (not w-full -- sized
+                    to content, #17), cpu/mem/bat led | icon | label | value
+                    (status LED leads the row), Storage/Network
+                    icon|label|value|chart-or-badge. CPU/Memory each add one
+                    row of three side-by-side step-line graphs (30S/5M/30M,
+                    corner-labeled tier name + value range) instead of three
+                    stacked rows; Battery has none (#17)
 web/app.js          all rendering; pure function of last good state.
                     Two independent trend sources feed the step charts: an
                     in-memory ring buffer (this session's own /api/state
@@ -159,6 +164,19 @@ render loop.
 
 ## Non-obvious gotchas
 
+- **A `td`-level `pl-[...]`/`pr-[...]` Tailwind utility class silently does
+  nothing in the System tables.** `.sys-table td{padding:0.32vmin 0}` (a
+  class+element selector) has *higher* specificity than a single-class
+  Tailwind utility like `.pl-\[0\.9em\]{padding-left:0.9em}`, so the
+  shorthand's `0` left/right padding always wins regardless of source
+  order or which class was added later via JS. This was invisible for
+  years because the old percentage-based `<colgroup>` widths gave every
+  column enough natural separation on its own; it only surfaced once
+  tables became compact/content-sized (#17), where a longer label
+  ("RECOVERY") would otherwise sit flush against its value with zero gap.
+  Fix/pattern: set `element.style.paddingLeft`/`paddingRight` directly
+  instead of a `pl-*`/`pr-*` class on any `<td>` in these tables — inline
+  styles always win regardless of the shorthand rule's specificity.
 - **PyGObject version pinning**: `gi.require_version("Gdk", "3.0")` must come
   before the `from gi.repository import ...` line and before anything pulls in
   Gtk 4, or the import dies with `Requiring namespace 'Gdk' version '3.0', but
@@ -260,17 +278,30 @@ any other script can add panels without touching the server.
 
 ## Current state (2026-08-20)
 
-- `desktop-dashboard-serve`/`-host` **enabled and active** against
+- All three units (`serve`/`collect`/`host`) **enabled and active** against
   `graphical-session.target`; the dashboard survives logout.
-  `desktop-dashboard-collect` (#14) exists as a unit file under `systemd/`
-  but is **not yet linked, enabled, or started** — Gatekeeper Protocol, same
-  as the original two units at first (`ISSUES.md` #1); run `install.sh` and
-  get explicit approval before `enable --now`.
+  `desktop-dashboard-collect` (#14) was linked, approved, and
+  `enable --now`'d in-session — Gatekeeper Protocol satisfied, same as the
+  original two units (`ISSUES.md` #1).
 - `display.transparent` is **false**. The transparent path was verified to
   work — cosmic-comp does composite an RGBA layer-shell surface over
   `cosmic-bg`'s wallpaper, backdrop blur included — but it reads poorly
   against the current black-hole wallpaper, so it was reverted. One-key flip
   in `config.json` plus a host restart if revisited against calmer imagery.
+- #17 (2026-08-20): System panel polish. Battery's tier graphs (30M/4H/24H)
+  removed entirely -- not needed, its LED already signals charge state.
+  CPU/MEM's LED is now traffic-light banded off percentage (green below
+  70%, gold 70-89%, red from 90%, flashing from 95%) instead of a fixed
+  hue -- Standby Green's first wired use in the system. Storage icons
+  became a floppy-disk glyph. The LED moved to lead the row, before the
+  icon (was: trailing the label, #16) -- the most immediate signal reads
+  first. CPU/Memory's three time-tier charts (30S/5M/30M) collapsed from
+  three stacked full-width rows into one row of three small side-by-side
+  graphs, each with its own corner labels (tier name left, value range
+  right). All three System tables dropped `w-full` -- compact, sized to
+  their own content instead of stretched to fill the panel (this also
+  surfaced a real `pl-*`/`pr-*`-on-`<td>` specificity bug, see gotchas).
+  See DESIGN.md's Utilization LED and Compact Tier Graph components.
 - #16 (2026-08-20): shrank the CPU/MEM/BAT utilization indicator from a
   large background ring to a small `0.85em` LED sitting after the row's
   label text, close to that text's own cap-height. Fill mechanic switched

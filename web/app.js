@@ -178,9 +178,15 @@ function sysIcon(kind, tone = 'currentColor') {
       });
       break;
     case 'disk':
-      g.appendChild(el('circle', { cx: 12, cy: 12, r: 9 }));
-      g.appendChild(el('circle', { cx: 12, cy: 12, r: 2.2, fill: tone }));
-      g.appendChild(el('line', { x1: 12, y1: 3, x2: 12, y2: 6 }));
+      // Floppy disk (ISSUES.md #17): body with the classic cut top-right
+      // corner, a metal shutter near the top, and a label area below --
+      // reads as storage media at a glance, unlike the old plain-disk glyph.
+      g.appendChild(el('path', {
+        d: 'M4.5 3 H15.5 L20.5 8 V19.5 A1.5 1.5 0 0 1 19 21 H5 '
+          + 'A1.5 1.5 0 0 1 3.5 19.5 V4.5 A1.5 1.5 0 0 1 4.5 3 Z',
+      }));
+      g.appendChild(el('rect', { x: 7.5, y: 3, width: 7, height: 5.5 }));
+      g.appendChild(el('rect', { x: 6.5, y: 13, width: 11, height: 6.5, rx: 0.5 }));
       break;
     case 'battery':
       g.appendChild(el('rect', { x: 1.5, y: 7, width: 17, height: 10, rx: 1.5 }));
@@ -197,26 +203,49 @@ function sysIcon(kind, tone = 'currentColor') {
   return g;
 }
 
-/* Small status LED for the CPU/MEM/BAT rows, sitting inline after the row
- * label text (ISSUES.md #16 -- an earlier version wrapped the icon in a
- * much larger background ring, which read as too heavy; a real LED doesn't
- * grow, it brightens). Sized in em so it's always exactly the label text's
- * own height. A fixed deep-red base disc (.icon-led, CSS) sits under a
- * second disc (.icon-led__fill) whose opacity and glow both scale with
- * --led-glow (0-1) -- dim red at rest, brightening to full glowing
- * Distress Red as pct approaches 100. CPU/MEM drive --led-glow continuously
- * off their percentage; battery ignores pct and instead reflects a
- * discrete charge state (see renderCpuMemBat) via ringState, since
- * "charging" isn't something a glow level alone can express.
+// Piecewise-linear dim -> bright ramp for the CPU/MEM LED: green's climb is
+// gentle (0.12-0.40 across its whole 0-70% span), yellow accelerates
+// (0.40-0.70 across 70-90%), red is steepest (0.70-1.00 across 90-100%) --
+// so the LED's brightness itself telegraphs "how close to trouble", not
+// just its hue. Continuous across band boundaries (only the slope changes,
+// never a jump), same underlying idea as #16's straight pct/100 mapping.
+function ledGlow(pct) {
+  const p = Math.max(0, Math.min(100, pct));
+  if (p >= 90) return 0.70 + (p - 90) / 10 * 0.30;
+  if (p >= 70) return 0.40 + (p - 70) / 20 * 0.30;
+  return 0.12 + p / 70 * 0.28;
+}
+
+/* Small status LED for the CPU/MEM/BAT rows (ISSUES.md #16, #17 -- an
+ * earlier version wrapped the icon in a much larger background ring, which
+ * read as too heavy; a real LED doesn't grow, it brightens). Sized in em
+ * so it's always close to the row's own text height. A fixed deep base
+ * disc (.icon-led, CSS) sits under a second disc (.icon-led__fill) whose
+ * opacity and glow both scale with --led-glow.
+ *
+ * CPU/MEM are traffic-light banded off their percentage -- green (dim,
+ * good) below 70%, yellow (brightening, approaching limits) 70-89%, red
+ * (bright, danger) from 90%, flashing on top of red from 95%. Battery
+ * ignores pct entirely and instead reflects a discrete charge state (see
+ * renderCpuMemBat) via ringState, since "charging" isn't something a glow
+ * level alone can express -- its red-only charging/dim/low-flash states
+ * are unchanged from #16.
  */
 function metricLed({ pct = null, ringState = null } = {}) {
   const dot = document.createElement('span');
-  dot.className = `icon-led${ringState ? ` icon-led--batt-${ringState}` : ''}`;
   const fill = document.createElement('span');
   fill.className = 'icon-led__fill';
-  if (!ringState) {
-    const glow = Math.max(0, Math.min(1, (pct ?? 0) / 100));
-    fill.style.setProperty('--led-glow', glow.toFixed(2));
+  if (ringState) {
+    const flash = ringState === 'low';
+    dot.className = `icon-led icon-led--batt-${ringState}${flash ? ' icon-led--flash' : ''}`;
+  } else {
+    const clamped = Math.max(0, Math.min(100, pct ?? 0));
+    // red is the fill's default color (below) -- only green/yellow need an
+    // override class, so the 90%+ band adds nothing extra here.
+    const colorClass = clamped >= 90 ? '' : clamped >= 70 ? ' icon-led--yellow' : ' icon-led--green';
+    const flash = clamped >= 95;
+    dot.className = `icon-led${colorClass}${flash ? ' icon-led--flash' : ''}`;
+    fill.style.setProperty('--led-glow', ledGlow(clamped).toFixed(2));
   }
   dot.appendChild(fill);
   return dot;
@@ -273,10 +302,13 @@ function miniBar(pct, tone = 'var(--color-accent)') {
   return wrap;
 }
 
-// One <tr>: icon | label (optionally followed by a small status LED, see
-// `led` below) | value (+ optional smaller sub-line) | tail node
-// (histograph or mini bar). This is what keeps every row's columns aligned
-// -- a real <table>, not independently-sized rows.
+// One <tr>. Two shapes, chosen by whether `led` is passed:
+//  - CPU/MEM/BAT: LED | icon | label | value -- LED leads the row, the
+//    most immediate signal (ISSUES.md #17; it used to trail the label).
+//  - Storage/Network: icon | label | value | tail node (histograph or mini
+//    bar), unchanged since #12.
+// Either way this is what keeps every row's columns aligned -- a real
+// <table>, not independently-sized rows.
 function sysRow({ icon, label, value, sub = '', tail = null, tone = 'var(--color-accent)', led = null }) {
   const tr = document.createElement('tr');
 
@@ -287,45 +319,81 @@ function sysRow({ icon, label, value, sub = '', tail = null, tone = 'var(--color
   const labelTd = document.createElement('td');
   labelTd.className = 'text-muted tracking-[0.1em] uppercase pl-[0.6vmin] ' +
     'text-[clamp(.44rem,.92vmin,.66rem)] truncate';
-  labelTd.append(label, ...(led ? [metricLed(led)] : []));
+  labelTd.textContent = label;
 
   const valueTd = document.createElement('td');
   valueTd.className = 'num text-right text-ink/90 text-[clamp(.48rem,1.02vmin,.74rem)]';
+  // Inline, not a pl-[...] utility class: .sys-table td{padding:0.32vmin 0}
+  // is a class+element selector, higher specificity than a single-class
+  // Tailwind utility, so it silently zeroes any pl-*/pr-* class applied to
+  // a <td> here. Relying on a wide auto-sized label column to create
+  // separation isn't an option either now that tables are compact (#17) --
+  // the label column tracks its own content width, so a longer label like
+  // "RECOVERY" would otherwise sit flush against the value with no gap.
+  valueTd.style.paddingLeft = '0.9em';
   valueTd.innerHTML = sub
     ? `${value}<div class="text-faint text-[clamp(.4rem,.82vmin,.58rem)] leading-tight">${sub}</div>`
     : value;
 
-  const tailTd = document.createElement('td');
-  tailTd.className = 'pl-[0.6vmin]';
-  if (tail) tailTd.appendChild(tail);
-
-  tr.append(iconTd, labelTd, valueTd, tailTd);
+  if (led) {
+    const ledTd = document.createElement('td');
+    ledTd.style.paddingRight = '0.5em'; // same specificity issue as valueTd above
+    ledTd.appendChild(metricLed(led));
+    tr.append(ledTd, iconTd, labelTd, valueTd);
+  } else {
+    const tailTd = document.createElement('td');
+    tailTd.className = 'pl-[0.6vmin]';
+    if (tail) tailTd.appendChild(tail);
+    tr.append(iconTd, labelTd, valueTd, tailTd);
+  }
   return tr;
 }
 
-// A step chart's own line -- no icon (indented under its metric's sysRow),
-// just a small tier label ("30S"/"5M"/...) and the chart, so the whole
-// thing reads as one line of text-plus-chart per the tier it represents.
-function sysTierRow(label, values, tone) {
+// One small trend graph: tier label top-left, its value range top-right --
+// decodes the step chart's otherwise-unlabeled auto-scaled y-axis, so the
+// standalone label column the old sysTierRow() used isn't needed per tier.
+function graphCell(label, values, tone) {
+  const wrap = document.createElement('div');
+  wrap.className = 'graph-cell';
+  const labels = document.createElement('div');
+  labels.className = 'graph-cell__labels';
+  const left = document.createElement('span');
+  left.textContent = label;
+  const right = document.createElement('span');
+  if (values.length) {
+    const lo = Math.min(...values), hi = Math.max(...values);
+    right.textContent = Math.round(lo) === Math.round(hi)
+      ? `${Math.round(lo)}` : `${Math.round(lo)}–${Math.round(hi)}`;
+  }
+  labels.append(left, right);
+  wrap.append(labels, stepChart([{ values, tone }], 'graph-cell__chart'));
+  return wrap;
+}
+
+// Compact tier-graph row for CPU/MEM (ISSUES.md #17): the three time-tier
+// step charts sit side by side in one row instead of three stacked
+// full-width rows. Spans under the label+value columns (colspan 2 each) --
+// the LED+icon columns stay empty, same indent as where the metric's own
+// icon sits in the row above.
+function metricGraphRow(tiers, tone) {
   const tr = document.createElement('tr');
-  tr.appendChild(document.createElement('td')); // empty icon column
-  const labelTd = document.createElement('td');
-  labelTd.className = 'text-faint pl-[0.6vmin] tracking-[0.1em] ' +
-    'text-[clamp(.4rem,.82vmin,.58rem)]';
-  labelTd.textContent = label;
-  tr.append(labelTd, document.createElement('td'));
-  const tailTd = document.createElement('td');
-  tailTd.className = 'pl-[0.6vmin]';
-  tailTd.appendChild(stepChart([{ values, tone }]));
-  tr.appendChild(tailTd);
+  const spacer = document.createElement('td');
+  spacer.colSpan = 2;
+  const cell = document.createElement('td');
+  cell.colSpan = 2;
+  const row = document.createElement('div');
+  row.className = 'graph-row';
+  tiers.forEach(({ label, values }) => row.appendChild(graphCell(label, values, tone)));
+  cell.appendChild(row);
+  tr.append(spacer, cell);
   return tr;
 }
 
 // CPU/Memory: 30 seconds (ring buffer -- DB resolution is ~30s, too coarse
 // for this window), 5 minutes and 30 minutes (SQLite-backed /api/history,
-// which survives a page reload). Battery: 30 minutes, 4 hours, 24 hours,
-// all from /api/history since a battery barely moves in any window short
-// enough for the ring buffer to cover.
+// which survives a page reload), collapsed into one compact graph row each
+// (ISSUES.md #17). Battery has no graphs at all (#17 -- not needed); its
+// LED-driven charge state is signal enough.
 function renderCpuMemBat(s) {
   const box = $('sys');
   box.replaceChildren();
@@ -339,9 +407,11 @@ function renderCpuMemBat(s) {
       s.cpu_freq ? `${(s.cpu_freq / 1000).toFixed(1)}GHz` : null].filter(Boolean).join(' · '),
     led: { pct: s.cpu },
   }));
-  box.appendChild(sysTierRow('30S', ringSince('cpu', 30_000), cpuTone));
-  box.appendChild(sysTierRow('5M', historySince('cpu_pct', 5 * 60_000), cpuTone));
-  box.appendChild(sysTierRow('30M', historySince('cpu_pct', 30 * 60_000), cpuTone));
+  box.appendChild(metricGraphRow([
+    { label: '30S', values: ringSince('cpu', 30_000) },
+    { label: '5M', values: historySince('cpu_pct', 5 * 60_000) },
+    { label: '30M', values: historySince('cpu_pct', 30 * 60_000) },
+  ], cpuTone));
 
   const memTone = hot(s.mem.pct);
   box.appendChild(sysRow({
@@ -350,9 +420,11 @@ function renderCpuMemBat(s) {
     sub: `${bytes(s.mem.used)} / ${bytes(s.mem.total)}`,
     led: { pct: s.mem.pct },
   }));
-  box.appendChild(sysTierRow('30S', ringSince('mem', 30_000), memTone));
-  box.appendChild(sysTierRow('5M', historySince('mem_pct', 5 * 60_000), memTone));
-  box.appendChild(sysTierRow('30M', historySince('mem_pct', 30 * 60_000), memTone));
+  box.appendChild(metricGraphRow([
+    { label: '30S', values: ringSince('mem', 30_000) },
+    { label: '5M', values: historySince('mem_pct', 5 * 60_000) },
+    { label: '30M', values: historySince('mem_pct', 30 * 60_000) },
+  ], memTone));
 
   if (s.battery) {
     const battTone = s.battery.pct < 20 && !s.battery.plugged
@@ -369,9 +441,6 @@ function renderCpuMemBat(s) {
       sub: !s.battery.plugged && s.battery.secs_left ? dur(s.battery.secs_left) : '',
       led: { ringState },
     }));
-    box.appendChild(sysTierRow('30M', historySince('battery_pct', 30 * 60_000), battTone));
-    box.appendChild(sysTierRow('4H', historySince('battery_pct', 4 * 3600_000), battTone));
-    box.appendChild(sysTierRow('24H', historySince('battery_pct', 24 * 3600_000), battTone));
   }
 
   const load = s.load.map((n) => n.toFixed(2)).join('  ');

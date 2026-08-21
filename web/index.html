@@ -131,23 +131,28 @@
   .sys-table td{vertical-align:middle;padding:0.32vmin 0}
   .sys-table .sysicon{width:1.05em;height:1.05em;display:block}
 
-  /* Status LED after the CPU/MEM/BAT row label text (ISSUES.md #16 -- an
-     earlier version was a large ring behind the icon; a real LED doesn't
-     grow, it brightens). Sized in em (0.85em, close to the label text's
-     own cap-height rather than its full line-box) so it reads as sitting
-     right on the text, not floating independently of it. A fixed deep-red
-     base disc (::before) sits under a second disc (.icon-led__fill) whose
-     opacity *and* glow both scale with --led-glow (0-1, set inline per row
-     in app.js's metricLed()) -- dim red at rest, brightening to full
-     glowing Distress Red as a metric's percentage approaches 100. Glow
-     blur/spread are kept small (max 5px/1.2px) so the halo stays
-     proportionate to a small LED instead of blooming into a blob. Battery
-     instead uses one of the .icon-led--batt-* modifiers below, since
-     "charging" is a discrete state a glow level alone can't express
-     (replaces the old CHRG text badge -- the LED now carries that same
-     signal). */
+  /* Status LED leading each CPU/MEM/BAT row (ISSUES.md #16, #17 -- an
+     earlier version was a large ring behind the icon, then sat after the
+     label text; moved to lead the row entirely since it's the most
+     immediate signal). Sized in em (0.85em, close to the row text's own
+     cap-height) so it reads as part of the text line, not a floating
+     shape. A fixed dark base disc (::before) sits under a second disc
+     (.icon-led__fill) whose opacity *and* glow both scale with --led-glow
+     (0-1, set inline per row in app.js's metricLed()). Glow blur/spread
+     are kept small (max 5px/1.2px) so the halo stays proportionate to a
+     small LED instead of blooming into a blob.
+
+     Distress Red is the fill's default color -- CPU/MEM's danger band
+     (>=90%) needs no override class. .icon-led--green/--yellow cover their
+     good/approaching-limits bands (0-69% / 70-89%), and .icon-led--flash
+     (>=95% for CPU/MEM, or battery critically low) adds the shared hard
+     2s-cycle blink on top of whatever color is already set. Battery
+     ignores CPU/MEM's percentage bands entirely and instead uses one of
+     the .icon-led--batt-* modifiers, since "charging" is a discrete state
+     a glow level alone can't express (replaces the old CHRG text badge --
+     the LED now carries that same signal). */
   .icon-led{position:relative;display:inline-block;width:0.85em;height:0.85em;
-    border-radius:50%;vertical-align:middle;margin-left:0.45em;flex:none}
+    border-radius:50%;vertical-align:middle;flex:none}
   .icon-led::before{content:"";position:absolute;inset:0;border-radius:50%;
     background:oklch(0.15 0.03 25)}
   .icon-led__fill{
@@ -159,14 +164,39 @@
                calc(var(--led-glow,0) * 1.2px) var(--color-crimson);
     transition:opacity .6s ease,box-shadow .6s ease;
   }
+  .icon-led--green .icon-led__fill{
+    background:radial-gradient(circle at 38% 32%,
+      oklch(0.95 0.08 155) 0%, var(--color-online) 55%, oklch(0.30 0.08 155) 100%);
+    box-shadow:0 0 calc(1px + var(--led-glow,0) * 4px)
+               calc(var(--led-glow,0) * 1.2px) var(--color-online);
+  }
+  .icon-led--yellow .icon-led__fill{
+    background:radial-gradient(circle at 38% 32%,
+      oklch(0.95 0.08 95) 0%, var(--color-warm) 55%, oklch(0.32 0.06 95) 100%);
+    box-shadow:0 0 calc(1px + var(--led-glow,0) * 4px)
+               calc(var(--led-glow,0) * 1.2px) var(--color-warm);
+  }
 
   .icon-led--batt-charging .icon-led__fill{--led-glow:1}
   .icon-led--batt-dim .icon-led__fill{--led-glow:0.25}
-  .icon-led--batt-low .icon-led__fill{--led-glow:1;animation:led-flash 2s steps(1) infinite}
+  .icon-led--flash .icon-led__fill{--led-glow:1;animation:led-flash 2s steps(1) infinite}
   @keyframes led-flash{0%,49.99%{opacity:1}50%,100%{opacity:.12}}
   @media (prefers-reduced-motion:reduce){
-    .icon-led--batt-low .icon-led__fill{animation:none;opacity:.7}
+    .icon-led--flash .icon-led__fill{animation:none;opacity:.7}
   }
+
+  /* Compact tier-graph row (ISSUES.md #17): three small step charts side
+     by side instead of three stacked full-width rows, each carrying its
+     own corner labels (tier name left, value range right) so a standalone
+     label column per tier isn't needed. */
+  .graph-row{display:flex;gap:1vmin;padding:0.2vmin 0 0.3vmin}
+  .graph-cell{position:relative;flex:1 1 0;min-width:3.2rem;display:flex;
+    flex-direction:column;gap:0.15em}
+  .graph-cell__labels{display:flex;justify-content:space-between;gap:0.4em;
+    color:var(--color-faint);letter-spacing:0.04em;line-height:1;
+    font-size:clamp(.38rem,.72vmin,.5rem);font-variant-numeric:tabular-nums}
+  .graph-cell__labels span:last-child{overflow:hidden;text-overflow:clip;white-space:nowrap}
+  .graph-cell__chart{display:block;width:100%;height:clamp(0.7rem,1.5vmin,0.95rem)}
 
   /* slow drifting light so a static desktop still feels alive --
      crimson/cyan, matching CyberpunkEnvironment's reddish ambient glow */
@@ -209,13 +239,16 @@
       <div class="panel px-[2vmin] py-[1.5vmin] flex flex-col gap-[0.6vmin]">
         <h2 class="sec-head text-faint uppercase tracking-[0.3em] text-[clamp(.55rem,1.15vmin,.8rem)]">
           System</h2>
-        <!-- CPU, Memory, Battery -- table so icon / label / value / chart
-             line up across every row. Each metric is one value row plus a
-             step-line-chart row per time tier (see ISSUES.md #12); Battery
-             sits directly under Memory. -->
-        <table class="sys-table w-full border-collapse">
+        <!-- CPU, Memory, Battery -- table so LED / icon / label / value line
+             up across every row (LED leads -- the most immediate signal,
+             ISSUES.md #17). CPU/Memory each get one value row plus a single
+             row of three compact side-by-side tier graphs (not three
+             stacked full-width rows); Battery has no graphs at all (#17)
+             and sits directly under Memory. Compact, not w-full (#17) --
+             sized to its own content, not stretched to fill the panel. -->
+        <table class="sys-table border-collapse">
           <colgroup>
-            <col class="w-[1.7em]"><col><col class="w-[24%]"><col class="w-[36%]">
+            <col class="w-[1.1em]"><col class="w-[1.6em]"><col><col>
           </colgroup>
           <tbody id="sys"></tbody>
         </table>
@@ -225,9 +258,9 @@
         <div class="pt-[0.6vmin] border-t border-[var(--color-hairline)]">
           <h3 class="sec-head text-faint uppercase tracking-[0.3em]
               text-[clamp(.48rem,1vmin,.68rem)] mb-[0.35vmin]">Storage</h3>
-          <table class="sys-table w-full border-collapse">
+          <table class="sys-table border-collapse">
             <colgroup>
-              <col class="w-[1.7em]"><col><col class="w-[24%]"><col class="w-[36%]">
+              <col class="w-[1.7em]"><col><col><col>
             </colgroup>
             <tbody id="disks"></tbody>
           </table>
@@ -238,9 +271,9 @@
         <div class="pt-[0.6vmin] border-t border-[var(--color-hairline)]">
           <h3 class="sec-head text-faint uppercase tracking-[0.3em]
               text-[clamp(.48rem,1vmin,.68rem)] mb-[0.35vmin]">Network</h3>
-          <table class="sys-table w-full border-collapse">
+          <table class="sys-table border-collapse">
             <colgroup>
-              <col class="w-[1.7em]"><col><col class="w-[24%]"><col class="w-[36%]">
+              <col class="w-[1.7em]"><col><col><col>
             </colgroup>
             <tbody id="net"></tbody>
           </table>
