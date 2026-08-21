@@ -10,7 +10,9 @@ one surface per monitor, sitting below the windows. No digital clock,
 date, or location readout -- the user's own system already shows all
 three (#5, #9). Two halves: System (left) | Forecast — current
 conditions, hourly, week, sun/moon, all one panel (right, #10) — plus a
-third, source-agnostic Tasks panel stacked below (#25).
+source-agnostic Tasks panel (#25) and a Schedule panel (#23, a compact
+today's-agenda list via `data/extra.json`'s `schedule` array; no source
+is wired up yet) stacked below.
 
 Three processes:
 
@@ -336,6 +338,15 @@ any other script can add panels without touching the server.
   visually verified with an actual track playing -- no player had an
   active track during this session, so eyeball the populated state on the
   live desktop next time something is playing.
+- #23 (2026-08-20): new Schedule panel, section below System/Forecast
+  (`accent-crimson`, completing the teal/gold/red triad). Distinct from a
+  full calendar grid -- a compact today's-agenda list (`renderSchedule()` in
+  `web/app.js`), reading `state.extra.schedule` (an array of `{time,
+  title}` rows) through the existing `data/extra.json` passthrough -- no
+  server change needed. Source-agnostic per the issue ("data source TBD
+  during implementation"); renders an empty-state row until something
+  populates `extra.json`. Verified functionally (smoke stage) and visually
+  via a static headless-Chrome render; not checked against the live desktop.
 - All three units (`serve`/`collect`/`host`) **enabled and active** against
   `graphical-session.target`; the dashboard survives logout.
   `desktop-dashboard-collect` (#14) was linked, approved, and

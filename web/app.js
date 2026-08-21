@@ -238,6 +238,12 @@ function sysIcon(kind, tone = 'currentColor') {
       g.appendChild(el('line', { x1: 12, y1: 6, x2: 12, y2: 16 }));
       g.appendChild(el('polyline', { points: '8,11 12,16 16,11' }));
       break;
+    case 'schedule':
+      g.appendChild(el('rect', { x: 3, y: 5, width: 18, height: 16, rx: 1.5 }));
+      g.appendChild(el('line', { x1: 3, y1: 9.5, x2: 21, y2: 9.5 }));
+      g.appendChild(el('line', { x1: 7.5, y1: 2.5, x2: 7.5, y2: 6.5 }));
+      g.appendChild(el('line', { x1: 16.5, y1: 2.5, x2: 16.5, y2: 6.5 }));
+      break;
     default: break;
   }
   return g;
@@ -674,6 +680,43 @@ function renderCalendar(extra) {
   host.replaceChildren(title, grid);
 }
 
+// Schedule (#23): source-agnostic today's-agenda list -- reads
+// state.extra.schedule, the same data/extra.json passthrough any script can
+// already populate (see CLAUDE.md's Data section) without touching the
+// server. Each item is {time: "HH:MM", title}; items whose time has already
+// passed today render dimmed, same muted/ink treatment renderWeek() uses for
+// past vs. current days. No source is wired up yet, so this renders the
+// empty state until something writes extra.json.
+function renderSchedule(items) {
+  const box = $('schedule');
+  if (!items || !items.length) {
+    box.replaceChildren(sysRow({
+      icon: 'schedule', label: 'TODAY', tone: 'var(--color-faint)', value: '—',
+      sub: 'no scheduled items',
+    }));
+    return;
+  }
+
+  const nowHM = new Date().toTimeString().slice(0, 5);
+  box.replaceChildren(...items.map((item) => {
+    const past = item.time && item.time < nowHM;
+    const row = document.createElement('div');
+    row.className = 'flex items-center gap-[0.8vmin] py-[0.15vmin] ' +
+      (past ? 'text-faint' : 'text-ink');
+
+    const time = document.createElement('span');
+    time.className = 'num w-[3.6em] shrink-0 text-[clamp(.5rem,1.05vmin,.78rem)]';
+    time.textContent = item.time || '';
+
+    const title = document.createElement('span');
+    title.className = 'flex-1 truncate tracking-wide text-[clamp(.52rem,1.1vmin,.82rem)]';
+    title.textContent = item.title || '';
+
+    row.append(time, title);
+    return row;
+  }));
+}
+
 function renderSunMoon(w) {
   const svg = $('sunarc');
   svg.replaceChildren();
@@ -872,6 +915,7 @@ function apply(s) {
   renderMusic(s.music);
   renderCalendar(s.extra);
   renderTasks(s.tasks);
+  renderSchedule((s.extra && s.extra.schedule) || []);
   refreshAutoCycles();
 
   const boot = $('boot');
