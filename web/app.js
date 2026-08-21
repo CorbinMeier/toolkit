@@ -761,7 +761,7 @@ function renderCalendar(extra) {
     // reads at a glance rather than needing the subtle weight/color
     // difference to be noticed.
     cell.className = 'num flex flex-col items-center justify-center gap-[0.1vmin] ' +
-      'text-[clamp(.48rem,1vmin,.7rem)] rounded-full aspect-square ' +
+      'text-[clamp(.48rem,1vmin,.7rem)] aspect-square ' +
       (isToday
         ? 'text-ink font-medium border border-[var(--color-warm)]'
         : 'text-muted border border-transparent');
