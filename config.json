@@ -52,10 +52,11 @@
   "display": {
     "layer": "BOTTOM",
     "transparent": true,
-    "theme": "retro_terminal",
+    "theme": "retro_orange",
     "_theme_options": [
       "night_ops",
-      "retro_terminal"
+      "retro_terminal",
+      "retro_orange"
     ],
     "safe_area_top": 48,
     "safe_area_bottom": 48

@@ -96,10 +96,11 @@
 
   /* ---------------------------------------------------------------- theme
      Theme toggle surface (#32): a config.json `display.theme` field,
-     applied by app.js's apply() as data-theme on <html>. Two themes ship:
+     applied by app.js's apply() as data-theme on <html>. Three themes ship:
      "night_ops" (default, no override needed -- it's the base palette
-     above) and "retro_terminal" (CRT/green-phosphor). A theme overrides
-     only the CSS custom properties every component already reads through
+     above), "retro_terminal" (CRT/green-phosphor), and "retro_orange" (#45,
+     the same CRT treatment in amber phosphor). A theme overrides only the
+     CSS custom properties every component already reads through
      (--color-*, --panel-accent/--panel-border via .accent-*) -- component
      shape/markup never branches on theme, so a new theme is a palette +
      fx-layer addition, not a parallel set of components. */
@@ -144,6 +145,49 @@
      panel blur belong to the Night Ops palette, not this one. */
   html[data-theme="retro_terminal"] .glow{display:none}
   html[data-theme="retro_terminal"] .panel{backdrop-filter:none}
+
+  /* retro_orange (#45): same CRT/phosphor treatment as retro_terminal,
+     amber hue instead of green -- mirrors its structure line for line so
+     the two stay in sync if the CRT mechanic ever changes. */
+  html[data-theme="retro_orange"]{
+    --color-ink:      #ffdcae;
+    --color-muted:    #e3a35a;
+    --color-faint:    #8f5f2e;
+    --color-panel:    oklch(0.10 0.03 55 / 0.92);
+    --color-hairline: oklch(0.55 0.10 55 / 0.22);
+    /* Monochrome phosphor: accent/warm/crimson all converge on the same
+       amber so accent-cyan/amber/crimson panels (System/Forecast/offline)
+       read as one consistent CRT palette without touching the class
+       assignments in index.html or app.js. */
+    --color-accent:         #ff9a2e;
+    --color-warm:           #ff9a2e;
+    --color-crimson:        #ff5f4d;
+    --color-cyan-border:    #8a4f14;
+    --color-amber-border:   #8a4f14;
+    --color-crimson-border: #7a2a1f;
+    --color-online:         #ff9a2e;
+    /* Devices/Log panel chrome (border/underline) converges on the same
+       amber as every other panel; --color-crimson/-border above stay red
+       so alert states (offline banner/dot, critical log) still stand out
+       on the phosphor screen. */
+    --color-crimson-panel:        #ff9a2e;
+    --color-crimson-panel-border: #8a4f14;
+    /* Offline devices read as a dim amber dot next to "up"'s bright
+       --color-online, instead of switching to red. */
+    --color-offline-dot: #8a4f14;
+    /* CPU/MEM/BAT utilization bars go all-amber too -- graduated dim ->
+       bright phosphor instead of the red/gold/green spectrum. */
+    --spectrum-lo:  #5c3210;
+    --spectrum-mid: #c4741e;
+    --spectrum-hi:  #ff9a2e;
+  }
+  html[data-theme="retro_orange"] body{
+    font-family:"Fira Mono",ui-monospace,monospace;
+    background:#0a0503;
+  }
+  html[data-theme="retro_orange"] body.transparent{background:transparent}
+  html[data-theme="retro_orange"] .glow{display:none}
+  html[data-theme="retro_orange"] .panel{backdrop-filter:none}
 
   html,body{height:100%;margin:0;overflow:hidden}
   body{
@@ -304,14 +348,27 @@
      still. Never intercepts input -- same read-only surface as everything
      else in this system. */
   #crtfx{position:fixed;inset:0;display:none;pointer-events:none;z-index:var(--z-fx)}
-  html[data-theme="retro_terminal"] #crtfx{
+  html[data-theme="retro_terminal"] #crtfx,
+  html[data-theme="retro_orange"] #crtfx{
     display:block;
+    animation:crtflicker 6.4s steps(1) infinite;
+  }
+  html[data-theme="retro_terminal"] #crtfx{
     background:
       repeating-linear-gradient(to bottom,
         rgb(0 0 0 / 0) 0px, rgb(0 0 0 / 0) 1px,
         rgb(0 0 0 / .22) 2px, rgb(0 0 0 / .22) 3px),
       radial-gradient(120% 100% at 50% 50%, transparent 55%, rgb(0 10 4 / .6) 100%);
-    animation:crtflicker 6.4s steps(1) infinite;
+  }
+  /* retro_orange (#45): same scanline/vignette mechanic, vignette tinted
+     warm instead of green-black so it reads as amber phosphor, not CRT
+     green with a color filter slapped on top. */
+  html[data-theme="retro_orange"] #crtfx{
+    background:
+      repeating-linear-gradient(to bottom,
+        rgb(0 0 0 / 0) 0px, rgb(0 0 0 / 0) 1px,
+        rgb(0 0 0 / .22) 2px, rgb(0 0 0 / .22) 3px),
+      radial-gradient(120% 100% at 50% 50%, transparent 55%, rgb(10 4 0 / .6) 100%);
   }
   @keyframes crtflicker{
     0%, 94%, 100% { opacity: 1; }
