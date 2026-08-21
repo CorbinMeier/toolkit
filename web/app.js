@@ -187,9 +187,62 @@ function sysIcon(kind, tone = 'currentColor') {
       g.appendChild(el('line', { x1: 16, y1: 21, x2: 16, y2: 9 }));
       g.appendChild(el('polyline', { points: '12.5,12.5 16,9 19.5,12.5' }));
       break;
+    // Weather stat icons -- same hand-rolled stroke language as the System
+    // icons above (no emoji, no external asset), for the Wind/Humidity/
+    // Rain/UV rows and the sunrise/sunset readout (ISSUES.md, Forecast
+    // brought to System's icon-led row treatment).
+    case 'wind':
+      g.appendChild(el('path', { d: 'M2 8 H13.5 a2.75 2.75 0 1 0 -2.75 -2.75' }));
+      g.appendChild(el('path', { d: 'M2 12.5 H17.5 a2.75 2.75 0 1 1 -2.75 2.75' }));
+      g.appendChild(el('path', { d: 'M2 17 H10' }));
+      break;
+    case 'humidity':
+      g.appendChild(el('path', {
+        d: 'M12 2.5 C12 2.5 5 11.2 5 15.5 A7 7 0 0 0 19 15.5 C19 11.2 12 2.5 12 2.5 Z',
+      }));
+      break;
+    case 'rain':
+      g.appendChild(el('path', {
+        d: 'M6 14.5 a4 4 0 0 1 0.4 -7.98 a5 5 0 0 1 9.5 -0.9 '
+          + 'a3.5 3.5 0 0 1 0.6 8.88 Z',
+      }));
+      g.appendChild(el('line', { x1: 9, y1: 18, x2: 8, y2: 21.5 }));
+      g.appendChild(el('line', { x1: 14, y1: 18, x2: 13, y2: 21.5 }));
+      break;
+    case 'uv':
+      g.appendChild(el('circle', { cx: 12, cy: 12, r: 5 }));
+      for (let i = 0; i < 8; i++) {
+        const a = (i * Math.PI) / 4;
+        g.appendChild(el('line', {
+          x1: 12 + Math.cos(a) * 8, y1: 12 + Math.sin(a) * 8,
+          x2: 12 + Math.cos(a) * 10.5, y2: 12 + Math.sin(a) * 10.5,
+        }));
+      }
+      break;
+    case 'sunrise':
+      g.appendChild(el('line', { x1: 2, y1: 20, x2: 22, y2: 20 }));
+      g.appendChild(el('line', { x1: 12, y1: 8, x2: 12, y2: 16 }));
+      g.appendChild(el('polyline', { points: '8,13 12,8 16,13' }));
+      break;
+    case 'sunset':
+      g.appendChild(el('line', { x1: 2, y1: 20, x2: 22, y2: 20 }));
+      g.appendChild(el('line', { x1: 12, y1: 6, x2: 12, y2: 16 }));
+      g.appendChild(el('polyline', { points: '8,11 12,16 16,11' }));
+      break;
     default: break;
   }
   return g;
+}
+
+// Same stroke-arrow language as the 'net' sysIcon, as an inline HTML string
+// for embedding inside a sysRow value/sub string (Network's down/up
+// throughput) instead of a plain unicode ↓/↑ glyph.
+function arrowGlyph(dir) {
+  const points = dir === 'up' ? '4,9 8,4 12,9' : '4,7 8,12 12,7';
+  const [y1, y2] = dir === 'up' ? [4, 13] : [2, 12];
+  return `<svg viewBox="0 0 16 16" class="icon-inline-sm" fill="none" stroke="currentColor"
+    stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+    <polyline points="${points}"/><line x1="8" y1="${y1}" x2="8" y2="${y2}"/></svg>`;
 }
 
 // Three-stop hex interpolation (crimson -> warm -> online) used to color
@@ -314,12 +367,12 @@ function miniBar(pct, tone = 'var(--color-accent)') {
 // utilization-bar graphic in the same tail slot Storage/Network already
 // use, so every row shares one column layout -- a real <table>, not
 // independently-sized rows.
-function sysRow({ icon, label, value, sub = '', tail = null, tone = 'var(--color-accent)' }) {
+function sysRow({ icon, iconNode, label, value, sub = '', tail = null, tone = 'var(--color-accent)' }) {
   const tr = document.createElement('tr');
 
   const iconTd = document.createElement('td');
   iconTd.style.color = tone;
-  iconTd.appendChild(sysIcon(icon, tone));
+  iconTd.appendChild(iconNode || sysIcon(icon, tone));
 
   const labelTd = document.createElement('td');
   labelTd.className = 'text-muted tracking-[0.1em] uppercase pl-[0.6vmin] ' +
@@ -425,8 +478,8 @@ function renderNetwork(s) {
   box.replaceChildren();
   box.appendChild(sysRow({
     icon: 'net', label: 'NET', tone: 'var(--color-accent)',
-    value: `↓${bytes(s.net.down)}/s`,
-    sub: `↑${bytes(s.net.up)}/s`,
+    value: `${arrowGlyph('down')}${bytes(s.net.down)}/s`,
+    sub: `${arrowGlyph('up')}${bytes(s.net.up)}/s`,
     tail: stepChart([
       { values: ringSince('down', RING_WINDOW_MS), tone: 'var(--color-accent)' },
       { values: ringSince('up', RING_WINDOW_MS), tone: 'var(--color-warm)' },
@@ -436,32 +489,36 @@ function renderNetwork(s) {
 
 /* -------------------------------------------------------- weather panels */
 function renderWeather(w) {
-  if (w.unavailable) { $('wdesc').textContent = 'weather unavailable'; return; }
+  if (w.unavailable) {
+    $('wstats').replaceChildren(sysRow({
+      icon: 'uv', label: 'NOW', tone: 'var(--color-warm)', value: '—',
+      sub: 'weather unavailable',
+    }));
+    return;
+  }
 
-  $('wicon').replaceChildren(weatherIcon(w.icon));
-  $('temp').textContent = w.temp;
-  $('tempunit').textContent = w.units.temp;
-  $('wdesc').textContent = w.desc;
-  $('wfeels').textContent =
-    `feels ${w.apparent}${w.units.temp}   ·   H ${w.high}°  L ${w.low}°` +
-    (w.stale ? `   ·   ${Math.round(w.age_seconds / 60)}m old` : '');
-
-  const cells = [
-    ['Wind', `${w.wind}`, `${w.units.wind} ${compass(w.wind_dir)}`],
-    ['Humidity', `${w.humidity}`, '%'],
-    ['Rain', `${w.precip_prob ?? 0}`, '% today'],
-    ['UV', w.uv == null ? '—' : `${Math.round(w.uv)}`, 'index'],
+  // Current conditions + Wind/Humidity/Rain/UV: one sys-table of icon |
+  // label | value rows, same treatment as System's CPU/MEM/BAT -- no
+  // oversized glowing hero temperature/icon readout (user feedback: "not a
+  // fan of the LARGE CURRENT WEATHER... more of a fan of layout and
+  // organized data, not specialized 'THIS IS TO BE BROUGHT TO YOUR
+  // ATTENTION' decisions").
+  const nowIcon = weatherIcon(w.icon);
+  nowIcon.setAttribute('class', 'sysicon');
+  const rows = [
+    sysRow({
+      iconNode: nowIcon, label: 'NOW', tone: 'var(--color-warm)',
+      value: `${w.temp}${w.units.temp}`,
+      sub: `${w.desc} · feels ${w.apparent}${w.units.temp} · `
+        + `H${w.high}° L${w.low}°`
+        + (w.stale ? ` · ${Math.round(w.age_seconds / 60)}m old` : ''),
+    }),
+    sysRow({ icon: 'wind', label: 'Wind', value: `${w.wind}${w.units.wind}`, sub: compass(w.wind_dir) }),
+    sysRow({ icon: 'humidity', label: 'Humidity', value: `${w.humidity}%` }),
+    sysRow({ icon: 'rain', label: 'Rain', value: `${w.precip_prob ?? 0}%`, sub: 'today' }),
+    sysRow({ icon: 'uv', label: 'UV', value: w.uv == null ? '—' : `${Math.round(w.uv)}`, sub: 'index' }),
   ];
-  $('wstats').replaceChildren(...cells.map(([k, v, u]) => {
-    const d = document.createElement('div');
-    d.innerHTML = `
-      <div class="text-faint uppercase tracking-[0.18em]
-           text-[clamp(.5rem,1.05vmin,.72rem)]">${k}</div>
-      <div class="num text-ink/95 text-[clamp(.9rem,2.3vmin,1.7rem)]
-           font-light leading-tight">${v}<span
-           class="text-faint text-[clamp(.5rem,1.05vmin,.75rem)] ml-1">${u}</span></div>`;
-    return d;
-  }));
+  $('wstats').replaceChildren(...rows);
 
   renderHourly(w);
   renderWeek(w);
@@ -556,9 +613,20 @@ function renderSunMoon(w) {
     fill: daytime ? 'var(--color-warm)' : 'var(--color-faint)',
   }));
 
-  $('suntimes').innerHTML =
-    `<span class="text-faint">↑</span> ${hhmm(w.sun.sunrise)}` +
-    `<span class="text-faint ml-[1.4vmin]">↓</span> ${hhmm(w.sun.sunset)}`;
+  // Icon-led, not the old plain ↑/↓ unicode glyphs -- same sysIcon
+  // technical stroke language as the System panel.
+  const timeChip = (icon, time) => {
+    const span = document.createElement('span');
+    span.className = 'inline-flex items-center gap-[0.35vmin]';
+    const ic = sysIcon(icon, 'var(--color-faint)');
+    ic.classList.remove('sysicon');
+    ic.classList.add('icon-inline');
+    span.append(ic, document.createTextNode(time));
+    return span;
+  };
+  $('suntimes').replaceChildren(
+    timeChip('sunrise', hhmm(w.sun.sunrise)),
+    timeChip('sunset', hhmm(w.sun.sunset)));
 
   // moon: shade a circle by illuminated fraction
   const m = $('moon');

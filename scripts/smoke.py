@@ -142,11 +142,13 @@ def main() -> int:
             return (m.group(1) if m else "").strip()
 
         # No date/clock/location readout -- the user's own system already
-        # shows all three (see ISSUES.md #5, #9). Temperature is the
-        # remaining proof the forecast panel rendered.
+        # shows all three (see ISSUES.md #5, #9). Current temperature now
+        # renders as the Forecast panel's "NOW" sys-table row (no more
+        # large standalone hero readout, see ISSUES.md) -- its label plus
+        # a degree-marked value is the remaining proof the panel rendered.
         if not w.get("unavailable"):
-            check("temperature rendered", text_of("temp").lstrip("-").isdigit(),
-                  repr(text_of("temp")))
+            check("temperature rendered", ">NOW<" in dom and "°" in dom,
+                  "missing NOW row or degree value")
         check("system table rendered", dom.count(">MEM<") >= 1, dom.count(">MEM<"))
         check("disk rows rendered", dom.count("sysicon") >= 3,
               "expected cpu+mem+>=1 disk row")

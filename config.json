@@ -17,7 +17,7 @@
   },
   "display": {
     "layer": "BOTTOM",
-    "transparent": false,
+    "transparent": true,
     "theme": "midnight",
     "safe_area_top": 48,
     "safe_area_bottom": 48

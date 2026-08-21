@@ -7,7 +7,8 @@
     "lint:py": ".venv/bin/ruff check .",
     "lint": "pnpm run lint:js && pnpm run lint:py",
     "test": "python3 -m unittest discover -s tests",
-    "build": "python3 scripts/smoke.py"
+    "build": "python3 scripts/smoke.py",
+    "deploy": "scripts/update-desktop.sh"
   },
   "devDependencies": {
     "@eslint/js": "^9",

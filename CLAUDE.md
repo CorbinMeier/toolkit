@@ -67,7 +67,8 @@ data/               weather.json cache, extra.json, metrics.db (all gitignored)
 scripts/smoke.py    the "build" stage — end-to-end render assertions
 tests/test_dashd.py unittest suite (hermetic, no network)
 systemd/            the two user units
-ISSUES.md           the tracker — no GitHub remote on this project
+ISSUES.md           legacy tracker, superseded by GitHub issues (origin →
+                    CorbinMeier/desktop, see #21); kept only for history
 ```
 
 ## Running and editing
@@ -80,6 +81,12 @@ journalctl --user -u desktop-dashboard-host -n 30
 
 `web/` is plain HTML/CSS/JS with Tailwind compiled in the browser — **there is
 no build step and nothing to bundle**. Edit, then `reload`.
+
+`scripts/update-desktop.sh` (`pnpm run deploy`) automates that: runs the §6
+lint→test→build chain and, only if every stage is green, `reload`s
+`desktop-dashboard-host` so the change actually shows up on the wallpaper. A
+red chain exits before touching the live surfaces. It never starts/enables a
+unit — that stays behind the Gatekeeper Protocol.
 
 Preview without touching the desktop. `?static=1` is required — headless
 Chrome's virtual clock never completes a CSS animation, so without it you
@@ -290,8 +297,11 @@ any other script can add panels without touching the server.
 - **Never run `systemctl --user enable/start` autonomously** — present and
   wait for yes/no (Gatekeeper Protocol, same as the sibling `../claude`
   project). The current units were enabled on explicit approval.
-- `ISSUES.md` is the tracker; file work there before fixing it, newest first,
-  with `Started at:` / `Ended at:` / `Time elapsed:` lines pulled from `date`.
+- GitHub (`gh issue`) is the tracker now — `origin` points at
+  `CorbinMeier/desktop` (see #21). File work as a `gh` issue before fixing
+  it, bracket work with `gh issue comment` `Started at:` / `Ended at:` /
+  `Time elapsed:` lines pulled from `date`. `ISSUES.md` is legacy history
+  only — do not add new entries to it.
 - The human is the final verification step for anything visual. Verify
   functionally first (smoke stage, curl, journal), then ask them to look —
   a screenshot cannot see past their windows.
