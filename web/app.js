@@ -757,15 +757,20 @@ function renderCalendar(extra) {
     const isToday = day === today;
 
     const cell = document.createElement('div');
-    // #41: a border (not just bolder/brighter text) marks today, so it
-    // reads at a glance rather than needing the subtle weight/color
-    // difference to be noticed.
-    cell.className = 'num flex flex-col items-center justify-center gap-[0.1vmin] ' +
-      'text-[clamp(.48rem,1vmin,.7rem)] aspect-square ' +
+    cell.className = 'flex flex-col items-center justify-center gap-[0.1vmin]';
+
+    // #41/#42: the border marks today, not just bolder/brighter text, so it
+    // reads at a glance -- but it wraps only the number itself (fixed 2px,
+    // fit-content box), not the whole grid cell, so it stays a small compact
+    // square instead of stretching to the column width.
+    const num = document.createElement('span');
+    num.className = 'num inline-flex items-center justify-center leading-none ' +
+      'text-[clamp(.48rem,1vmin,.7rem)] w-[1.6em] h-[1.6em] box-border ' +
       (isToday
-        ? 'text-ink font-medium border border-[var(--color-warm)]'
-        : 'text-muted border border-transparent');
-    cell.textContent = String(day);
+        ? 'text-ink font-medium border-2 border-[var(--color-warm)]'
+        : 'text-muted border-2 border-transparent');
+    num.textContent = String(day);
+    cell.appendChild(num);
 
     if (events.has(iso)) {
       const dot = document.createElement('span');
