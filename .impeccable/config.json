@@ -11,6 +11,15 @@
         ],
         "createdAt": "2026-08-20T22:45:45.699Z",
         "reason": "Explicit user request to port ui/cyberpunk/CyberpunkUIKit's visual language; the kit's own source (--cp-glow: 0 0 5px accent, GlowText text-shadow, section-header underline glow) is authored with these exact glow shadows as its genre look, same sanctioned-exception class as FalloutTerminal/CrtNotFound's CRT scanline look per the template library's own meta.md (\"kept intentionally... not stripped as branding\")."
+      },
+      {
+        "rule": "design-system-font",
+        "value": "fira mono",
+        "files": [
+          "web/index.html"
+        ],
+        "createdAt": "2026-08-21T04:03:27.691Z",
+        "reason": "DESIGN.md typography section already reserves Fira Mono as --font-mono ('declared in the token set but not actually applied anywhere... reserved, not a live typographic voice') for a future live use; the Retro Terminal theme (#32) is that use."
       }
     ]
   }

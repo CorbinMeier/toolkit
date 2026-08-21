@@ -57,7 +57,57 @@
        the pre-first-paint fallback. */
     --safe-top:    0px;
     --safe-bottom: 0px;
+
+    /* Rendering layers (#32): a fixed z-order stack every component picks
+       one slot from, instead of ad-hoc z-index values scattered per
+       element. bg sits behind the panels (ambient glow blobs today); fx
+       sits above panel content but below the offline banner/boot overlay
+       -- built for the Retro Terminal CRT overlay (scanlines/vignette/
+       flicker), but themeless: any future effect that needs to sit above
+       content without being part of it uses this same slot. */
+    --z-bg: -1;
+    --z-content: 0;
+    --z-fx: 30;
+    --z-banner: 40;
+    --z-boot: 50;
   }
+
+  /* ---------------------------------------------------------------- theme
+     Theme toggle surface (#32): a config.json `display.theme` field,
+     applied by app.js's apply() as data-theme on <html>. Two themes ship:
+     "night_ops" (default, no override needed -- it's the base palette
+     above) and "retro_terminal" (CRT/green-phosphor). A theme overrides
+     only the CSS custom properties every component already reads through
+     (--color-*, --panel-accent/--panel-border via .accent-*) -- component
+     shape/markup never branches on theme, so a new theme is a palette +
+     fx-layer addition, not a parallel set of components. */
+  html[data-theme="retro_terminal"]{
+    --color-ink:      #b9ffce;
+    --color-muted:    #6fe39a;
+    --color-faint:    #3f8f63;
+    --color-panel:    oklch(0.09 0.03 150 / 0.92);
+    --color-hairline: oklch(0.55 0.10 150 / 0.22);
+    /* Monochrome phosphor: accent/warm/crimson all converge on the same
+       green so accent-cyan/amber/crimson panels (System/Forecast/offline)
+       read as one consistent CRT palette without touching the class
+       assignments in index.html or app.js. */
+    --color-accent:         #39ff88;
+    --color-warm:           #39ff88;
+    --color-crimson:        #ff5f4d;
+    --color-cyan-border:    #1c6b3f;
+    --color-amber-border:   #1c6b3f;
+    --color-crimson-border: #7a2a1f;
+    --color-online:         #39ff88;
+  }
+  html[data-theme="retro_terminal"] body{
+    font-family:"Fira Mono",ui-monospace,monospace;
+    background:#040a06;
+  }
+  html[data-theme="retro_terminal"] body.transparent{background:transparent}
+  /* CRT is flat and monochrome -- the cyberpunk ambient glow blobs and
+     panel blur belong to the Night Ops palette, not this one. */
+  html[data-theme="retro_terminal"] .glow{display:none}
+  html[data-theme="retro_terminal"] .panel{backdrop-filter:none}
 
   html,body{height:100%;margin:0;overflow:hidden}
   body{
@@ -168,8 +218,9 @@
   .util-bars{filter:drop-shadow(0 0 1.5px rgb(0 0 0 / .4))}
 
   /* slow drifting light so a static desktop still feels alive --
-     crimson/cyan, matching CyberpunkEnvironment's reddish ambient glow */
-  .glow{position:fixed;border-radius:50%;filter:blur(110px);pointer-events:none;z-index:-1}
+     crimson/cyan, matching CyberpunkEnvironment's reddish ambient glow.
+     Lives on the bg layer (#32) -- behind every panel, never above content. */
+  .glow{position:fixed;border-radius:50%;filter:blur(110px);pointer-events:none;z-index:var(--z-bg)}
   .g1{width:44vw;height:44vw;top:-16vw;left:-8vw;
       background:oklch(0.55 0.17 25/.30);animation:d1 42s ease-in-out infinite alternate}
   .g2{width:38vw;height:38vw;bottom:-16vw;right:-6vw;
@@ -188,13 +239,45 @@
      ever grab on this surface. No-op on an element that already fits. */
   .auto-cycle{overflow-y:hidden}
 
+  /* CRT fx layer (#32): a component-independent overlay above panel
+     content (fx layer) but below the offline banner/boot. Hidden by
+     default for every theme except retro_terminal -- the layer mechanism
+     itself is theme-agnostic (any future effect can target it), but this
+     is its one live consumer today: scanlines + a soft vignette + an
+     occasional flicker, the way a real phosphor CRT never sits perfectly
+     still. Never intercepts input -- same read-only surface as everything
+     else in this system. */
+  #crtfx{position:fixed;inset:0;display:none;pointer-events:none;z-index:var(--z-fx)}
+  html[data-theme="retro_terminal"] #crtfx{
+    display:block;
+    background:
+      repeating-linear-gradient(to bottom,
+        rgb(0 0 0 / 0) 0px, rgb(0 0 0 / 0) 1px,
+        rgb(0 0 0 / .22) 2px, rgb(0 0 0 / .22) 3px),
+      radial-gradient(120% 100% at 50% 50%, transparent 55%, rgb(0 10 4 / .6) 100%);
+    animation:crtflicker 6.4s steps(1) infinite;
+  }
+  @keyframes crtflicker{
+    0%, 94%, 100% { opacity: 1; }
+    95%           { opacity: .88; }
+    96%           { opacity: .98; }
+    97%           { opacity: .91; }
+  }
+  @media (prefers-reduced-motion:reduce){#crtfx{animation:none}}
+>>>>>>> 6bc5ddf (feat(web): add Retro Terminal theme, theme toggle, and a CRT fx render layer — fixes #32)
+
   #boot{position:fixed;inset:0;display:grid;place-items:center;
-        background:oklch(0.12 0.02 255);z-index:50;transition:opacity .5s}
+        background:oklch(0.12 0.02 255);z-index:var(--z-boot);transition:opacity .5s}
 </style>
 </head>
 
 <body class="h-full">
   <div class="glow g1"></div><div class="glow g2"></div>
+
+  <!-- fx layer (#32): theme-driven overlay effects (Retro Terminal's
+       scanlines/vignette/flicker today) live here, independent of and
+       above #root's panel content -- see --z-fx in the theme block above. -->
+  <div id="crtfx" aria-hidden="true"></div>
 
   <div id="boot"><div class="glowtext text-faint text-2xl tracking-widest">STARTING…</div></div>
 

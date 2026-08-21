@@ -855,6 +855,11 @@ function apply(s) {
   const outCfg = (s.config.outputs || {})[OUTPUT] || (s.config.outputs || {}).default || {};
   document.body.classList.toggle('transparent', !!disp.transparent);
   document.documentElement.dataset.layout = outCfg.layout || 'auto';
+  // Theme toggle surface: a config.json field for now (issue #32) -- a
+  // natural future home is the Control Backend (#30) once it exists, but
+  // this doesn't block on that. data-theme on <html> drives the CSS
+  // variable overrides and the CRT fx layer in index.html.
+  document.documentElement.dataset.theme = disp.theme || 'night_ops';
   const root = document.documentElement.style;
   root.setProperty('--safe-top', `${disp.safe_area_top || 0}px`);
   root.setProperty('--safe-bottom', `${disp.safe_area_bottom || 0}px`);

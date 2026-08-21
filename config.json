@@ -18,7 +18,11 @@
   "display": {
     "layer": "BOTTOM",
     "transparent": true,
-    "theme": "midnight",
+    "theme": "night_ops",
+    "_theme_options": [
+      "night_ops",
+      "retro_terminal"
+    ],
     "safe_area_top": 48,
     "safe_area_bottom": 48
   },

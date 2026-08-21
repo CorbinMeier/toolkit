@@ -139,6 +139,70 @@ Within each half, panels are content-sized, not stretched: rows pack toward the 
 
 Every metric table is compact, not stretched (#17): no table carries `w-full` — each sizes to its own content instead of filling the panel, so a narrow value or a small right-aligned chart doesn't leave a dead gap between itself and its column boundary. Every System table now shares one `<colgroup>` shape (icon `1.6–1.7em`, label / value auto-sized to content, tail auto-sized) — CPU/MEM/BAT's table used to diverge with a leading status LED column (#17); that column is retired (#31) and CPU/MEM/BAT now carries its Utilization Bars graphic in the same tail slot Storage/Network already use.
 
+## Themes
+
+The system ships two selectable visual themes, toggled via `config.json`'s
+`display.theme` field (`"night_ops"` | `"retro_terminal"`, ISSUES.md #32) and
+applied by `app.js`'s `apply()` as `data-theme` on `<html>`. A theme is
+*only* a palette swap plus fx-layer content — no component's markup or
+shape branches on which theme is active; every component reads color
+exclusively through the `--color-*`/`--panel-accent`/`--panel-border`
+custom properties, so overriding those under `html[data-theme="..."]` in
+`web/index.html` is sufficient to reskin the whole page. The toggle surface
+is deliberately just a config field for now — the natural future home is
+the Control Backend (#30) once it exists, but implementation doesn't block
+on that.
+
+### Night Ops HUD (default)
+The system described everywhere else in this document — teal/gold/red
+accent triad, Fira Sans, backdrop blur, drifting ambient gradient glow.
+
+### Retro Terminal
+A CRT/green-phosphor console look. Same panel shapes, table layout, and
+component structure as Night Ops HUD — only the palette and surface
+treatment change:
+- **Palette:** every accent (teal/gold/red) converges on one phosphor
+  green (`#39ff88`) plus a near-black green-tinted panel fill, so
+  `accent-cyan`/`accent-amber`/`accent-crimson` regions read as a single
+  monochrome instrument instead of the tri-color HUD — matching the
+  reference aesthetic of a single-color terminal, not a stylistic
+  shortcut.
+- **Typography:** switches to Fira Mono (`--font-mono` is declared in the
+  base token set but deliberately unused by Night Ops HUD — Retro Terminal
+  is its first live consumer).
+- **Surface:** panel `backdrop-filter` blur is turned off (flat, not
+  glassy — closer to a real terminal) and the ambient drifting glow blobs
+  (`.glow`, `.g1`/`.g2`) are hidden — that ambient cyberpunk lighting is a
+  Night Ops HUD-specific device, not a generic background treatment.
+- **CRT fx overlay:** a scanline + vignette layer with an occasional
+  subtle flicker (`#crtfx`, see Rendering Layers below), respecting
+  `prefers-reduced-motion`.
+
+## Rendering Layers
+
+Components render on one of a small, fixed set of z-order layers (ISSUES.md
+#32) rather than picking ad-hoc `z-index` values — declared once as CSS
+custom properties (`--z-bg`, `--z-content`, `--z-fx`, `--z-banner`,
+`--z-boot`) in `web/index.html`'s `:root` block:
+
+| Layer | Token | Holds |
+|---|---|---|
+| Background | `--z-bg` (-1) | The drifting ambient glow blobs (`.glow`) |
+| Content | `--z-content` (0) | `#root` — every panel, the System/Forecast structure |
+| FX | `--z-fx` (30) | Theme-driven overlay effects, independent of panel content — today, Retro Terminal's `#crtfx` scanline/vignette/flicker overlay |
+| Banner | `--z-banner` (40) | The offline banner |
+| Boot | `--z-boot` (50) | The startup overlay, dismissed on first successful render |
+
+The FX layer is the reason this exists as a named mechanism rather than a
+single extra `div`: a CRT-style overlay needs to sit **above** panel
+content (so scanlines cross it) but **below** the offline banner and boot
+overlay (so a real alert is never dimmed by a decorative effect), and it
+needs to do so independently of which theme is active — the layer is
+theme-agnostic infrastructure; only its content (`#crtfx`'s background/
+animation) is theme-conditional. A future effect that needs the same
+"above content, below alerts" placement reuses the FX layer rather than
+inventing another `z-index`.
+
 ## Elevation & Depth
 
 Flat by design — there is no drop-shadow-based elevation anywhere in the system. Depth comes from two mechanisms instead: `backdrop-filter: blur(6px)` on every panel (rising to `blur(18px) saturate(1.3)` if the wallpaper is running in transparent mode over a photo background), and layered ambient radial/linear gradients in the page background that drift slowly (`42s`/`55s`, deliberately different periods so the two glow blobs never fall into a visible sync). `box-shadow` and `text-shadow` exist in the system, but they're never used to lift a surface — only to make an accent-colored edge or piece of text glow, which is a status signal, not a depth cue (see Colors' Status-Only Glow Rule).

@@ -166,6 +166,10 @@ def main() -> int:
         check("tailwind compiled utilities",
               "--color-ink" in dom and ".text-faint" in dom,
               "vendor bundle may not have run")
+        theme = state["config"]["display"].get("theme", "night_ops")
+        check(f'theme "{theme}" applied to <html>', f'data-theme="{theme}"' in dom,
+              "app.js should set documentElement.dataset.theme from display.theme")
+        check("crt fx layer present", 'id="crtfx"' in dom, "missing #crtfx overlay")
 
         print(f"\n\033[32m{ok_count} checks passed\033[0m")
         return 0
