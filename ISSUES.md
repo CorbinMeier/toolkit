@@ -2,6 +2,38 @@
 
 Newest first. No GitHub remote on this project, so this file is the tracker.
 
+## 18. Battery LED: charging should read green, not red; flash red only at low charge
+
+Status: closed
+Source: user request
+Date: 2026-08-20
+
+The battery status LED lit up red whenever the laptop was plugged in --
+backwards, since red reads as an alarm and "plugged in and charging" is the
+good state. Requested behavior: charging lights the LED green (bright,
+overriding everything else); unplugged and running fine shows a dim green;
+unplugged and at 35% or below turns red and flashes. Threshold moved from
+20% to 35% (and the BAT row's warm-text low-battery tone moved to match, so
+the value color and the LED agree on what "low" means).
+
+`metricLed()` (`web/app.js`) now pairs the `icon-led--batt-charging` and
+`icon-led--batt-dim` glow-level modifiers with the existing
+`icon-led--green` color class (same green CPU/MEM already use for their
+healthy band); only the `low` state keeps the base red fill plus
+`icon-led--flash`. No new CSS was needed -- `--batt-charging`'s glow:1 and
+`--batt-dim`'s glow:0.25 already matched "bright" vs. "dim" once paired
+with a color class.
+
+Verified via the full lint -> test -> build chain (eslint, ruff, unittest
+against system python3, `scripts/smoke.py`) and a live `reload` of
+`desktop-dashboard-host`; visual confirmation is the user's per the
+project's usual convention.
+
+Started at: 2026-08-20T19:07:33-07:00
+Ended at: 2026-08-20T19:07:33-07:00
+Time elapsed: 0m (implementation and verification already completed inline
+before filing; see note below)
+
 ## 17. System panel polish: drop battery graphs, traffic-light LEDs, floppy storage icon, compact tables
 
 Status: closed
