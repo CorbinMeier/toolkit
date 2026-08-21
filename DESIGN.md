@@ -184,6 +184,11 @@ Every surface in this system is read-only — there are no buttons, form inputs,
 - **Dot:** a `0.55em` solid circle in the banner's accent color, `50%` border-radius, sitting inline before the message text.
 - **Banner:** a small notched panel (same pentagon `clip-path` as every other panel) in the Distress Red accent, fixed to the top-center of the viewport, hidden by default and shown only after two consecutive failed polls — deliberately debounced so a single dropped request never flashes the banner.
 
+### Auto-Cycle Reveal
+- **Problem:** the desktop surface has no pointer or keyboard reach — it sits below every window — so a panel whose content outgrows its box has no scrollbar a user could ever grab (ISSUES.md #29).
+- **Mechanism:** opt in per-element with `class="auto-cycle"` plus a CSS height/max-height so it can actually overflow (`overflow-y:hidden` — no visible scrollbar, since it's never user-driven). `app.js`'s `refreshAutoCycles()` (called every `apply()`) scrolls it slowly to the bottom, dwells, resets to the top, and repeats; an element that already fits its box is left alone.
+- **Status:** general-purpose only — no shipped panel needs it yet. Future components (networked devices, log highlighter, tasks, ...) adopt it as they're built rather than reinventing their own reveal behavior.
+
 ## Do's and Don'ts
 
 ### Do:

@@ -59,7 +59,12 @@ web/app.js          all rendering; pure function of last good state.
                     in-memory ring buffer (this session's own /api/state
                     polls, for the 30s CPU/Memory tier and the Network
                     chart) and trendHistory (/api/history rows, for every
-                    tier >= 5 minutes)
+                    tier >= 5 minutes). refreshAutoCycles() (called every
+                    apply()) drives any class="auto-cycle" element through a
+                    passive scroll-dwell-reset loop -- the only way to reveal
+                    overflowing panel content on a surface with no pointer
+                    reach (#29); general mechanism only, no shipped panel
+                    opts in yet
 web/vendor/         Tailwind v4 browser build, vendored (no network at runtime)
 config.json         location, units, port, display layer, per-output overrides,
                     metrics sample/retain interval

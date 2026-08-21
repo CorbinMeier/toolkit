@@ -648,6 +648,64 @@ function renderSunMoon(w) {
 }
 
 /* ------------------------------------------------------------------ poll */
+/* ------------------------------------------------------- auto-cycle reveal
+ * The desktop surface sits below every window with no pointer/keyboard
+ * reach (#29) -- a panel whose content outgrows its box has no scrollbar a
+ * user could ever grab. Any element marked class="auto-cycle" (with a CSS
+ * height/max-height so it can actually overflow) opts into a passive
+ * scroll-dwell-reset loop that reveals the rest of its content over time.
+ * refreshAutoCycles() is called every apply() and is the only integration
+ * point a future panel (networked devices, log highlighter, tasks, ...)
+ * needs -- it doesn't touch anything that already fits its box.
+ */
+const autoCycles = new WeakMap();
+
+function stopAutoCycle(el) {
+  const c = autoCycles.get(el);
+  if (!c) return;
+  clearTimeout(c.timer);
+  autoCycles.delete(el);
+  el.scrollTop = 0;
+}
+
+function driveAutoCycle(el, overflow, { stepPx = 1, stepMs = 45, dwellMs = 2600 } = {}) {
+  const c = { overflow, timer: null };
+  autoCycles.set(el, c);
+  const step = () => {
+    const max = el.scrollHeight - el.clientHeight;
+    if (el.scrollTop >= max - 0.5) {
+      c.timer = setTimeout(() => {
+        el.scrollTop = 0;
+        c.timer = setTimeout(step, dwellMs);
+      }, dwellMs);
+      return;
+    }
+    el.scrollTop = Math.min(max, el.scrollTop + stepPx);
+    c.timer = setTimeout(step, stepMs);
+  };
+  c.timer = setTimeout(step, dwellMs);
+}
+
+function refreshAutoCycles() {
+  // Static snapshot renders (headless screenshot, ?static=1) and
+  // prefers-reduced-motion both want a single settled frame, not a
+  // perpetually running timer chain.
+  const skipMotion = STATIC || matchMedia('(prefers-reduced-motion: reduce)').matches;
+  document.querySelectorAll('.auto-cycle').forEach((box) => {
+    const overflow = box.scrollHeight - box.clientHeight;
+    const running = autoCycles.get(box);
+    if (overflow <= 2 || skipMotion) {
+      if (running) stopAutoCycle(box);
+      return;
+    }
+    // Same shape as the in-flight cycle -- let it keep going instead of
+    // yanking back to the top on every ~5s poll.
+    if (running && Math.abs(running.overflow - overflow) < 4) return;
+    if (running) stopAutoCycle(box);
+    driveAutoCycle(box, overflow);
+  });
+}
+
 function apply(s) {
   state = s;
 
@@ -664,6 +722,7 @@ function apply(s) {
   renderCpuMemBat(s.sys);
   renderDisks(s.sys.disks);
   renderNetwork(s.sys);
+  refreshAutoCycles();
 
   const boot = $('boot');
   if (boot && !boot.dataset.done) {

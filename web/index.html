@@ -171,6 +171,13 @@
   .fadein{animation:fi .6s ease both}
   @keyframes fi{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
 
+  /* Opt-in for any panel content that can outgrow its box (#29): give the
+     element a height/max-height so it can actually overflow, add
+     class="auto-cycle", and app.js's refreshAutoCycles() drives it through
+     a passive scroll-dwell-reset loop -- there is no scrollbar a user could
+     ever grab on this surface. No-op on an element that already fits. */
+  .auto-cycle{overflow-y:hidden}
+
   #boot{position:fixed;inset:0;display:grid;place-items:center;
         background:oklch(0.12 0.02 255);z-index:50;transition:opacity .5s}
 </style>
