@@ -1,0 +1,261 @@
+#!/usr/bin/env python3
+"""Mobile-facing config/control surface for the desktop dashboard (#30).
+
+A second, small HTTP server -- separate from bin/dashd-serve on purpose,
+since that one binds loopback-only "by design. No auth" (see its own
+docstring). This one binds LAN-reachable (config.control.host/port) so a
+phone on the same network can edit config.json without hand-editing it.
+
+Trust model, since a LAN-bound write surface needs one:
+  - Every route except /api/health requires a bearer token (query `?t=` or
+    `Authorization: Bearer`), checked with hmac.compare_digest. The token
+    is generated on first run and persisted to data/control_token.txt
+    (0600, gitignored).
+  - /api/control/qr.svg and /api/control/rotate are further restricted to
+    loopback callers regardless of token -- the QR code (which embeds the
+    token in its URL) and the ability to invalidate that token are only
+    ever reachable from the machine itself. A phone is paired by scanning
+    a QR shown *at* the desktop (`--print-qr`, or the loopback qr.svg
+    route from a local browser/SSH tunnel), not by discovering it over
+    the LAN.
+  - POST /api/control/config only ever writes fields in EDITABLE below --
+    an attacker with a stolen token can flip units/devices/logs settings,
+    not repoint the server, change ports, or touch location/credentials.
+
+QR rendering shells out to `qrencode` (already packaged, no sudo needed on
+this machine -- see CLAUDE.md) rather than vendoring or hand-rolling a QR
+encoder; same "shell out to an existing system tool" pattern lib/sysinfo.py
+already uses for lsblk.
+"""
+from __future__ import annotations
+
+import hmac
+import json
+import os
+import secrets
+import socket
+import subprocess
+import sys
+import urllib.parse
+from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parent.parent
+WEB = ROOT / "web" / "control"
+DATA = ROOT / "data"
+CONFIG = ROOT / "config.json"
+TOKEN_PATH = DATA / "control_token.txt"
+
+# Dotted config paths the mobile UI may read/write. Everything else
+# (location, server/control's own host/port, credentials) is unreachable
+# through this API no matter what the request body contains.
+EDITABLE = {
+    "units": {"temperature", "wind", "precipitation", "clock24"},
+    "display": {"transparent", "safe_area_top", "safe_area_bottom"},
+    "devices": {"scan_interval_seconds", "scan_target"},
+    "logs": {"source_type", "journalctl_unit", "file_path", "max_lines"},
+}
+
+
+def load_config() -> dict:
+    with CONFIG.open() as fh:
+        return json.load(fh)
+
+
+def save_config(cfg: dict) -> None:
+    tmp = CONFIG.with_suffix(".json.tmp")
+    tmp.write_text(json.dumps(cfg, indent=2))
+    tmp.replace(CONFIG)  # atomic on the same filesystem
+
+
+def load_token() -> str:
+    if TOKEN_PATH.exists():
+        tok = TOKEN_PATH.read_text().strip()
+        if tok:
+            return tok
+    DATA.mkdir(exist_ok=True)
+    tok = secrets.token_urlsafe(24)
+    TOKEN_PATH.write_text(tok)
+    TOKEN_PATH.chmod(0o600)
+    return tok
+
+
+def lan_ip() -> str:
+    """Best-effort outbound-interface address -- opens a UDP socket and asks
+    the kernel which local address a route to 8.8.8.8 would use. No packet
+    is actually sent (UDP connect() is just route selection)."""
+    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    try:
+        s.connect(("8.8.8.8", 80))
+        return s.getsockname()[0]
+    except OSError:
+        return "127.0.0.1"
+    finally:
+        s.close()
+
+
+def pairing_url(cfg: dict, token: str) -> str:
+    port = cfg.get("control", {}).get("port", 4321)
+    return f"http://{lan_ip()}:{port}/?t={urllib.parse.quote(token)}"
+
+
+def check_token(token: str, supplied: str) -> bool:
+    """Constant-time compare, pulled out of Handler so it's testable without
+    spinning up a real HTTP request."""
+    return bool(supplied) and hmac.compare_digest(supplied, token)
+
+
+def merge_patch(cfg: dict, patch: dict) -> list[str]:
+    """Apply `patch` onto `cfg` in place, restricted to EDITABLE. Returns
+    the dotted keys that were rejected as unknown/out-of-scope, so the
+    caller can report a partial-save instead of silently dropping fields.
+    """
+    rejected = []
+    if not isinstance(patch, dict):
+        return ["<patch body>"]
+    for section, fields in patch.items():
+        if section not in EDITABLE or not isinstance(fields, dict):
+            rejected.append(section)
+            continue
+        cfg.setdefault(section, {})
+        for key, value in fields.items():
+            if key not in EDITABLE[section]:
+                rejected.append(f"{section}.{key}")
+                continue
+            cfg[section][key] = value
+    return rejected
+
+
+class Handler(SimpleHTTPRequestHandler):
+    def __init__(self, *a, **kw):
+        super().__init__(*a, directory=str(WEB), **kw)
+
+    def _json(self, payload: dict, code: int = 200) -> None:
+        body = json.dumps(payload).encode()
+        self.send_response(code)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(body)))
+        self.send_header("Cache-Control", "no-store")
+        self.end_headers()
+        self.wfile.write(body)
+
+    def _is_loopback(self) -> bool:
+        return self.client_address[0] in ("127.0.0.1", "::1")
+
+    def _authed(self, token: str) -> bool:
+        supplied = self.headers.get("Authorization", "")
+        if supplied.startswith("Bearer "):
+            supplied = supplied[len("Bearer "):]
+        else:
+            qs = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
+            supplied = qs.get("t", [""])[0]
+        return check_token(token, supplied)
+
+    def do_GET(self) -> None:  # noqa: N802
+        route = urllib.parse.urlparse(self.path).path
+        token = load_token()
+
+        if route == "/api/health":
+            self._json({"ok": True})
+            return
+
+        if route == "/api/control/qr.svg":
+            if not self._is_loopback():
+                self._json({"error": "loopback only"}, 403)
+                return
+            url = pairing_url(load_config(), token)
+            try:
+                out = subprocess.run(
+                    ["qrencode", "-t", "SVG", "-o", "-", url],
+                    capture_output=True, timeout=5, check=True)
+            except (OSError, subprocess.SubprocessError):
+                self._json({"error": "qrencode unavailable", "url": url}, 503)
+                return
+            self.send_response(200)
+            self.send_header("Content-Type", "image/svg+xml")
+            self.send_header("Content-Length", str(len(out.stdout)))
+            self.send_header("Cache-Control", "no-store")
+            self.end_headers()
+            self.wfile.write(out.stdout)
+            return
+
+        if route == "/api/control/config":
+            if not self._authed(token):
+                self._json({"error": "unauthorized"}, 401)
+                return
+            cfg = load_config()
+            self._json({section: {k: cfg.get(section, {}).get(k) for k in fields}
+                        for section, fields in EDITABLE.items()})
+            return
+
+        super().do_GET()
+
+    def do_POST(self) -> None:  # noqa: N802
+        route = urllib.parse.urlparse(self.path).path
+        token = load_token()
+
+        if route == "/api/control/config":
+            if not self._authed(token):
+                self._json({"error": "unauthorized"}, 401)
+                return
+            length = int(self.headers.get("Content-Length", 0) or 0)
+            try:
+                patch = json.loads(self.rfile.read(length) or b"{}")
+            except json.JSONDecodeError:
+                self._json({"error": "invalid json"}, 400)
+                return
+            cfg = load_config()
+            rejected = merge_patch(cfg, patch)
+            save_config(cfg)
+            self._json({"ok": True, "rejected": rejected})
+            return
+
+        if route == "/api/control/rotate":
+            if not self._is_loopback():
+                self._json({"error": "loopback only"}, 403)
+                return
+            new_token = secrets.token_urlsafe(24)
+            DATA.mkdir(exist_ok=True)
+            TOKEN_PATH.write_text(new_token)
+            TOKEN_PATH.chmod(0o600)
+            self._json({"ok": True})
+            return
+
+        self._json({"error": "not found"}, 404)
+
+    def log_message(self, fmt, *args):  # quiet; systemd journal does the rest
+        if os.environ.get("DASHD_VERBOSE"):
+            sys.stderr.write(f"{self.address_string()} {fmt % args}\n")
+
+
+def main() -> int:
+    cfg = load_config()
+    DATA.mkdir(exist_ok=True)
+    WEB.mkdir(parents=True, exist_ok=True)
+    token = load_token()
+    host = cfg.get("control", {}).get("host", "0.0.0.0")
+    port = cfg.get("control", {}).get("port", 4321)
+
+    if "--print-qr" in sys.argv:  # local-terminal pairing, no browser needed
+        url = pairing_url(cfg, token)
+        print(f"Pairing URL: {url}")
+        try:
+            subprocess.run(["qrencode", "-t", "ANSIUTF8", url], check=True)
+        except (OSError, subprocess.SubprocessError) as exc:
+            print(f"(qrencode unavailable: {exc})")
+        return 0
+
+    srv = ThreadingHTTPServer((host, port), Handler)
+    srv.daemon_threads = True
+    print(f"dashd-control  http://{host}:{port}  "
+          f"(pair from the desktop: --print-qr, or GET /api/control/qr.svg "
+          f"over loopback)", flush=True)
+    try:
+        srv.serve_forever()
+    except KeyboardInterrupt:
+        print("bye", flush=True)
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

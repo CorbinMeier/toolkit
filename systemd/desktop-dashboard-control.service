@@ -1,0 +1,21 @@
+[Unit]
+Description=Desktop dashboard mobile control surface (LAN-reachable)
+Documentation=file:%h/Code/Dashboards/desktop/README.md
+PartOf=graphical-session.target
+After=graphical-session.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/python3 %h/Code/Dashboards/desktop/bin/dashd-control
+Restart=on-failure
+RestartSec=3
+# Unlike serve/collect, this one binds LAN-reachable by design (#30) --
+# every route past /api/health is token-gated in the app itself (see
+# bin/dashd-control's docstring). Still no elevated OS access needed.
+PrivateDevices=yes
+ProtectHome=read-only
+ReadWritePaths=%h/Code/Dashboards/desktop/data %h/Code/Dashboards/desktop/config.json
+NoNewPrivileges=yes
+
+[Install]
+WantedBy=graphical-session.target

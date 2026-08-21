@@ -14,14 +14,22 @@ source-agnostic Tasks panel (#25) and a Schedule panel (#23, a compact
 today's-agenda list via `data/extra.json`'s `schedule` array; no source
 is wired up yet) stacked below.
 
-Three processes:
+Four processes:
 
 - `bin/dashd-serve` — loopback static + data server on `127.0.0.1:4320`
 - `bin/dashd-collect` — standalone historical-metrics sampler; the only
   writer of `data/metrics.db` (#14)
 - `bin/dashd-host` — GTK3 + gtk-layer-shell + WebKit2 surfaces, one per output
+- `bin/dashd-control` — LAN-reachable mobile config/control surface, paired
+  by scanning a QR code shown at the desktop (`--print-qr`, or the
+  loopback-only `/api/control/qr.svg`); every other route is token-gated
+  (#30)
 
-All three run as **enabled** systemd user units (see *Current state* below).
+The first three run as **enabled** systemd user units (see *Current state*
+below); `dashd-control`'s unit exists
+(`systemd/desktop-dashboard-control.service`) but is **not enabled** — new
+units wait for the Gatekeeper Protocol (see *Conventions*), same as the
+other three did before their own approval.
 
 `DESIGN.md` (plus its `.impeccable/design.json` sidecar) documents the
 visual system — "The Night Ops HUD": the teal/gold/red accent triad,
@@ -54,6 +62,15 @@ lib/sysinfo.py      shared psutil sampling (system_stats() for dashd-serve's
                     playing/paused or playerctl isn't installed
 lib/metrics.py      SQLite historical-metrics store (cpu/mem/battery_pct);
                     self-migrates ALTER TABLE ADD COLUMN for an older DB
+lib/devices.py      LAN device-presence sweep (#27): shells out to
+                    `nmap -sn` (ping sweep, no root needed), parsed from
+                    grepable -oG output
+lib/logsrc.py       filtered/highlighted log tailing (#28): journalctl unit
+                    or arbitrary file, matched against config.logs.patterns
+                    (regex -> status/label); returns only matched lines
+bin/dashd-control   mobile control server (#30) -- see *Layout*'s process
+                    list above and the docstring at the top of the file for
+                    the token/loopback trust model
 web/index.html      panel structure (Tailwind utility classes); System
                     renders as three compact <table>s (not w-full -- sized
                     to content, #17), cpu/mem/bat led | icon | label | value
@@ -64,9 +81,11 @@ web/index.html      panel structure (Tailwind utility classes); System
                     stacked rows; Battery has none (#17). Music (#26) is a
                     fourth System sub-section below Network, same
                     icon|label|value|tail row shape, hidden entirely when
-                    nothing is playing/paused. Third panel, Tasks, renders
+                    nothing is playing/paused. Tasks (#25) renders
                     state.tasks.items as checkbox|text|due rows, empty state
-                    "No tasks" (#25)
+                    "No tasks". A stacked Monitor section (Devices + Log,
+                    #27/#28) follows System/Forecast -- same sys-table/
+                    notched-panel treatment
 web/app.js          all rendering; pure function of last good state.
                     Two independent trend sources feed the step charts: an
                     in-memory ring buffer (this session's own /api/state
@@ -79,12 +98,19 @@ web/app.js          all rendering; pure function of last good state.
                     reach (#29); general mechanism only, no shipped panel
                     opts in yet
 web/vendor/         Tailwind v4 browser build, vendored (no network at runtime)
+web/control/        standalone mobile control UI served by bin/dashd-control
+                    (plain HTML/JS, deliberately not styled to DESIGN.md's
+                    Night Ops HUD -- it's a phone-viewed form, not the
+                    wallpaper surface)
 config.json         location, units, port, display layer, per-output overrides,
-                    metrics sample/retain interval
-data/               weather.json cache, extra.json, metrics.db (all gitignored)
+                    metrics sample/retain interval, control host/port,
+                    devices scan interval/target, log source/patterns (#30)
+data/               weather.json cache, extra.json, metrics.db, devices.json
+                    cache, control_token.txt (all gitignored)
 scripts/smoke.py    the "build" stage — end-to-end render assertions
 tests/test_dashd.py unittest suite (hermetic, no network)
-systemd/            the two user units
+tests/test_control.py unit tests for dashd-control's auth/whitelist logic
+systemd/            the four user units (dashd-control's not yet enabled)
 ```
 
 ## Running and editing
@@ -124,7 +150,7 @@ correctly *below* windows; ask the user to look instead.
 ## Verification chain (lint → test → build)
 
 ```bash
-npx eslint web/app.js eslint.config.js   # or: pnpm run lint:js
+npx eslint web/app.js web/control/control.js eslint.config.js   # or: pnpm run lint:js
 .venv/bin/ruff check .                   # or: pnpm run lint:py
 python3 -m unittest discover -s tests    # or: pnpm run test
 python3 scripts/smoke.py                 # or: pnpm run build
@@ -347,7 +373,29 @@ any other script can add panels without touching the server.
   during implementation"); renders an empty-state row until something
   populates `extra.json`. Verified functionally (smoke stage) and visually
   via a static headless-Chrome render; not checked against the live desktop.
-- All three units (`serve`/`collect`/`host`) **enabled and active** against
+- #27: added `lib/devices.py` (nmap -sn ping sweep) and a Devices row in the
+  new Monitor panel. Scanning runs off the request thread -- a `/24` sweep
+  can take real seconds, especially if scan_target isn't actually reachable
+  from this host, so dashd-serve kicks it off in a background thread and
+  serves the last-known cache (`data/devices.json`, TTL
+  devices.scan_interval_seconds) rather than blocking /api/state on it.
+- #28: added `lib/logsrc.py` (journalctl unit or file tail, filtered
+  against config.logs.patterns) and a Log row in the Monitor panel --
+  matched/highlighted lines only, not a full tail. Verified end-to-end
+  against a real running unit (NetworkManager) and a temp file source in
+  this session; the shipped default (`journalctl_unit: "ssh"`) is empty on
+  this dev machine since sshd isn't running here, which is correct
+  behavior, not a bug.
+- #30: added `bin/dashd-control`, a LAN-reachable mobile config surface
+  (units/display/devices/logs, whitelisted) paired via a QR code
+  (`qrencode`, already packaged -- no new dependency). Token-gated past
+  `/api/health`; QR rendering and token rotation are further loopback-only.
+  Its systemd unit exists but is **not enabled** (Gatekeeper Protocol).
+  Verified end-to-end with curl (health/auth/config GET+POST/qr.svg); QR
+  scannability itself relies on `qrencode`'s own correctness rather than an
+  in-session phone scan -- flagging that as unverified-by-a-human, not
+  unverified-at-all.
+- All three original units (`serve`/`collect`/`host`) **enabled and active** against
   `graphical-session.target`; the dashboard survives logout.
   `desktop-dashboard-collect` (#14) was linked, approved, and
   `enable --now`'d in-session — Gatekeeper Protocol satisfied, same as the

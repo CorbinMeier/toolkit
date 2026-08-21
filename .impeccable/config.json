@@ -20,6 +20,66 @@
         ],
         "createdAt": "2026-08-21T04:03:27.691Z",
         "reason": "DESIGN.md typography section already reserves Fira Mono as --font-mono ('declared in the token set but not actually applied anywhere... reserved, not a live typographic voice') for a future live use; the Retro Terminal theme (#32) is that use."
+      },
+      {
+        "rule": "design-system-color",
+        "value": "#e6edf3",
+        "createdAt": "2026-08-21T04:07:29.856Z",
+        "reason": "web/control is a standalone mobile config form (#30), deliberately not styled to DESIGN.md's Night Ops HUD -- it's a phone-viewed utility page, not the wallpaper surface"
+      },
+      {
+        "rule": "design-system-color",
+        "value": "#7ee7ea",
+        "createdAt": "2026-08-21T04:07:29.911Z",
+        "reason": "web/control is a standalone mobile config form (#30), deliberately not styled to DESIGN.md's Night Ops HUD -- it's a phone-viewed utility page, not the wallpaper surface"
+      },
+      {
+        "rule": "design-system-radius",
+        "value": "8px",
+        "createdAt": "2026-08-21T04:07:29.977Z",
+        "reason": "web/control is a standalone mobile config form (#30), deliberately not styled to DESIGN.md's Night Ops HUD -- it's a phone-viewed utility page, not the wallpaper surface"
+      },
+      {
+        "rule": "design-system-color",
+        "value": "#9fb0bd",
+        "createdAt": "2026-08-21T04:07:30.031Z",
+        "reason": "web/control is a standalone mobile config form (#30), deliberately not styled to DESIGN.md's Night Ops HUD -- it's a phone-viewed utility page, not the wallpaper surface"
+      },
+      {
+        "rule": "design-system-color",
+        "value": "#c3ccd4",
+        "createdAt": "2026-08-21T04:07:30.086Z",
+        "reason": "web/control is a standalone mobile config form (#30), deliberately not styled to DESIGN.md's Night Ops HUD -- it's a phone-viewed utility page, not the wallpaper surface"
+      },
+      {
+        "rule": "design-system-color",
+        "value": "#161b22",
+        "createdAt": "2026-08-21T04:07:30.146Z",
+        "reason": "web/control is a standalone mobile config form (#30), deliberately not styled to DESIGN.md's Night Ops HUD -- it's a phone-viewed utility page, not the wallpaper surface"
+      },
+      {
+        "rule": "design-system-color",
+        "value": "#30363d",
+        "createdAt": "2026-08-21T04:07:30.205Z",
+        "reason": "web/control is a standalone mobile config form (#30), deliberately not styled to DESIGN.md's Night Ops HUD -- it's a phone-viewed utility page, not the wallpaper surface"
+      },
+      {
+        "rule": "design-system-color",
+        "value": "#1f6a6e",
+        "createdAt": "2026-08-21T04:07:30.264Z",
+        "reason": "web/control is a standalone mobile config form (#30), deliberately not styled to DESIGN.md's Night Ops HUD -- it's a phone-viewed utility page, not the wallpaper surface"
+      },
+      {
+        "rule": "design-system-color",
+        "value": "#0d1117",
+        "createdAt": "2026-08-21T04:07:30.323Z",
+        "reason": "web/control is a standalone mobile config form (#30), deliberately not styled to DESIGN.md's Night Ops HUD -- it's a phone-viewed utility page, not the wallpaper surface"
+      },
+      {
+        "rule": "design-system-color",
+        "value": "#22303c",
+        "createdAt": "2026-08-21T04:07:30.379Z",
+        "reason": "web/control is a standalone mobile config form (#30), deliberately not styled to DESIGN.md's Night Ops HUD -- it's a phone-viewed utility page, not the wallpaper surface"
       }
     ]
   }

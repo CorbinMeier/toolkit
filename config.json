@@ -15,6 +15,40 @@
     "host": "127.0.0.1",
     "port": 4320
   },
+  "control": {
+    "_comment": "bin/dashd-control -- mobile-facing config surface (#30). Binds LAN-reachable (unlike server.host above), so every route past /api/health requires the pairing token; qr.svg/rotate are loopback-only regardless of token.",
+    "host": "0.0.0.0",
+    "port": 4321
+  },
+  "devices": {
+    "_comment": "Networked-devices panel (#27), editable from the Control Backend.",
+    "scan_interval_seconds": 300,
+    "scan_target": "192.168.1.0/24"
+  },
+  "logs": {
+    "_comment": "Log-highlighter panel (#28), source editable from the Control Backend. source_type is 'journalctl' or 'file'.",
+    "source_type": "journalctl",
+    "journalctl_unit": "ssh",
+    "file_path": null,
+    "max_lines": 200,
+    "patterns": [
+      {
+        "regex": "Failed password|authentication failure|Invalid user",
+        "status": "critical",
+        "label": "Failed login"
+      },
+      {
+        "regex": "Accepted password|Accepted publickey",
+        "status": "ok",
+        "label": "Login OK"
+      },
+      {
+        "regex": "sudo:.*COMMAND",
+        "status": "warn",
+        "label": "sudo"
+      }
+    ]
+  },
   "display": {
     "layer": "BOTTOM",
     "transparent": true,

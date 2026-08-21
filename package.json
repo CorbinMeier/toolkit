@@ -3,7 +3,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "lint:js": "eslint web/app.js eslint.config.js",
+    "lint:js": "eslint web/app.js web/control/control.js eslint.config.js",
     "lint:py": ".venv/bin/ruff check .",
     "lint": "pnpm run lint:js && pnpm run lint:py",
     "test": "python3 -m unittest discover -s tests",
