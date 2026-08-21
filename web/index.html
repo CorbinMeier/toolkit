@@ -317,6 +317,17 @@
           <div id="week" class="flex flex-col"></div>
         </div>
 
+        <!-- Calendar (#22): current-month grid, today highlighted. Source-
+             agnostic -- optional event dots come from state.extra.calendar
+             (data/extra.json, same pass-through pattern as everything else
+             under "extra"), so a future ICS/CalDAV sync script can populate
+             it without touching the server or this file. -->
+        <div class="pt-[1.1vmin] border-t border-[var(--color-hairline)]">
+          <h3 class="sec-head text-faint uppercase tracking-[0.3em]
+              text-[clamp(.5rem,1.05vmin,.72rem)] mb-[0.4vmin]">Calendar</h3>
+          <div id="calendar" class="flex flex-col"></div>
+        </div>
+
         <!-- Sun & Moon hidden -- same "too much dead space" feedback as
              Hourly. Markup/render code kept intact (renderSunMoon() in
              app.js still runs, just targets hidden nodes), same pattern as

@@ -1,10 +1,12 @@
 /* Desktop dashboard renderer.
  *
- * No date/clock/location readout -- the user's own system already shows
- * all three (see #5, #9). Everything redraws from /api/state on
- * a poll. Render is a pure function of the last good state, so a failed
- * poll just keeps the previous frame up and raises the offline banner
- * instead of blanking the wallpaper.
+ * No standalone date/clock/location readout -- the user's own system
+ * already shows all three (see #5, #9). The Calendar component
+ * (#22) is not that: a month grid with today highlighted is context the
+ * taskbar doesn't give, not a redundant single-line date.
+ * Everything redraws from /api/state on a poll. Render is a pure function
+ * of the last good state, so a failed poll just keeps the previous frame
+ * up and raises the offline banner instead of blanking the wallpaper.
  *
  *  #34: the CPU/Memory trend graphs (and the /api/history poll
  * that fed them) were removed from this file -- not wanted on the
@@ -613,6 +615,65 @@ function renderWeek(w) {
   }));
 }
 
+/* Calendar (#22): current-month grid, today highlighted. Source-agnostic --
+ * built purely from the client clock, with an optional event-dot overlay
+ * read from state.extra.calendar.events (a list of "YYYY-MM-DD" strings or
+ * {date, label} objects). extra.json is the existing pass-through point
+ * (bin/dashd-serve merges data/extra.json into /api/state verbatim), so a
+ * future ICS/CalDAV sync script can populate real events without any
+ * server or frontend change. No events configured -> just the bare grid. */
+function renderCalendar(extra) {
+  const host = $('calendar');
+  if (!host) return;
+
+  const now = new Date();
+  const year = now.getFullYear(), month = now.getMonth(), today = now.getDate();
+  const first = new Date(year, month, 1);
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+  const events = new Set(
+    (extra?.calendar?.events || [])
+      .map((e) => (typeof e === 'string' ? e : e?.date))
+      .filter(Boolean),
+  );
+
+  const title = document.createElement('div');
+  title.className = 'text-muted tracking-wide text-[clamp(.52rem,1.1vmin,.82rem)] mb-[0.5vmin]';
+  title.textContent = first.toLocaleDateString(undefined, { month: 'long', year: 'numeric' });
+
+  const grid = document.createElement('div');
+  grid.className = 'grid grid-cols-7 gap-y-[0.3vmin] text-center';
+
+  ['S', 'M', 'T', 'W', 'T', 'F', 'S'].forEach((d) => {
+    const head = document.createElement('div');
+    head.className = 'text-faint uppercase text-[clamp(.42rem,.85vmin,.6rem)]';
+    head.textContent = d;
+    grid.appendChild(head);
+  });
+
+  for (let i = 0; i < first.getDay(); i++) grid.appendChild(document.createElement('div'));
+
+  for (let day = 1; day <= daysInMonth; day++) {
+    const iso = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+    const isToday = day === today;
+
+    const cell = document.createElement('div');
+    cell.className = 'num flex flex-col items-center justify-center gap-[0.1vmin] ' +
+      'text-[clamp(.48rem,1vmin,.7rem)] ' + (isToday ? 'text-ink font-medium' : 'text-muted');
+    cell.textContent = String(day);
+
+    if (events.has(iso)) {
+      const dot = document.createElement('span');
+      dot.className = 'w-[0.22em] h-[0.22em] shrink-0';
+      dot.style.background = isToday ? 'var(--color-ink)' : 'var(--color-warm)';
+      cell.appendChild(dot);
+    }
+
+    grid.appendChild(cell);
+  }
+
+  host.replaceChildren(title, grid);
+}
+
 function renderSunMoon(w) {
   const svg = $('sunarc');
   svg.replaceChildren();
@@ -756,6 +817,7 @@ function apply(s) {
   renderDisks(s.sys.disks);
   renderNetwork(s.sys);
   renderMusic(s.music);
+  renderCalendar(s.extra);
   refreshAutoCycles();
 
   const boot = $('boot');
