@@ -2,6 +2,23 @@
 
 Newest first. No GitHub remote on this project, so this file is the tracker.
 
+## 19. CPU/Memory trend graph: collapse the 30S/5M/30M three-tier row into one filled 30-minute graph
+
+Status: open
+Source: user request
+Date: 2026-08-20
+
+User feedback on the #17 three-tier compact graph row: didn't like it.
+Walked through concrete directions and the user picked "one combined
+graph (not three), keep CPU and MEM as separate rows, last 30 minutes,
+filled area sparkline" over keeping the three-tier split or dropping
+graphs entirely. Problems with the old three-tier version that prompted
+this: each of the 30S/5M/30M cells auto-scaled independently so
+magnitude wasn't comparable across tiers by eye, and the 30S tier read
+as near-flat dead space at that size.
+
+Started at: 2026-08-20T19:25:36-07:00
+
 ## 18. Battery LED: charging should read green, not red; flash red only at low charge
 
 Status: closed
