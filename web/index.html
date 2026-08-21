@@ -131,63 +131,14 @@
   .sys-table td{vertical-align:middle;padding:0.32vmin 0}
   .sys-table .sysicon{width:1.05em;height:1.05em;display:block}
 
-  /* Status LED leading each CPU/MEM/BAT row (ISSUES.md #16, #17 -- an
-     earlier version was a large ring behind the icon, then sat after the
-     label text; moved to lead the row entirely since it's the most
-     immediate signal). Sized in em (0.85em, close to the row text's own
-     cap-height) so it reads as part of the text line, not a floating
-     shape. A fixed dark base disc (::before) sits under a second disc
-     (.icon-led__fill) whose opacity *and* glow both scale with --led-glow
-     (0-1, set inline per row in app.js's metricLed()). Glow blur/spread
-     are kept small (max 5px/1.2px) so the halo stays proportionate to a
-     small LED instead of blooming into a blob.
-
-     Distress Red is the fill's default color -- CPU/MEM's danger band
-     (>=90%) needs no override class. .icon-led--green/--yellow cover their
-     good/approaching-limits bands (0-69% / 70-89%), and .icon-led--flash
-     (>=95% for CPU/MEM, or battery critically low) adds the shared hard
-     2s-cycle blink on top of whatever color is already set. Battery
-     ignores CPU/MEM's percentage bands entirely and instead uses one of
-     the .icon-led--batt-* modifiers, since "charging" is a discrete state
-     a glow level alone can't express (replaces the old CHRG text badge --
-     the LED now carries that same signal). Charging and dim both pair
-     with .icon-led--green (on mains or running fine unplugged, at bright
-     vs. dim glow respectively) -- low is the one state that keeps the
-     base red fill and adds the flash, at <=35% unplugged (ISSUES.md #18:
-     red used to mean "plugged in", which read backwards). */
-  .icon-led{position:relative;display:inline-block;width:0.85em;height:0.85em;
-    border-radius:50%;vertical-align:middle;flex:none}
-  .icon-led::before{content:"";position:absolute;inset:0;border-radius:50%;
-    background:oklch(0.15 0.03 25)}
-  .icon-led__fill{
-    position:absolute;inset:0;border-radius:50%;
-    background:radial-gradient(circle at 38% 32%,
-      oklch(0.85 0.08 25) 0%, var(--color-crimson) 55%, oklch(0.30 0.07 25) 100%);
-    opacity:var(--led-glow,0);
-    box-shadow:0 0 calc(1px + var(--led-glow,0) * 4px)
-               calc(var(--led-glow,0) * 1.2px) var(--color-crimson);
-    transition:opacity .6s ease,box-shadow .6s ease;
-  }
-  .icon-led--green .icon-led__fill{
-    background:radial-gradient(circle at 38% 32%,
-      oklch(0.95 0.08 155) 0%, var(--color-online) 55%, oklch(0.30 0.08 155) 100%);
-    box-shadow:0 0 calc(1px + var(--led-glow,0) * 4px)
-               calc(var(--led-glow,0) * 1.2px) var(--color-online);
-  }
-  .icon-led--yellow .icon-led__fill{
-    background:radial-gradient(circle at 38% 32%,
-      oklch(0.95 0.08 95) 0%, var(--color-warm) 55%, oklch(0.32 0.06 95) 100%);
-    box-shadow:0 0 calc(1px + var(--led-glow,0) * 4px)
-               calc(var(--led-glow,0) * 1.2px) var(--color-warm);
-  }
-
-  .icon-led--batt-charging .icon-led__fill{--led-glow:1}
-  .icon-led--batt-dim .icon-led__fill{--led-glow:0.25}
-  .icon-led--flash .icon-led__fill{--led-glow:1;animation:led-flash 2s steps(1) infinite}
-  @keyframes led-flash{0%,49.99%{opacity:1}50%,100%{opacity:.12}}
-  @media (prefers-reduced-motion:reduce){
-    .icon-led--flash .icon-led__fill{animation:none;opacity:.7}
-  }
+  /* Angled utilization bar (ISSUES.md #31, replacing the retired status
+     LED -- user feedback: "not working out"). A row of slanted parallelogram
+     <polygon> segments built in app.js's utilBars(); this rule just gives
+     the containing <svg> a small glow so the lit segments read as
+     illuminated rather than flat fills, matching the reference racing-stat
+     graphic's glow. */
+  .util-bars polygon{transition:fill .6s ease}
+  .util-bars{filter:drop-shadow(0 0 1.5px rgb(0 0 0 / .4))}
 
   /* Trend graph row beneath a CPU/MEM row (ISSUES.md #17, revised): one
      full-width filled step chart with its own corner labels (window

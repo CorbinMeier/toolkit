@@ -8,98 +8,259 @@
         "role": "neutral",
         "displayName": "Signal White",
         "canonical": "oklch(0.96 0.01 250)",
-        "tonalRamp": ["oklch(0.15 0.02 260)", "oklch(0.30 0.02 260)", "oklch(0.45 0.02 258)", "oklch(0.52 0.03 258)", "oklch(0.60 0.03 256)", "oklch(0.70 0.03 255)", "oklch(0.85 0.02 252)", "oklch(0.96 0.01 250)"]
+        "tonalRamp": [
+          "oklch(0.15 0.02 260)",
+          "oklch(0.30 0.02 260)",
+          "oklch(0.45 0.02 258)",
+          "oklch(0.52 0.03 258)",
+          "oklch(0.60 0.03 256)",
+          "oklch(0.70 0.03 255)",
+          "oklch(0.85 0.02 252)",
+          "oklch(0.96 0.01 250)"
+        ]
       },
       "console-grey": {
         "role": "neutral",
         "displayName": "Console Grey",
         "canonical": "oklch(0.70 0.03 255)",
-        "tonalRamp": ["oklch(0.15 0.02 260)", "oklch(0.30 0.02 260)", "oklch(0.45 0.02 258)", "oklch(0.52 0.03 258)", "oklch(0.60 0.03 256)", "oklch(0.70 0.03 255)", "oklch(0.85 0.02 252)", "oklch(0.96 0.01 250)"]
+        "tonalRamp": [
+          "oklch(0.15 0.02 260)",
+          "oklch(0.30 0.02 260)",
+          "oklch(0.45 0.02 258)",
+          "oklch(0.52 0.03 258)",
+          "oklch(0.60 0.03 256)",
+          "oklch(0.70 0.03 255)",
+          "oklch(0.85 0.02 252)",
+          "oklch(0.96 0.01 250)"
+        ]
       },
       "recessed-grey": {
         "role": "neutral",
         "displayName": "Recessed Grey",
         "canonical": "oklch(0.52 0.03 258)",
-        "tonalRamp": ["oklch(0.15 0.02 260)", "oklch(0.30 0.02 260)", "oklch(0.45 0.02 258)", "oklch(0.52 0.03 258)", "oklch(0.60 0.03 256)", "oklch(0.70 0.03 255)", "oklch(0.85 0.02 252)", "oklch(0.96 0.01 250)"]
+        "tonalRamp": [
+          "oklch(0.15 0.02 260)",
+          "oklch(0.30 0.02 260)",
+          "oklch(0.45 0.02 258)",
+          "oklch(0.52 0.03 258)",
+          "oklch(0.60 0.03 256)",
+          "oklch(0.70 0.03 255)",
+          "oklch(0.85 0.02 252)",
+          "oklch(0.96 0.01 250)"
+        ]
       },
       "deep-console": {
         "role": "neutral",
         "displayName": "Deep Console",
         "canonical": "oklch(0.19 0.015 260 / 0.88)",
-        "tonalRamp": ["oklch(0.12 0.02 255)", "oklch(0.16 0.03 265)", "oklch(0.19 0.015 260)", "oklch(0.25 0.02 260)", "oklch(0.32 0.02 260)", "oklch(0.40 0.02 260)", "oklch(0.55 0.02 260)", "oklch(0.70 0.02 260)"]
+        "tonalRamp": [
+          "oklch(0.12 0.02 255)",
+          "oklch(0.16 0.03 265)",
+          "oklch(0.19 0.015 260)",
+          "oklch(0.25 0.02 260)",
+          "oklch(0.32 0.02 260)",
+          "oklch(0.40 0.02 260)",
+          "oklch(0.55 0.02 260)",
+          "oklch(0.70 0.02 260)"
+        ]
       },
       "hairline-grey": {
         "role": "neutral",
         "displayName": "Hairline Grey",
         "canonical": "oklch(0.70 0.04 260 / 0.14)",
-        "tonalRamp": ["oklch(0.15 0.02 260)", "oklch(0.30 0.02 260)", "oklch(0.45 0.02 258)", "oklch(0.52 0.03 258)", "oklch(0.60 0.03 256)", "oklch(0.70 0.03 255)", "oklch(0.85 0.02 252)", "oklch(0.96 0.01 250)"]
+        "tonalRamp": [
+          "oklch(0.15 0.02 260)",
+          "oklch(0.30 0.02 260)",
+          "oklch(0.45 0.02 258)",
+          "oklch(0.52 0.03 258)",
+          "oklch(0.60 0.03 256)",
+          "oklch(0.70 0.03 255)",
+          "oklch(0.85 0.02 252)",
+          "oklch(0.96 0.01 250)"
+        ]
       },
       "signal-teal": {
         "role": "primary",
         "displayName": "Signal Teal",
         "canonical": "oklch(0.83 0.14 195)",
-        "tonalRamp": ["oklch(0.15 0.05 195)", "oklch(0.30 0.08 195)", "oklch(0.45 0.11 195)", "oklch(0.60 0.13 195)", "oklch(0.70 0.14 195)", "oklch(0.83 0.14 195)", "oklch(0.90 0.10 195)", "oklch(0.95 0.05 195)"]
+        "tonalRamp": [
+          "oklch(0.15 0.05 195)",
+          "oklch(0.30 0.08 195)",
+          "oklch(0.45 0.11 195)",
+          "oklch(0.60 0.13 195)",
+          "oklch(0.70 0.14 195)",
+          "oklch(0.83 0.14 195)",
+          "oklch(0.90 0.10 195)",
+          "oklch(0.95 0.05 195)"
+        ]
       },
       "ember-gold": {
         "role": "secondary",
         "displayName": "Ember Gold",
         "canonical": "oklch(0.88 0.17 95)",
-        "tonalRamp": ["oklch(0.15 0.03 95)", "oklch(0.30 0.06 95)", "oklch(0.45 0.10 95)", "oklch(0.60 0.14 95)", "oklch(0.72 0.16 95)", "oklch(0.80 0.17 95)", "oklch(0.88 0.17 95)", "oklch(0.95 0.08 95)"]
+        "tonalRamp": [
+          "oklch(0.15 0.03 95)",
+          "oklch(0.30 0.06 95)",
+          "oklch(0.45 0.10 95)",
+          "oklch(0.60 0.14 95)",
+          "oklch(0.72 0.16 95)",
+          "oklch(0.80 0.17 95)",
+          "oklch(0.88 0.17 95)",
+          "oklch(0.95 0.08 95)"
+        ]
       },
       "distress-red": {
         "role": "tertiary",
         "displayName": "Distress Red",
         "canonical": "oklch(0.65 0.17 25)",
-        "tonalRamp": ["oklch(0.15 0.03 25)", "oklch(0.30 0.07 25)", "oklch(0.45 0.12 25)", "oklch(0.55 0.15 25)", "oklch(0.65 0.17 25)", "oklch(0.75 0.14 25)", "oklch(0.85 0.08 25)", "oklch(0.95 0.03 25)"]
+        "tonalRamp": [
+          "oklch(0.15 0.03 25)",
+          "oklch(0.30 0.07 25)",
+          "oklch(0.45 0.12 25)",
+          "oklch(0.55 0.15 25)",
+          "oklch(0.65 0.17 25)",
+          "oklch(0.75 0.14 25)",
+          "oklch(0.85 0.08 25)",
+          "oklch(0.95 0.03 25)"
+        ]
       },
       "signal-teal-dim": {
         "role": "primary-border",
         "displayName": "Signal Teal, Dim",
         "canonical": "#1f6a6e",
-        "tonalRamp": ["oklch(0.15 0.03 195)", "oklch(0.25 0.05 195)", "oklch(0.35 0.06 195)", "oklch(0.42 0.07 195)", "oklch(0.50 0.07 195)", "oklch(0.60 0.06 195)", "oklch(0.72 0.05 195)", "oklch(0.85 0.03 195)"]
+        "tonalRamp": [
+          "oklch(0.15 0.03 195)",
+          "oklch(0.25 0.05 195)",
+          "oklch(0.35 0.06 195)",
+          "oklch(0.42 0.07 195)",
+          "oklch(0.50 0.07 195)",
+          "oklch(0.60 0.06 195)",
+          "oklch(0.72 0.05 195)",
+          "oklch(0.85 0.03 195)"
+        ]
       },
       "ember-gold-dim": {
         "role": "secondary-border",
         "displayName": "Ember Gold, Dim",
         "canonical": "#8a6a12",
-        "tonalRamp": ["oklch(0.12 0.02 95)", "oklch(0.22 0.04 95)", "oklch(0.32 0.06 95)", "oklch(0.42 0.08 95)", "oklch(0.52 0.09 95)", "oklch(0.64 0.09 95)", "oklch(0.78 0.07 95)", "oklch(0.90 0.04 95)"]
+        "tonalRamp": [
+          "oklch(0.12 0.02 95)",
+          "oklch(0.22 0.04 95)",
+          "oklch(0.32 0.06 95)",
+          "oklch(0.42 0.08 95)",
+          "oklch(0.52 0.09 95)",
+          "oklch(0.64 0.09 95)",
+          "oklch(0.78 0.07 95)",
+          "oklch(0.90 0.04 95)"
+        ]
       },
       "distress-red-dim": {
         "role": "tertiary-border",
         "displayName": "Distress Red, Dim",
         "canonical": "#9c3230",
-        "tonalRamp": ["oklch(0.12 0.02 25)", "oklch(0.22 0.05 25)", "oklch(0.32 0.08 25)", "oklch(0.42 0.10 25)", "oklch(0.50 0.12 25)", "oklch(0.60 0.13 25)", "oklch(0.75 0.10 25)", "oklch(0.90 0.05 25)"]
+        "tonalRamp": [
+          "oklch(0.12 0.02 25)",
+          "oklch(0.22 0.05 25)",
+          "oklch(0.32 0.08 25)",
+          "oklch(0.42 0.10 25)",
+          "oklch(0.50 0.12 25)",
+          "oklch(0.60 0.13 25)",
+          "oklch(0.75 0.10 25)",
+          "oklch(0.90 0.05 25)"
+        ]
       },
       "standby-green": {
         "role": "status-band",
         "displayName": "Standby Green",
         "canonical": "oklch(0.87 0.19 155)",
-        "tonalRamp": ["oklch(0.15 0.04 155)", "oklch(0.30 0.08 155)", "oklch(0.45 0.12 155)", "oklch(0.60 0.16 155)", "oklch(0.72 0.18 155)", "oklch(0.80 0.19 155)", "oklch(0.87 0.19 155)", "oklch(0.95 0.08 155)"]
+        "tonalRamp": [
+          "oklch(0.15 0.04 155)",
+          "oklch(0.30 0.08 155)",
+          "oklch(0.45 0.12 155)",
+          "oklch(0.60 0.16 155)",
+          "oklch(0.72 0.18 155)",
+          "oklch(0.80 0.19 155)",
+          "oklch(0.87 0.19 155)",
+          "oklch(0.95 0.08 155)"
+        ]
       }
     },
     "typographyMeta": {
-      "display": { "displayName": "Display", "purpose": "The current-temperature readout only. One glow-text hero element per screen." },
-      "headline": { "displayName": "Headline", "purpose": "The four weather-stat numbers (Wind/Humidity/Rain/UV)." },
-      "title": { "displayName": "Title", "purpose": "Weather description line; a lighter variant covers the week list's day names and hi/lo ranges." },
-      "body": { "displayName": "Body", "purpose": "Every live metric readout -- system-table values, hourly temps, footer stats. Always tabular-nums." },
-      "label": { "displayName": "Label", "purpose": "Section headers and row labels. Tracking width (0.1em row label vs 0.3em section header) signals hierarchy level." }
+      "display": {
+        "displayName": "Display",
+        "purpose": "The current-temperature readout only. One glow-text hero element per screen."
+      },
+      "headline": {
+        "displayName": "Headline",
+        "purpose": "The four weather-stat numbers (Wind/Humidity/Rain/UV)."
+      },
+      "title": {
+        "displayName": "Title",
+        "purpose": "Weather description line; a lighter variant covers the week list's day names and hi/lo ranges."
+      },
+      "body": {
+        "displayName": "Body",
+        "purpose": "Every live metric readout -- system-table values, hourly temps, footer stats. Always tabular-nums."
+      },
+      "label": {
+        "displayName": "Label",
+        "purpose": "Section headers and row labels. Tracking width (0.1em row label vs 0.3em section header) signals hierarchy level."
+      }
     },
     "shadows": [
-      { "name": "glow-accent-tab", "value": "0 0 6px var(--panel-accent)", "purpose": "Panel corner-tab and section-header underline glow -- the constant 'this region is live' signal, present at rest." },
-      { "name": "glow-led-fill", "value": "0 0 calc(1px + var(--led-glow) * 4px) calc(var(--led-glow) * 1.2px) var(--color-crimson)", "purpose": "Utilization LED fill's glow -- blur and spread both scale with --led-glow (0-1), capped small so the halo stays proportionate to the 0.85em LED. Distress Red (shown) is the fill's default color; .icon-led--green/--yellow override the shadow color to Standby Green/Ember Gold respectively for CPU/MEM's traffic-light bands. CPU/MEM brighten continuously within their band as percentage rises; battery snaps to full red while genuinely charging." },
-      { "name": "text-glow-display", "value": "-6px -4px 26px var(--panel-accent)", "purpose": "text-shadow on the Display-role hero temperature readout -- emphasis, reserved for exactly one element per screen." }
+      {
+        "name": "glow-accent-tab",
+        "value": "0 0 6px var(--panel-accent)",
+        "purpose": "Panel corner-tab and section-header underline glow -- the constant 'this region is live' signal, present at rest."
+      },
+      {
+        "name": "glow-util-bars",
+        "value": "drop-shadow(0 0 1.5px rgb(0 0 0 / .4))",
+        "purpose": "Utilization Bars' <svg> drop-shadow -- a small glow so lit segments read as illuminated rather than flat fills, matching the reference racing-stat graphic."
+      },
+      {
+        "name": "text-glow-display",
+        "value": "-6px -4px 26px var(--panel-accent)",
+        "purpose": "text-shadow on the Display-role hero temperature readout -- emphasis, reserved for exactly one element per screen."
+      }
     ],
     "motion": [
-      { "name": "duration-state", "value": "0.6s", "purpose": "Utilization LED's opacity/box-shadow transition as --led-glow changes -- CPU/MEM's continuous banded brightness ramp, or battery's charging/dim state swap." },
-      { "name": "duration-led-flash", "value": "2s", "purpose": "Utilization LED's critical-state flash cycle -- a hard steps(1) alternation, 1s fully opaque then 1s near-transparent. Shared by battery's low-charge state and CPU/MEM's >=95% danger state (ISSUES.md #17)." },
-      { "name": "duration-value", "value": "0.6s", "purpose": "Width transition when a bar-style value changes (e.g. the Storage mini-bar fill)." },
-      { "name": "duration-entrance", "value": "0.6s", "purpose": "Per-panel fade+rise entrance on first load, staggered 60ms per panel, capped at 1.6s total; always stripped back off so visibility never depends on the animation completing." },
-      { "name": "duration-ambient-1", "value": "42s", "purpose": "Slow drift cycle for the first ambient background glow blob (g1)." },
-      { "name": "duration-ambient-2", "value": "55s", "purpose": "Slow drift cycle for the second ambient background glow blob (g2) -- deliberately different from g1 so the two never visibly sync." },
-      { "name": "ease-standard", "value": "ease", "purpose": "Default transition easing used across value/state transitions." }
+      {
+        "name": "duration-state",
+        "value": "0.6s",
+        "purpose": "Utilization Bars segment fill-color transition when a metric's percentage changes."
+      },
+      {
+        "name": "duration-value",
+        "value": "0.6s",
+        "purpose": "Width transition when a bar-style value changes (e.g. the Storage mini-bar fill)."
+      },
+      {
+        "name": "duration-entrance",
+        "value": "0.6s",
+        "purpose": "Per-panel fade+rise entrance on first load, staggered 60ms per panel, capped at 1.6s total; always stripped back off so visibility never depends on the animation completing."
+      },
+      {
+        "name": "duration-ambient-1",
+        "value": "42s",
+        "purpose": "Slow drift cycle for the first ambient background glow blob (g1)."
+      },
+      {
+        "name": "duration-ambient-2",
+        "value": "55s",
+        "purpose": "Slow drift cycle for the second ambient background glow blob (g2) -- deliberately different from g1 so the two never visibly sync."
+      },
+      {
+        "name": "ease-standard",
+        "value": "ease",
+        "purpose": "Default transition easing used across value/state transitions."
+      }
     ],
     "breakpoints": [
-      { "name": "lg", "value": "1024px" }
+      {
+        "name": "lg",
+        "value": "1024px"
+      }
     ]
   },
   "components": [
@@ -115,8 +276,8 @@
       "name": "Metric Row",
       "kind": "custom",
       "refersTo": "metric-row",
-      "description": "One line of the System table: icon, uppercase label, right-aligned tabular value with an optional sub-line, and a chart/badge column. The signature 'instrument cluster' primitive -- Storage and Network are built from this row (icon storage icons are a floppy-disk glyph, ISSUES.md #17). CPU/MEM/BAT diverges: a status LED leads the row, before the icon -- see the Utilization LED component.",
-      "html": "<table class=\"ds-metric-table\"><colgroup><col class=\"ds-col-icon\"><col><col class=\"ds-col-value\"><col class=\"ds-col-chart\"></colgroup><tbody><tr><td class=\"ds-metric-icon\" style=\"color:var(--color-accent)\"><svg viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.6\" stroke-linecap=\"round\" stroke-linejoin=\"round\" width=\"16\" height=\"16\"><rect x=\"6\" y=\"6\" width=\"12\" height=\"12\" rx=\"1.2\"/><rect x=\"9.5\" y=\"9.5\" width=\"5\" height=\"5\" rx=\"0.6\"/><line x1=\"9\" y1=\"1.5\" x2=\"9\" y2=\"6\"/><line x1=\"12\" y1=\"1.5\" x2=\"12\" y2=\"6\"/><line x1=\"15\" y1=\"1.5\" x2=\"15\" y2=\"6\"/><line x1=\"9\" y1=\"18\" x2=\"9\" y2=\"22.5\"/><line x1=\"12\" y1=\"18\" x2=\"12\" y2=\"22.5\"/><line x1=\"15\" y1=\"18\" x2=\"15\" y2=\"22.5\"/><line x1=\"1.5\" y1=\"9\" x2=\"6\" y2=\"9\"/><line x1=\"1.5\" y1=\"12\" x2=\"6\" y2=\"12\"/><line x1=\"1.5\" y1=\"15\" x2=\"6\" y2=\"15\"/><line x1=\"18\" y1=\"9\" x2=\"22.5\" y2=\"9\"/><line x1=\"18\" y1=\"12\" x2=\"22.5\" y2=\"12\"/><line x1=\"18\" y1=\"15\" x2=\"22.5\" y2=\"15\"/></svg></td><td class=\"ds-metric-label\">CPU</td><td class=\"ds-metric-value\">42%<div class=\"ds-metric-sub\">58°C · 3.4GHz</div></td><td class=\"ds-metric-chart\"><svg viewBox=\"0 0 100 30\" preserveAspectRatio=\"none\" width=\"56\" height=\"14\"><path d=\"M 0 20 L 25 20 L 25 14 L 50 14 L 50 18 L 75 18 L 75 8 L 100 8\" fill=\"none\" stroke=\"var(--color-accent)\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" opacity=\"0.85\"/></svg></td></tr></tbody></table>",
+      "description": "One line of the System table: icon, uppercase label, right-aligned tabular value with an optional sub-line, and a chart/badge column. The signature 'instrument cluster' primitive -- Storage and Network are built from this row (icon storage icons are a floppy-disk glyph, ISSUES.md #17). CPU/MEM/BAT now shares this exact shape too (ISSUES.md #31) -- its tail column holds a Utilization Bars graphic, replacing the retired leading status LED.",
+      "html": "<table class=\"ds-metric-table\"><colgroup><col class=\"ds-col-icon\"><col><col class=\"ds-col-value\"><col class=\"ds-col-chart\"></colgroup><tbody><tr><td class=\"ds-metric-icon\" style=\"color:var(--color-accent)\"><svg viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.6\" stroke-linecap=\"round\" stroke-linejoin=\"round\" width=\"16\" height=\"16\"><rect x=\"6\" y=\"6\" width=\"12\" height=\"12\" rx=\"1.2\"/><rect x=\"9.5\" y=\"9.5\" width=\"5\" height=\"5\" rx=\"0.6\"/><line x1=\"9\" y1=\"1.5\" x2=\"9\" y2=\"6\"/><line x1=\"12\" y1=\"1.5\" x2=\"12\" y2=\"6\"/><line x1=\"15\" y1=\"1.5\" x2=\"15\" y2=\"6\"/><line x1=\"9\" y1=\"18\" x2=\"9\" y2=\"22.5\"/><line x1=\"12\" y1=\"18\" x2=\"12\" y2=\"22.5\"/><line x1=\"15\" y1=\"18\" x2=\"15\" y2=\"22.5\"/><line x1=\"1.5\" y1=\"9\" x2=\"6\" y2=\"9\"/><line x1=\"1.5\" y1=\"12\" x2=\"6\" y2=\"12\"/><line x1=\"1.5\" y1=\"15\" x2=\"6\" y2=\"15\"/><line x1=\"18\" y1=\"9\" x2=\"22.5\" y2=\"9\"/><line x1=\"18\" y1=\"12\" x2=\"22.5\" y2=\"12\"/><line x1=\"18\" y1=\"15\" x2=\"22.5\" y2=\"15\"/></svg></td><td class=\"ds-metric-label\">CPU</td><td class=\"ds-metric-value\">42%<div class=\"ds-metric-sub\">58\u00b0C \u00b7 3.4GHz</div></td><td class=\"ds-metric-chart\"><svg viewBox=\"0 0 100 30\" preserveAspectRatio=\"none\" width=\"56\" height=\"14\"><path d=\"M 0 20 L 25 20 L 25 14 L 50 14 L 50 18 L 75 18 L 75 8 L 100 8\" fill=\"none\" stroke=\"var(--color-accent)\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" opacity=\"0.85\"/></svg></td></tr></tbody></table>",
       "css": ".ds-metric-table{border-collapse:collapse;font-family:\"Fira Sans\",system-ui,sans-serif}.ds-col-icon{width:1.7em}.ds-metric-table td{vertical-align:middle;padding:0.32vmin 0}.ds-metric-icon svg{display:block}.ds-metric-label{color:var(--color-muted);text-transform:uppercase;letter-spacing:0.1em;font-size:0.6rem;padding-left:0.6vmin}.ds-metric-value{text-align:right;font-variant-numeric:tabular-nums;color:var(--color-ink);opacity:.9;font-size:0.68rem;padding-left:0.9em}.ds-metric-sub{color:var(--color-faint);font-size:0.5rem;line-height:1.2}.ds-metric-chart{padding-left:0.6vmin}"
     },
     {
@@ -124,7 +285,7 @@
       "kind": "custom",
       "refersTo": "graph-cell",
       "description": "Three small trend graphs side by side in one row beneath CPU/MEM's value row, replacing what used to be three stacked full-width tier rows (ISSUES.md #17). Each carries its own corner labels -- tier name top-left, that tier's value range top-right -- so a standalone label column per tier isn't needed; the range also decodes the step chart's otherwise-unlabeled auto-scaled y-axis. Labels are plain HTML text kept outside the chart's own viewBox, not SVG, so preserveAspectRatio=\"none\" (Step-Line Chart, below) never distorts them.",
-      "html": "<div class=\"ds-graph-row\"><div class=\"ds-graph-cell\"><div class=\"ds-graph-cell__labels\"><span>30S</span><span>41–58</span></div><svg class=\"ds-graph-cell__chart\" viewBox=\"0 0 100 30\" preserveAspectRatio=\"none\"><path d=\"M0 24 L20 24 L20 20 L40 20 L40 22 L60 22 L60 12 L80 12 L80 16 L100 16\" fill=\"none\" stroke=\"var(--color-accent)\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" opacity=\"0.85\"/></svg></div><div class=\"ds-graph-cell\"><div class=\"ds-graph-cell__labels\"><span>5M</span><span>9–24</span></div><svg class=\"ds-graph-cell__chart\" viewBox=\"0 0 100 30\" preserveAspectRatio=\"none\"><path d=\"M0 20 L30 20 L30 10 L60 10 L60 18 L100 18\" fill=\"none\" stroke=\"var(--color-accent)\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" opacity=\"0.85\"/></svg></div></div>",
+      "html": "<div class=\"ds-graph-row\"><div class=\"ds-graph-cell\"><div class=\"ds-graph-cell__labels\"><span>30S</span><span>41\u201358</span></div><svg class=\"ds-graph-cell__chart\" viewBox=\"0 0 100 30\" preserveAspectRatio=\"none\"><path d=\"M0 24 L20 24 L20 20 L40 20 L40 22 L60 22 L60 12 L80 12 L80 16 L100 16\" fill=\"none\" stroke=\"var(--color-accent)\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" opacity=\"0.85\"/></svg></div><div class=\"ds-graph-cell\"><div class=\"ds-graph-cell__labels\"><span>5M</span><span>9\u201324</span></div><svg class=\"ds-graph-cell__chart\" viewBox=\"0 0 100 30\" preserveAspectRatio=\"none\"><path d=\"M0 20 L30 20 L30 10 L60 10 L60 18 L100 18\" fill=\"none\" stroke=\"var(--color-accent)\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" opacity=\"0.85\"/></svg></div></div>",
       "css": ".ds-graph-row{display:flex;gap:1vmin;padding:0.2vmin 0 0.3vmin}.ds-graph-cell{position:relative;flex:1 1 0;min-width:3.2rem;display:flex;flex-direction:column;gap:0.15em}.ds-graph-cell__labels{display:flex;justify-content:space-between;gap:0.4em;color:var(--color-faint);letter-spacing:0.04em;line-height:1;font-size:clamp(.38rem,.72vmin,.5rem);font-variant-numeric:tabular-nums}.ds-graph-cell__chart{display:block;width:100%;height:clamp(0.7rem,1.5vmin,0.95rem)}"
     },
     {
@@ -144,19 +305,19 @@
       "css": ".ds-sec-head{position:relative;padding-bottom:0.65vmin;margin:0;color:var(--color-faint);text-transform:uppercase;letter-spacing:0.3em;font-size:0.68rem;font-weight:400;font-family:\"Fira Sans\",system-ui,sans-serif}.ds-sec-head::after{content:\"\";position:absolute;left:0;bottom:0;width:100%;height:1px;background:var(--panel-accent);box-shadow:0 0 6px var(--panel-accent)}"
     },
     {
-      "name": "Utilization LED",
+      "name": "Utilization Bars",
       "kind": "custom",
-      "refersTo": "icon-led",
-      "description": "Non-interactive status LED leading the CPU/MEM/BAT row, before the icon -- the row's most immediate signal, sized close to the row text's own height. A fixed dark base disc sits under a second disc whose opacity and glow both rise with --led-glow (0-1), reading as a status light brightening rather than a progress bar. It started as a much larger ring behind the icon, then moved to trail the label, then led the row entirely (ISSUES.md #16, #17). CPU/MEM are traffic-light banded off their percentage -- Standby Green below 70%, Ember Gold 70-89%, Distress Red (the fill's default color, no override class needed) from 90%, flashing (.icon-led--flash) once utilization reaches 95%. Battery instead uses a discrete .icon-led--batt-{charging,low,dim} modifier (low also carries .icon-led--flash), since 'charging' isn't a glow level. Replaces the old CHRG text badge -- the LED now carries that same currently-charging signal.",
-      "html": "<span>CPU <span class=\"ds-icon-led ds-icon-led--green\" style=\"--led-glow:0.3\"><span class=\"ds-icon-led__fill\"></span></span></span> <span>MEM <span class=\"ds-icon-led ds-icon-led--yellow\" style=\"--led-glow:0.62\"><span class=\"ds-icon-led__fill\"></span></span></span> <span>CPU <span class=\"ds-icon-led ds-icon-led--flash\" style=\"--led-glow:1\"><span class=\"ds-icon-led__fill\"></span></span></span> <span>BAT <span class=\"ds-icon-led ds-icon-led--batt-charging\"><span class=\"ds-icon-led__fill\"></span></span></span>",
-      "css": ".ds-icon-led{position:relative;display:inline-block;width:0.85em;height:0.85em;border-radius:50%;vertical-align:middle}.ds-icon-led::before{content:\"\";position:absolute;inset:0;border-radius:50%;background:oklch(0.15 0.03 25)}.ds-icon-led__fill{position:absolute;inset:0;border-radius:50%;background:radial-gradient(circle at 38% 32%,oklch(0.85 0.08 25) 0%,var(--color-crimson) 55%,oklch(0.30 0.07 25) 100%);opacity:var(--led-glow,0);box-shadow:0 0 calc(1px + var(--led-glow,0) * 4px) calc(var(--led-glow,0) * 1.2px) var(--color-crimson);transition:opacity .6s ease,box-shadow .6s ease}.ds-icon-led--green .ds-icon-led__fill{background:radial-gradient(circle at 38% 32%,oklch(0.95 0.08 155) 0%,var(--color-online) 55%,oklch(0.30 0.08 155) 100%);box-shadow:0 0 calc(1px + var(--led-glow,0) * 4px) calc(var(--led-glow,0) * 1.2px) var(--color-online)}.ds-icon-led--yellow .ds-icon-led__fill{background:radial-gradient(circle at 38% 32%,oklch(0.95 0.08 95) 0%,var(--color-warm) 55%,oklch(0.32 0.06 95) 100%);box-shadow:0 0 calc(1px + var(--led-glow,0) * 4px) calc(var(--led-glow,0) * 1.2px) var(--color-warm)}.ds-icon-led--batt-charging .ds-icon-led__fill{--led-glow:1}.ds-icon-led--batt-dim .ds-icon-led__fill{--led-glow:0.25}.ds-icon-led--flash .ds-icon-led__fill{--led-glow:1;animation:led-flash 2s steps(1) infinite}@keyframes led-flash{0%,49.99%{opacity:1}50%,100%{opacity:.12}}"
+      "refersTo": "util-bars",
+      "description": "Non-interactive angled-bar utilization graphic in the tail column of every CPU/MEM/BAT row, replacing the retired status LED (ISSUES.md #31 -- user feedback: the LED \"wasn't working out\"). Ten slanted parallelogram <polygon> segments; round(pct/100*10) of them read as lit. Each lit segment takes a fixed spectrum color by its position in the bar -- Distress Red at the low end, through Ember Gold, to Standby Green at the high end -- not the metric's own live percentage, so a half-full bar always shows the same red-to-gold gradient regardless of which metric it belongs to; only the count of lit segments encodes the percentage. Unlit segments are a flat, low-opacity grey, reading as the empty track.",
+      "html": "<svg viewBox=\"0 0 100 20\" preserveAspectRatio=\"none\" width=\"72\" height=\"14\"><polygon points=\"5.6,2 10.6,2 8,18 3,18\" fill=\"#e8615a\"/><polygon points=\"13.2,2 18.2,2 15.6,18 10.6,18\" fill=\"#f39a45\"/><polygon points=\"20.8,2 25.8,2 23.2,18 18.2,18\" fill=\"#fed33f\"/><polygon points=\"28.4,2 33.4,2 30.8,18 25.8,18\" fill=\"#9de076\"/><polygon points=\"36,2 41,2 38.4,18 33.4,18\" fill=\"#2bfea0\"/><polygon points=\"43.6,2 48.6,2 46,18 41,18\" fill=\"oklch(0.32 0.02 260 / .45)\"/><polygon points=\"51.2,2 56.2,2 53.6,18 48.6,18\" fill=\"oklch(0.32 0.02 260 / .45)\"/></svg>",
+      "css": ".ds-util-bars polygon{transition:fill .6s ease}.ds-util-bars{filter:drop-shadow(0 0 1.5px rgb(0 0 0 / .4))}"
     },
     {
       "name": "Status Dot + Offline Banner",
       "kind": "custom",
       "refersTo": "offline-banner",
       "description": "Fixed top-center notified banner shown only after two consecutive failed polls (debounced so one dropped request never flashes it). The only place Distress Red appears as a background fill rather than an accent line.",
-      "html": "<div class=\"ds-offline-banner\"><span class=\"ds-status-dot\"></span>data feed unreachable — showing last known values</div>",
+      "html": "<div class=\"ds-offline-banner\"><span class=\"ds-status-dot\"></span>data feed unreachable \u2014 showing last known values</div>",
       "css": ".ds-offline-banner{display:inline-flex;align-items:center;background:var(--color-panel);border:2px solid var(--color-crimson-border);backdrop-filter:blur(6px);clip-path:polygon(0 0,100% 0,100% calc(100% - 1.15rem),calc(100% - 1.15rem) 100%,0 100%);padding:0.5rem 1.25rem;color:var(--color-crimson);font-size:0.875rem;letter-spacing:0.02em;font-family:\"Fira Sans\",system-ui,sans-serif}.ds-status-dot{display:inline-block;width:0.55em;height:0.55em;border-radius:50%;background:var(--color-crimson);vertical-align:middle;margin-right:0.6em;flex:none}"
     }
   ],
@@ -166,29 +327,45 @@
     "keyCharacteristics": [
       "Notched, chamfered-corner panels -- never rounded corners -- each carrying a single committed accent (teal, gold, or red)",
       "Flat surfaces at rest; glow (text-shadow / box-shadow used as light emission, never elevation) is reserved for real status",
-      "Dense, table-aligned metric rows, each table compact and sized to its own content rather than stretched to fill the panel: Storage/Network run icon -> label -> value -> chart or badge; CPU/MEM/BAT leads with a status LED instead -- LED -> icon -> label -> value",
+      "Dense, table-aligned metric rows, each table compact and sized to its own content rather than stretched to fill the panel: every System row (CPU/MEM/BAT included) shares one shape -- icon -> label -> value -> chart or badge (ISSUES.md #31 retired the status LED that used to lead CPU/MEM/BAT; its slot is now an angled Utilization Bars graphic in the tail column, same as Storage/Network's chart)",
       "Tabular numerals everywhere a value updates, so nothing visually jitters on refresh",
       "A dark, slowly-drifting ambient gradient background (42s/55s cycles, deliberately desynced) is the only 'alive' surface that isn't tied to real data"
     ],
     "rules": [
-      { "name": "The One Accent Per Region Rule", "body": "Every panel commits to exactly one accent -- border, corner-tab glow, and section-header underline all read from the same --panel-accent/--panel-border pair. Accents never mix within a single panel.", "section": "colors" },
-      { "name": "The Status-Only Glow Rule", "body": "Glow (box-shadow-as-light, text-shadow) never decorates a resting element. It appears only when something is true: a metric is hot, the battery is actually charging, the feed is offline. A panel's corner tab and section-header underline are the one standing exception -- they're the system's constant 'this region is live' signature, not a status readout.", "section": "colors" },
-      { "name": "The Tabular Numerals Rule", "body": "Every element carrying a value that updates on a poll gets font-variant-numeric: tabular-nums. A refreshing CPU percentage or download rate never shifts its neighbors horizontally.", "section": "typography" },
-      { "name": "The Flat-By-Default Rule", "body": "No element receives a drop shadow for hierarchy. If something needs to stand out, it gets an accent-colored glow (glow = 'this is live/important'), not a lift (lift = 'this is above the surface').", "section": "elevation" }
+      {
+        "name": "The One Accent Per Region Rule",
+        "body": "Every panel commits to exactly one accent -- border, corner-tab glow, and section-header underline all read from the same --panel-accent/--panel-border pair. Accents never mix within a single panel.",
+        "section": "colors"
+      },
+      {
+        "name": "The Status-Only Glow Rule",
+        "body": "Glow (box-shadow-as-light, text-shadow) never decorates a resting element. It appears only when something is true: a metric is hot, the battery is actually charging, the feed is offline. A panel's corner tab and section-header underline are the one standing exception -- they're the system's constant 'this region is live' signature, not a status readout.",
+        "section": "colors"
+      },
+      {
+        "name": "The Tabular Numerals Rule",
+        "body": "Every element carrying a value that updates on a poll gets font-variant-numeric: tabular-nums. A refreshing CPU percentage or download rate never shifts its neighbors horizontally.",
+        "section": "typography"
+      },
+      {
+        "name": "The Flat-By-Default Rule",
+        "body": "No element receives a drop shadow for hierarchy. If something needs to stand out, it gets an accent-colored glow (glow = 'this is live/important'), not a lift (lift = 'this is above the surface').",
+        "section": "elevation"
+      }
     ],
     "dos": [
       "Do give every panel exactly one accent (border + corner-tab glow + section-header underline all match) -- see the One Accent Per Region Rule.",
       "Do use font-variant-numeric: tabular-nums on any text that holds a value which updates on a poll.",
       "Do let a panel's content determine its height; leave unused vertical space rather than stretching rows to fill it.",
       "Do reserve glow (box-shadow-as-light, text-shadow) for a real status condition -- hot, charging, offline, or the panel corner tab's constant 'this region is live' signal.",
-      "Do keep Storage and Network's colgroup proportions identical to each other (icon / label / value / tail); CPU/MEM/BAT's table is allowed to diverge since it's the only one carrying a status LED.",
+      "Do keep every System table's colgroup proportions identical (icon / label / value / tail) so their columns line up -- all four now share the same shape since the CPU/MEM/BAT-only LED column was retired (ISSUES.md #31).",
       "Do size every metric table to its own content, not its parent panel (no w-full) -- a narrow value or a small chart shouldn't leave a dead gap between itself and its column boundary."
     ],
     "donts": [
       "Don't use large rounded corners or a soft-card look anywhere. The notch (pentagon clip-path, 1.15rem chamfer) is this system's entire corner language; a border-radius: 8px+ card would read as a different design system grafted on.",
       "Don't add a drop shadow for hierarchy or lift. This system has no elevation model -- depth comes from blur and ambient background layering only (see the Flat-By-Default Rule).",
       "Don't mix two accents on one panel, or apply an accent color to an element outside its region.",
-      "Don't add an interactive affordance (button, input, hover-driven control) -- this is a read-only, no-input wallpaper surface. If a status element (like the utilization LED) looks like it could be a button, that's a bug, not an invitation to wire up a click handler."
+      "Don't add an interactive affordance (button, input, hover-driven control) -- this is a read-only, no-input wallpaper surface. If a status element (like the Utilization Bars) looks like it could be a button, that's a bug, not an invitation to wire up a click handler."
     ]
   }
 }

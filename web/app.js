@@ -202,55 +202,47 @@ function sysIcon(kind, tone = 'currentColor') {
   return g;
 }
 
-// Piecewise-linear dim -> bright ramp for the CPU/MEM LED: green's climb is
-// gentle (0.12-0.40 across its whole 0-70% span), yellow accelerates
-// (0.40-0.70 across 70-90%), red is steepest (0.70-1.00 across 90-100%) --
-// so the LED's brightness itself telegraphs "how close to trouble", not
-// just its hue. Continuous across band boundaries (only the slope changes,
-// never a jump), same underlying idea as #16's straight pct/100 mapping.
-function ledGlow(pct) {
-  const p = Math.max(0, Math.min(100, pct));
-  if (p >= 90) return 0.70 + (p - 90) / 10 * 0.30;
-  if (p >= 70) return 0.40 + (p - 70) / 20 * 0.30;
-  return 0.12 + p / 70 * 0.28;
+// Three-stop hex interpolation (crimson -> warm -> online) used to color
+// each segment of utilBars() -- a fixed spectrum across the bar's full
+// length, revealed proportionally by how many segments are filled, the
+// same effect as the reference racing-stat graphic (ISSUES.md #31).
+function lerpHex(a, b, t) {
+  const pa = [1, 3, 5].map((i) => parseInt(a.slice(i, i + 2), 16));
+  const pb = [1, 3, 5].map((i) => parseInt(b.slice(i, i + 2), 16));
+  const c = pa.map((v, i) => Math.round(v + (pb[i] - v) * t));
+  return `#${c.map((v) => v.toString(16).padStart(2, '0')).join('')}`;
+}
+function spectrumColor(t) {
+  return t < 0.5 ? lerpHex('#e8615a', '#fed33f', t / 0.5)
+    : lerpHex('#fed33f', '#2bfea0', (t - 0.5) / 0.5);
 }
 
-/* Small status LED for the CPU/MEM/BAT rows (ISSUES.md #16, #17 -- an
- * earlier version wrapped the icon in a much larger background ring, which
- * read as too heavy; a real LED doesn't grow, it brightens). Sized in em
- * so it's always close to the row's own text height. A fixed deep base
- * disc (.icon-led, CSS) sits under a second disc (.icon-led__fill) whose
- * opacity and glow both scale with --led-glow.
- *
- * CPU/MEM are traffic-light banded off their percentage -- green (dim,
- * good) below 70%, yellow (brightening, approaching limits) 70-89%, red
- * (bright, danger) from 90%, flashing on top of red from 95%. Battery
- * ignores pct entirely and instead reflects a discrete charge state (see
- * renderCpuMemBat) via ringState, since "charging" isn't something a glow
- * level alone can express -- its red-only charging/dim/low-flash states
- * are unchanged from #16.
- */
-function metricLed({ pct = null, ringState = null } = {}) {
-  const dot = document.createElement('span');
-  const fill = document.createElement('span');
-  fill.className = 'icon-led__fill';
-  if (ringState) {
-    const flash = ringState === 'low';
-    // low is the one state that stays the alarm red; charging/dim both
-    // read as green (on mains vs. running fine unplugged).
-    const colorClass = ringState === 'low' ? '' : ' icon-led--green';
-    dot.className = `icon-led icon-led--batt-${ringState}${colorClass}${flash ? ' icon-led--flash' : ''}`;
-  } else {
-    const clamped = Math.max(0, Math.min(100, pct ?? 0));
-    // red is the fill's default color (below) -- only green/yellow need an
-    // override class, so the 90%+ band adds nothing extra here.
-    const colorClass = clamped >= 90 ? '' : clamped >= 70 ? ' icon-led--yellow' : ' icon-led--green';
-    const flash = clamped >= 95;
-    dot.className = `icon-led${colorClass}${flash ? ' icon-led--flash' : ''}`;
-    fill.style.setProperty('--led-glow', ledGlow(clamped).toFixed(2));
+/* Angled utilization bar (ISSUES.md #31, replacing the status LED -- user
+ * feedback: "not working out"). A row of slanted parallelogram segments,
+ * same idea as a car-stat readout: segments up to the filled count light up
+ * in a fixed red -> gold -> green spectrum across the bar's position (not
+ * tied to the metric's own percentage bands), the rest sit dim/unlit as the
+ * empty track. Battery has no percentage bands to speak of either -- same
+ * fixed spectrum, just fewer segments lit at low charge. */
+function utilBars(pct, segments = 10) {
+  const clamped = Math.max(0, Math.min(100, pct ?? 0));
+  const filled = Math.round((clamped / 100) * segments);
+  const svg = el('svg', { viewBox: '0 0 100 20', preserveAspectRatio: 'none',
+    class: 'util-bars w-[clamp(3.2rem,8vmin,5.6rem)] h-[clamp(0.7rem,1.6vmin,0.95rem)] shrink-0 ml-auto' });
+  const w = 5, gap = 2.2, skew = 2.6, h = 16, top = 2, left = 3;
+  for (let i = 0; i < segments; i++) {
+    const x = left + i * (w + gap);
+    const points = [
+      [x + skew, top], [x + skew + w, top], [x + w, top + h], [x, top + h],
+    ].map((p) => p.join(',')).join(' ');
+    const lit = i < filled;
+    svg.appendChild(el('polygon', {
+      points,
+      fill: lit ? spectrumColor(i / (segments - 1)) : 'oklch(0.32 0.02 260 / .45)',
+      opacity: lit ? '0.95' : '1',
+    }));
   }
-  dot.appendChild(fill);
-  return dot;
+  return svg;
 }
 
 /* Step line chart -- compact enough to sit on a single line next to text
@@ -326,14 +318,14 @@ function miniBar(pct, tone = 'var(--color-accent)') {
   return wrap;
 }
 
-// One <tr>. Two shapes, chosen by whether `led` is passed:
-//  - CPU/MEM/BAT: LED | icon | label | value -- LED leads the row, the
-//    most immediate signal (ISSUES.md #17; it used to trail the label).
-//  - Storage/Network: icon | label | value | tail node (histograph or mini
-//    bar), unchanged since #12.
-// Either way this is what keeps every row's columns aligned -- a real
-// <table>, not independently-sized rows.
-function sysRow({ icon, label, value, sub = '', tail = null, tone = 'var(--color-accent)', led = null }) {
+// One <tr>: icon | label | value | tail node (utilization bar, histograph,
+// or mini bar). Same shape for every System row now -- CPU/MEM/BAT used to
+// lead with a status LED instead of a tail column (ISSUES.md #16, #17);
+// that LED is retired (#31, "not working out") in favor of an angled
+// utilization-bar graphic in the same tail slot Storage/Network already
+// use, so every row shares one column layout -- a real <table>, not
+// independently-sized rows.
+function sysRow({ icon, label, value, sub = '', tail = null, tone = 'var(--color-accent)' }) {
   const tr = document.createElement('tr');
 
   const iconTd = document.createElement('td');
@@ -359,17 +351,10 @@ function sysRow({ icon, label, value, sub = '', tail = null, tone = 'var(--color
     ? `${value}<div class="text-faint text-[clamp(.4rem,.82vmin,.58rem)] leading-tight">${sub}</div>`
     : value;
 
-  if (led) {
-    const ledTd = document.createElement('td');
-    ledTd.style.paddingRight = '0.5em'; // same specificity issue as valueTd above
-    ledTd.appendChild(metricLed(led));
-    tr.append(ledTd, iconTd, labelTd, valueTd);
-  } else {
-    const tailTd = document.createElement('td');
-    tailTd.className = 'pl-[0.6vmin]';
-    if (tail) tailTd.appendChild(tail);
-    tr.append(iconTd, labelTd, valueTd, tailTd);
-  }
+  const tailTd = document.createElement('td');
+  tailTd.className = 'pl-[0.6vmin]';
+  if (tail) tailTd.appendChild(tail);
+  tr.append(iconTd, labelTd, valueTd, tailTd);
   return tr;
 }
 
@@ -422,49 +407,42 @@ function metricGraphRow(label, values, tone) {
 // (SQLite-backed /api/history, which survives a page reload) -- revised
 // from #17's original 30S/5M/30M three-tier row per user feedback (the
 // tiers weren't independently comparable and 30S was near-flat dead
-// space at this size). Battery has no graph at all (#17 -- not needed);
-// its LED-driven charge state is signal enough.
+// space at this size). Battery has no trend graph at all (#17 -- not
+// needed). Each row's tail column is now an angled utilization-bar graphic
+// (#31, replacing the status LED) instead of a trend chart.
 function renderCpuMemBat(s) {
   const box = $('sys');
   box.replaceChildren();
   const hot = (p) => p > 88 ? 'var(--color-warm)' : 'var(--color-accent)';
+  const pad2 = (n) => String(Math.round(n)).padStart(2, '0');
 
   const cpuTone = hot(s.cpu);
   box.appendChild(sysRow({
     icon: 'cpu', label: 'CPU', tone: cpuTone,
-    value: `${s.cpu.toFixed(0)}%`,
+    value: `${pad2(s.cpu)}%`,
     sub: [s.temp_c ? `${s.temp_c}°C` : null,
       s.cpu_freq ? `${(s.cpu_freq / 1000).toFixed(1)}GHz` : null].filter(Boolean).join(' · '),
-    led: { pct: s.cpu },
+    tail: utilBars(s.cpu),
   }));
   box.appendChild(metricGraphRow('30M', historySince('cpu_pct', 30 * 60_000), cpuTone));
 
   const memTone = hot(s.mem.pct);
   box.appendChild(sysRow({
     icon: 'mem', label: 'MEM', tone: memTone,
-    value: `${s.mem.pct.toFixed(0)}%`,
+    value: `${pad2(s.mem.pct)}%`,
     sub: `${bytes(s.mem.used)} / ${bytes(s.mem.total)}`,
-    led: { pct: s.mem.pct },
+    tail: utilBars(s.mem.pct),
   }));
   box.appendChild(metricGraphRow('30M', historySince('mem_pct', 30 * 60_000), memTone));
 
   if (s.battery) {
     const battTone = s.battery.pct <= 35 && !s.battery.plugged
       ? 'var(--color-warm)' : 'var(--color-accent)';
-    // Battery's LED ignores pct and reflects a discrete charge state
-    // instead -- "charging" isn't a glow level. Priority: actually
-    // charging beats a low-battery warning (a low battery that's plugged
-    // in and recovering isn't the emergency a flashing light implies).
-    // charging/dim both read as green (on mains vs. running fine on its
-    // own); low is the one state that stays red and flashes (ISSUES.md
-    // #18 -- red used to mean "plugged in", which read backwards).
-    const ringState = s.battery.charging ? 'charging'
-      : s.battery.pct <= 35 ? 'low' : 'dim';
     box.appendChild(sysRow({
       icon: 'battery', label: 'BAT', tone: battTone,
-      value: `${s.battery.pct}%`,
+      value: `${pad2(s.battery.pct)}%`,
       sub: !s.battery.plugged && s.battery.secs_left ? dur(s.battery.secs_left) : '',
-      led: { ringState },
+      tail: utilBars(s.battery.pct),
     }));
   }
 
