@@ -2,6 +2,35 @@
 
 Newest first. No GitHub remote on this project, so this file is the tracker.
 
+## 16. Shrink the utilization indicator to a small LED beside the label, not behind the icon
+
+Status: closed
+Source: user request this session
+Date: 2026-08-20
+
+Follow-up to #15: the big background-of-the-icon ring reads as too large /
+lower-quality. Move it -- a small `1em` circle, sized to the row label
+text's own height, sitting to the right of the CPU/MEM/BAT label text
+(instead of behind/around the icon). Keep the same percentage-to-glow
+behavior (dim red at rest, brightening + glowing red as CPU/mem approaches
+100%, battery's discrete charging/dim/low-flash states unchanged), but the
+fill mechanic switches from "grows from center" (only visible at the old
+larger size) to "brightens" -- classic LED behavior, and the only one that
+still reads at `1em`.
+
+Shipped at `0.85em` (closer to the label's own cap-height than a full
+`1em` line-box) with glow blur/spread capped small (max `4px`/`1.2px`, down
+from `9px`/`3px`) so the halo stays proportionate instead of blooming into
+a blob -- confirmed by a before/after screenshot comparison. DESIGN.md +
+`.impeccable/design.json` updated: Utilization Ring renamed to Utilization
+LED. Verified functionally: full lint→test→build chain green (32 unit
+tests + smoke runs including the headless-Chrome render pass). Merged to
+`main`.
+
+Started at: 2026-08-20T18:11:37-07:00
+Ended at: 2026-08-20T18:22:04-07:00
+Time elapsed: 10m 27s
+
 ## 15. Utilization "power gauge" ring around CPU/MEM/BAT icons; remove CHRG badge
 
 Status: closed
