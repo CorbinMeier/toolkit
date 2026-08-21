@@ -60,6 +60,12 @@
        night_ops looks unchanged. */
     --color-crimson-panel:        #e8615a;
     --color-crimson-panel-border: #9c3230;
+    /* Per-device offline dot (statusDot() in app.js) -- separate from
+       --color-crimson so a theme can dim it instead of recoloring it
+       (#44): night_ops keeps the same red as every other alert, but
+       Retro Terminal wants "off" read as a dim green next to "up"'s
+       bright green, not a hue change. */
+    --color-offline-dot: #e8615a;
     /* CPU/MEM/BAT utilization-bar spectrum (#31's angled-bar graphic,
        app.js's spectrumColor()) -- read via getComputedStyle rather than
        hardcoded in JS so a theme can override them like every other
@@ -120,6 +126,9 @@
        stand out on the phosphor screen. */
     --color-crimson-panel:        #39ff88;
     --color-crimson-panel-border: #1c6b3f;
+    /* #44: offline devices read as a dim green dot next to "up"'s bright
+       --color-online, instead of switching to red. */
+    --color-offline-dot: #1c6b3f;
     /* #39: CPU/MEM/BAT utilization bars go all-green too -- graduated
        dim -> bright phosphor instead of the red/gold/green spectrum. */
     --spectrum-lo:  #145c33;

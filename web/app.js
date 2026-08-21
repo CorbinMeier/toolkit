@@ -498,14 +498,17 @@ function renderMusic(music) {
   }
 }
 
-// A small glowing circle -- green/up or crimson/offline -- replacing the
-// old node-glyph icon (user feedback: "the icon you used here is odd").
-// Reuses .dot (same status-dot CSS the offline banner already uses), just
-// colored per-row instead of the banner's fixed crimson.
+// A small glowing circle -- green/up or dim/offline -- replacing the old
+// node-glyph icon (user feedback: "the icon you used here is odd").
+// Reuses .dot (same status-dot CSS the offline banner already uses).
+// --color-offline-dot (not --color-crimson) so a theme can dim this
+// instead of recoloring it (#44) -- night_ops keeps it red like every
+// other alert, Retro Terminal makes it a dark green next to "up"'s
+// bright green.
 function statusDot(status) {
   const dot = document.createElement('span');
   dot.className = 'dot';
-  const color = status === 'up' ? 'var(--color-online)' : 'var(--color-crimson)';
+  const color = status === 'up' ? 'var(--color-online)' : 'var(--color-offline-dot)';
   dot.style.background = color;
   dot.style.boxShadow = `0 0 4px ${color}`;
   return dot;
