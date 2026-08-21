@@ -86,11 +86,12 @@
     },
     "shadows": [
       { "name": "glow-accent-tab", "value": "0 0 6px var(--panel-accent)", "purpose": "Panel corner-tab and section-header underline glow -- the constant 'this region is live' signal, present at rest." },
-      { "name": "glow-chrg-active", "value": "0 0 9px 1px var(--color-crimson), 0 0 2px var(--color-crimson)", "purpose": "CHRG badge's active (currently-charging) state glow." },
+      { "name": "glow-ring-fill", "value": "0 0 calc(2px + var(--ring-scale) * 9px) calc(var(--ring-scale) * 3px) var(--color-crimson)", "purpose": "Utilization ring fill's glow -- blur and spread both scale with --ring-scale (0-1), so it brightens continuously as a metric's percentage approaches 100, or snaps to full while the battery is genuinely charging." },
       { "name": "text-glow-display", "value": "-6px -4px 26px var(--panel-accent)", "purpose": "text-shadow on the Display-role hero temperature readout -- emphasis, reserved for exactly one element per screen." }
     ],
     "motion": [
-      { "name": "duration-state", "value": "0.4s", "purpose": "CHRG badge color/background/box-shadow cross-fade between inert and active states." },
+      { "name": "duration-state", "value": "0.6s", "purpose": "Utilization ring's transform/box-shadow/opacity transition as --ring-scale changes." },
+      { "name": "duration-battery-flash", "value": "2s", "purpose": "Battery ring's low-charge flash cycle -- a hard steps(1) alternation, 1s fully opaque then 1s near-transparent." },
       { "name": "duration-value", "value": "0.6s", "purpose": "Width transition when a bar-style value changes (e.g. the Storage mini-bar fill)." },
       { "name": "duration-entrance", "value": "0.6s", "purpose": "Per-panel fade+rise entrance on first load, staggered 60ms per panel, capped at 1.6s total; always stripped back off so visibility never depends on the animation completing." },
       { "name": "duration-ambient-1", "value": "42s", "purpose": "Slow drift cycle for the first ambient background glow blob (g1)." },
@@ -135,12 +136,12 @@
       "css": ".ds-sec-head{position:relative;padding-bottom:0.65vmin;margin:0;color:var(--color-faint);text-transform:uppercase;letter-spacing:0.3em;font-size:0.68rem;font-weight:400;font-family:\"Fira Sans\",system-ui,sans-serif}.ds-sec-head::after{content:\"\";position:absolute;left:0;bottom:0;width:100%;height:1px;background:var(--panel-accent);box-shadow:0 0 6px var(--panel-accent)}"
     },
     {
-      "name": "Status Badge (CHRG)",
-      "kind": "chip",
-      "refersTo": "chrg-badge",
-      "description": "Non-interactive charge-state indicator. Deep inert red at rest; switches to full Distress Red with a glow only while the battery is genuinely charging (not merely plugged in and full).",
-      "html": "<span class=\"ds-chrg-badge\">CHRG</span> <span class=\"ds-chrg-badge ds-chrg-badge--active\">CHRG</span>",
-      "css": ".ds-chrg-badge{display:inline-flex;align-items:center;justify-content:center;padding:0.15em 0.55em;border-radius:2px;line-height:1;font-size:0.68em;letter-spacing:0.14em;font-weight:600;color:oklch(0.62 0.05 25);background:oklch(0.22 0.03 25);border:1px solid var(--color-crimson-border);transition:color .4s ease,background .4s ease,box-shadow .4s ease;font-family:\"Fira Sans\",system-ui,sans-serif}.ds-chrg-badge--active{color:oklch(0.99 0.02 25);background:var(--color-crimson);border-color:var(--color-crimson);box-shadow:0 0 9px 1px var(--color-crimson),0 0 2px var(--color-crimson)}"
+      "name": "Utilization Ring",
+      "kind": "custom",
+      "refersTo": "icon-ring",
+      "description": "Non-interactive 'power gauge' behind the CPU/MEM/BAT icons -- a fixed deep-red base disc plus a second disc that scales up from the center and glows brighter as --ring-scale (0-1) rises, reading as a status light powering up rather than a progress bar. CPU/MEM drive --ring-scale continuously from their percentage; battery instead uses a discrete .icon-ring--batt-{charging,low,dim} modifier, since 'charging' isn't a fill level. Replaces the old CHRG text badge -- the battery ring now carries that same currently-charging signal.",
+      "html": "<span class=\"ds-icon-ring\" style=\"--ring-scale:0.72\"><span class=\"ds-icon-ring__fill\"></span><svg viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"var(--color-accent)\" stroke-width=\"1.6\" stroke-linecap=\"round\" stroke-linejoin=\"round\" width=\"16\" height=\"16\" style=\"position:relative;z-index:1\"><rect x=\"6\" y=\"6\" width=\"12\" height=\"12\" rx=\"1.2\"/></svg></span> <span class=\"ds-icon-ring ds-icon-ring--batt-charging\"><span class=\"ds-icon-ring__fill\"></span></span> <span class=\"ds-icon-ring ds-icon-ring--batt-low\"><span class=\"ds-icon-ring__fill\"></span></span>",
+      "css": ".ds-icon-ring{position:relative;width:1.6em;height:1.6em;border-radius:50%;display:grid;place-items:center}.ds-icon-ring::before{content:\"\";position:absolute;inset:0;border-radius:50%;background:oklch(0.15 0.03 25)}.ds-icon-ring__fill{position:absolute;inset:0;border-radius:50%;background:radial-gradient(circle at 42% 34%,oklch(0.85 0.08 25) 0%,var(--color-crimson) 55%,oklch(0.30 0.07 25) 100%);transform:scale(var(--ring-scale,0));box-shadow:0 0 calc(2px + var(--ring-scale,0) * 9px) calc(var(--ring-scale,0) * 3px) var(--color-crimson);transition:transform .6s ease,box-shadow .6s ease,opacity .4s ease}.ds-icon-ring--batt-charging .ds-icon-ring__fill{--ring-scale:1}.ds-icon-ring--batt-dim .ds-icon-ring__fill{--ring-scale:0.22;opacity:.55;box-shadow:none}.ds-icon-ring--batt-low .ds-icon-ring__fill{--ring-scale:1;animation:ring-flash 2s steps(1) infinite}@keyframes ring-flash{0%,49.99%{opacity:1}50%,100%{opacity:.12}}"
     },
     {
       "name": "Status Dot + Offline Banner",
@@ -178,7 +179,7 @@
       "Don't use large rounded corners or a soft-card look anywhere. The notch (pentagon clip-path, 1.15rem chamfer) is this system's entire corner language; a border-radius: 8px+ card would read as a different design system grafted on.",
       "Don't add a drop shadow for hierarchy or lift. This system has no elevation model -- depth comes from blur and ambient background layering only (see the Flat-By-Default Rule).",
       "Don't mix two accents on one panel, or apply an accent color to an element outside its region.",
-      "Don't add an interactive affordance (button, input, hover-driven control) -- this is a read-only, no-input wallpaper surface. If a status element (like CHRG) looks like it could be a button, that's a bug, not an invitation to wire up a click handler."
+      "Don't add an interactive affordance (button, input, hover-driven control) -- this is a read-only, no-input wallpaper surface. If a status element (like the utilization ring) looks like it could be a button, that's a bug, not an invitation to wire up a click handler."
     ]
   }
 }

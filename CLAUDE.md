@@ -198,8 +198,9 @@ render loop.
   full palette for exactly this reason — don't de-duplicate them.
 - `psutil.sensors_battery()` returns `power_plugged`, not `plugged_in`, and
   it's AC-present, not charge state — a full battery still left plugged in
-  reports `power_plugged: True` with no current flowing. The CHRG indicator
-  needs the real thing, so `battery_charging()` reads
+  reports `power_plugged: True` with no current flowing. The battery
+  utilization ring's charging state needs the real thing, so
+  `battery_charging()` reads
   `/sys/class/power_supply/BAT*/status` (`"Charging"` vs `"Full"` /
   `"Discharging"` / `"Not charging"`) and only falls back to
   `power_plugged` when no `BAT*` node exists at all.
@@ -270,6 +271,11 @@ any other script can add panels without touching the server.
   `cosmic-bg`'s wallpaper, backdrop blur included — but it reads poorly
   against the current black-hole wallpaper, so it was reverted. One-key flip
   in `config.json` plus a host restart if revisited against calmer imagery.
+- #15 (2026-08-20): CPU/MEM/BAT icons now sit inside a two-layer
+  utilization ring (deep-red base + a glowing fill that scales with
+  percentage; battery uses a discrete charging/dim/low-flash state
+  instead) -- see DESIGN.md's Utilization Ring component. Replaces the
+  CHRG text badge entirely, which is removed.
 - #14 (2026-08-20): split historical-metrics collection out of dashd-serve
   into a standalone `bin/dashd-collect`, the sole writer of
   `data/metrics.db` now. Shared cpu/mem/battery/net sampling moved into

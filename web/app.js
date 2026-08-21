@@ -197,6 +197,27 @@ function sysIcon(kind, tone = 'currentColor') {
   return g;
 }
 
+/* "Power gauge" badge behind the CPU/MEM/BAT icons: a fixed deep-red base
+ * disc (.icon-ring, CSS) plus a second same-size disc (.icon-ring__fill)
+ * that grows from the center and glows brighter as pct approaches 100 --
+ * reads as a status light powering up, not a progress bar. CPU/MEM drive it
+ * continuously off their percentage; battery ignores pct entirely and
+ * instead reflects a discrete charge state (see renderCpuMemBat) via
+ * ringState, since "charging" isn't something a fill level can express.
+ */
+function iconRing(kind, tone, { pct = null, ringState = null } = {}) {
+  const wrap = document.createElement('span');
+  wrap.className = `icon-ring${ringState ? ` icon-ring--batt-${ringState}` : ''}`;
+  const fill = document.createElement('span');
+  fill.className = 'icon-ring__fill';
+  if (!ringState) {
+    const scale = Math.max(0, Math.min(1, (pct ?? 0) / 100));
+    fill.style.setProperty('--ring-scale', scale.toFixed(2));
+  }
+  wrap.append(fill, sysIcon(kind, tone));
+  return wrap;
+}
+
 /* Step line chart -- compact enough to sit on a single line next to text
  * (a tier label, in sysTierRow() below). "Step" rather than a diagonal
  * line: each sample holds its value until the next one arrives (a
@@ -248,15 +269,16 @@ function miniBar(pct, tone = 'var(--color-accent)') {
   return wrap;
 }
 
-// One <tr>: icon | label | value (+ optional smaller sub-line) | tail node
-// (histograph, mini bar, or a badge like CHRG). This is what keeps every
-// row's columns aligned -- a real <table>, not independently-sized rows.
-function sysRow({ icon, label, value, sub = '', tail = null, tone = 'var(--color-accent)' }) {
+// One <tr>: icon (optionally wrapped in a utilization ring, see `ring`
+// below) | label | value (+ optional smaller sub-line) | tail node
+// (histograph or mini bar). This is what keeps every row's columns aligned
+// -- a real <table>, not independently-sized rows.
+function sysRow({ icon, label, value, sub = '', tail = null, tone = 'var(--color-accent)', ring = null }) {
   const tr = document.createElement('tr');
 
   const iconTd = document.createElement('td');
   iconTd.style.color = tone;
-  iconTd.appendChild(sysIcon(icon, tone));
+  iconTd.appendChild(ring ? iconRing(icon, tone, ring) : sysIcon(icon, tone));
 
   const labelTd = document.createElement('td');
   labelTd.className = 'text-muted tracking-[0.1em] uppercase pl-[0.6vmin] ' +
@@ -311,6 +333,7 @@ function renderCpuMemBat(s) {
     value: `${s.cpu.toFixed(0)}%`,
     sub: [s.temp_c ? `${s.temp_c}°C` : null,
       s.cpu_freq ? `${(s.cpu_freq / 1000).toFixed(1)}GHz` : null].filter(Boolean).join(' · '),
+    ring: { pct: s.cpu },
   }));
   box.appendChild(sysTierRow('30S', ringSince('cpu', 30_000), cpuTone));
   box.appendChild(sysTierRow('5M', historySince('cpu_pct', 5 * 60_000), cpuTone));
@@ -321,6 +344,7 @@ function renderCpuMemBat(s) {
     icon: 'mem', label: 'MEM', tone: memTone,
     value: `${s.mem.pct.toFixed(0)}%`,
     sub: `${bytes(s.mem.used)} / ${bytes(s.mem.total)}`,
+    ring: { pct: s.mem.pct },
   }));
   box.appendChild(sysTierRow('30S', ringSince('mem', 30_000), memTone));
   box.appendChild(sysTierRow('5M', historySince('mem_pct', 5 * 60_000), memTone));
@@ -329,14 +353,17 @@ function renderCpuMemBat(s) {
   if (s.battery) {
     const battTone = s.battery.pct < 20 && !s.battery.plugged
       ? 'var(--color-warm)' : 'var(--color-accent)';
-    const chrg = document.createElement('span');
-    chrg.className = `chrg-badge${s.battery.charging ? ' is-charging' : ''}`;
-    chrg.textContent = 'CHRG';
+    // Battery's ring ignores pct and reflects a discrete charge state
+    // instead -- "charging" isn't a fill level. Priority: actually
+    // charging beats a low-battery warning (a low battery that's plugged
+    // in and recovering isn't the emergency a flashing light implies).
+    const ringState = s.battery.charging ? 'charging'
+      : s.battery.pct < 20 ? 'low' : 'dim';
     box.appendChild(sysRow({
       icon: 'battery', label: 'BAT', tone: battTone,
       value: `${s.battery.pct}%`,
       sub: !s.battery.plugged && s.battery.secs_left ? dur(s.battery.secs_left) : '',
-      tail: chrg,
+      ring: { ringState },
     }));
     box.appendChild(sysTierRow('30M', historySince('battery_pct', 30 * 60_000), battTone));
     box.appendChild(sysTierRow('4H', historySince('battery_pct', 4 * 3600_000), battTone));
