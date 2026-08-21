@@ -2,6 +2,51 @@
 
 Newest first. No GitHub remote on this project, so this file is the tracker.
 
+## 12. Multi-tier step-line charts for CPU/MEM/BAT; dedicated Storage/Network sections
+
+Status: closed
+Source: user request this session
+Date: 2026-08-20
+
+Add a step line chart (compact enough to sit inline with text, one per
+line) for CPU and Memory. Battery goes directly below Memory. Storage gets
+its own dedicated, visually separated area within System, and below that a
+dedicated Network section with another step-line chart carrying two lines
+(upload and download).
+
+Store metrics history for CPU, Memory, and Battery specifically (network
+doesn't need long-term storage). CPU probably wants three step charts:
+30 seconds, 5 minutes, and 30 minutes. Same tiers for Memory. Battery
+would probably benefit more from 30 minutes, 4 hours, and 24 hours.
+
+New `stepChart()` (step-after "staircase" interpolation, replacing the old
+diagonal `miniSpark()`) renders one or more series on a shared scale, so
+Network's download/upload lines share one chart. CPU/Memory each get a
+value row plus three tier sub-rows (30S/5M/30M); Battery gets a value row
+plus three tier sub-rows (30M/4H/24H) directly below Memory. Storage and
+Network moved into their own `<table>`s under a "Storage"/"Network"
+sec-head, separated from the cpu/mem/bat rows by a hairline.
+
+Two independent trend sources, since neither one alone covers every tier:
+a client-side ring buffer (this session's own ~5s `/api/state` polls)
+backs the 30-second CPU/Memory tier and the Network chart -- the DB's
+~30s sample interval can't resolve a 30-second window at all, and would
+flatten brief network bursts even at a longer window. Everything >= 5
+minutes reads from `/api/history` instead (`trendHistory`, fetched once
+per minute for the whole retention window and sliced per tier
+client-side), since that persists across a page reload and the DB's
+resolution is fine by then. `battery_pct` was added to
+`lib/metrics.py`'s `COLUMNS`, with a self-migrating `ALTER TABLE ADD
+COLUMN` in `_connect()` so the already-running production `metrics.db`
+(cpu/mem/net only, from #7) didn't 500 on first touch. `dashd-serve` also
+now exposes `config.metrics_retain_hours` in `/api/state` so the
+frontend's history-fetch window tracks the server's actual retention
+instead of a second hardcoded constant that could silently drift from it.
+
+Started at: 2026-08-20T16:58:11-07:00
+Ended at: 2026-08-20T17:03:19-07:00
+Time elapsed: 5m 8s
+
 ## 11. System panel: table layout, icons, lsblk-sourced disk/partition list, battery CHRG indicator
 
 Status: closed
