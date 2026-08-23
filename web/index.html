@@ -272,19 +272,19 @@
 
   /* System table: icon | label | value | histograph/badge, one row per
      metric, so everything lines up in real grid columns instead of
-     independently-sized flex rows. No icons, one font size, no stacked
-     sub-line (#57 standardized System onto the same conventions Weather's
-     .kv-grid settled on) -- label | value(+status bar) | sub, the old
-     second line now a dedicated third column instead, dash-prefixed to
-     read as subordinate data. width:fit-content for the same reason
-     .kv-grid needs it: a direct child of .panel's flex column otherwise
-     inherits align-items:stretch and gets forced to the panel's full
-     cross-axis width. */
-  .sys-grid{display:grid;grid-template-columns:auto auto auto;
+     independently-sized flex rows. No icons, one font size (#57
+     standardized System onto the same conventions Weather's .kv-grid
+     settled on) -- label | value(+status bar), with an optional sub line
+     directly underneath the value (#58 -- dash-prefixed, sitting below
+     the row rather than beside it as a third column). width:fit-content
+     for the same reason .kv-grid needs it: a direct child of .panel's
+     flex column otherwise inherits align-items:stretch and gets forced
+     to the panel's full cross-axis width. */
+  .sys-grid{display:grid;grid-template-columns:auto auto;
     column-gap:1vmin;row-gap:0.3vmin;align-items:center;width:fit-content}
   .sys-grid > .sys-key{text-align:left}
   .sys-grid > .sys-val{justify-self:end;display:flex;align-items:center;gap:0.6vmin}
-  .sys-grid > .sys-sub{justify-self:end}
+  .sys-grid > .sys-sub{justify-self:end;grid-column:2}
 
   /* Spreadsheet-style key:value grid (#50) -- key column left, value
      column right, one CSS grid so both columns line up across every row

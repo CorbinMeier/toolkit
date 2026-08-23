@@ -72,10 +72,12 @@ web/index.html      panel structure (Tailwind utility classes); System
                     renders as three compact .sys-grid CSS grids (not
                     w-full -- sized to content), one each for CPU/MEM/BAT,
                     Storage, Network: label | value (+ Utilization Bars/
-                    mini bar/step chart) | sub, no icons, one font size,
-                    no stacked second line (#57 -- the old sub-line, e.g.
-                    CPU's temp/freq, is now a dash-prefixed third column
-                    instead). A row's value takes Weather's alert-badge
+                    mini bar/step chart), no icons, one font size (#57).
+                    An optional sub line (CPU temp/freq, MEM used/total,
+                    BAT time-remaining, NET upload rate) sits dash-prefixed
+                    directly under the value, pinned there via
+                    grid-column:2 rather than beside it as a third column
+                    (#58). A row's value takes Weather's alert-badge
                     treatment (#49) past its hot threshold, replacing the
                     retired icon-tone signal. Music (#26) is a fourth
                     System sub-section below Network with its own bespoke
@@ -350,21 +352,25 @@ any other script can add panels without touching the server.
 
 ## Current state (2026-08-20)
 
+- #58 (2026-08-23): follow-up to #57 -- the dash-prefixed sub line (CPU
+  temp/freq, MEM used/total, BAT time-remaining, NET upload rate) moved
+  from a third `.sys-grid` column beside the value onto its own line
+  directly under it (`.sys-sub{grid-column:2}`), matching how this data
+  read before #57. `sysRow()` now omits the sub row entirely (not an
+  empty one) when there's nothing to show, e.g. Storage.
 - #57 (2026-08-23): System (CPU/MEM/BAT, Storage, Network) standardized
   onto the same conventions Weather's `.kv-grid` settled on (#50-#52):
-  a new `.sys-grid` (label | value+status-bar | sub) replaces the old
-  `<table class="sys-table">` icon|label|value|tail row shape. No icons
-  (the cpu/mem/disk/battery/net glyphs and the network up/down arrow
-  glyphs are gone -- `sysIcon()` shrank to just its one remaining live
-  case, sunrise/sunset); one font size for every cell; no stacked
-  second line (the old sub-line -- CPU temp/freq, MEM used/total, BAT
-  time-remaining, NET upload rate -- is a dash-prefixed third column
-  instead). A row's value gets Weather's `.alert-badge` treatment past
-  its existing hot threshold (CPU/MEM/Storage > 88%, Battery <= 35%
-  unplugged), replacing the retired icon-tone signal. Explicitly kept
-  as-is: the Utilization Bars/mini bar/step chart status visualization
-  itself, now attached to the value cell instead of a separate tail
-  column.
+  a new `.sys-grid` (label | value+status-bar, sub on its own line
+  under the value -- #58) replaces the old `<table class="sys-table">`
+  icon|label|value|tail row shape. No icons (the cpu/mem/disk/battery/net
+  glyphs and the network up/down arrow glyphs are gone -- `sysIcon()`
+  shrank to just its one remaining live case, sunrise/sunset); one font
+  size for every cell. A row's value gets Weather's `.alert-badge`
+  treatment past its existing hot threshold (CPU/MEM/Storage > 88%,
+  Battery <= 35% unplugged), replacing the retired icon-tone signal.
+  Explicitly kept as-is: the Utilization Bars/mini bar/step chart status
+  visualization itself, now attached to the value cell instead of a
+  separate tail column.
 - #56 (2026-08-23): the Devices panel (#27 and its follow-ups -- remembered-
   per-network registry, ipv6-first identification, self-pinning) was
   removed entirely (user: "remove devices. its basically just clutter"),

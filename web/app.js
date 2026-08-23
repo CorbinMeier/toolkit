@@ -243,16 +243,18 @@ function miniBar(pct, tone = 'var(--color-accent)',
   return wrap;
 }
 
-// One .sys-grid row: label | value (+ status bar/chart) | sub (#57,
-// standardizing System onto the same conventions Weather's .kv-grid
-// settled on -- no icons, one font size everywhere, no stacked second
-// line). `hot` swaps the value to the same alert-badge treatment Weather
-// uses (#49) instead of the retired icon-tone signal; the bar/chart
-// itself is unrelated and keeps its own independent coloring (DESIGN.md's
-// Utilization Bars component is a fixed position-based spectrum, not a
-// threshold). `sub` is the old second-line info (CPU temp/freq, MEM
-// used/total, BAT time-remaining, NET upload rate) as a dash-prefixed
-// third column instead of a stacked line under the value.
+// One .sys-grid row: label | value (+ status bar/chart), with an optional
+// sub line directly underneath the value (#57 standardized System onto
+// Weather's .kv-grid conventions -- no icons, one font size everywhere;
+// #58 moved the dash-prefixed sub info back under the row instead of
+// beside it as a third column). `hot` swaps the value to the same
+// alert-badge treatment Weather uses (#49) instead of the retired
+// icon-tone signal; the bar/chart itself is unrelated and keeps its own
+// independent coloring (DESIGN.md's Utilization Bars component is a
+// fixed position-based spectrum, not a threshold). `sub` is the old
+// second-line info (CPU temp/freq, MEM used/total, BAT time-remaining,
+// NET upload rate) -- omitted entirely (not an empty row) when there's
+// nothing to show, e.g. Storage.
 function sysRow({ label, value, hot = false, bar = null, sub = '' }) {
   const key = document.createElement('div');
   key.className = 'sys-key text-faint tracking-[0.1em] uppercase truncate';
@@ -266,9 +268,11 @@ function sysRow({ label, value, hot = false, bar = null, sub = '' }) {
   val.appendChild(valText);
   if (bar) val.appendChild(bar);
 
+  if (!sub) return [key, val];
+
   const subEl = document.createElement('div');
   subEl.className = 'sys-sub num text-faint';
-  subEl.textContent = sub ? `- ${sub}` : '';
+  subEl.textContent = `- ${sub}`;
 
   return [key, val, subEl];
 }
