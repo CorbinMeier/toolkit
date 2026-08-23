@@ -678,9 +678,15 @@ function renderWeather(w) {
   const tempEl = $('wtemp');
   const hiloEl = $('whilo');
   if (w.unavailable) {
-    if (descEl) { descEl.textContent = 'weather unavailable'; descEl.classList.remove('text-crimson'); }
+    if (descEl) {
+      descEl.textContent = 'weather unavailable';
+      descEl.classList.remove('alert-badge'); descEl.classList.add('text-muted');
+    }
     if (feelsEl) feelsEl.textContent = '';
-    if (tempEl) { tempEl.textContent = '—'; tempEl.classList.remove('text-crimson'); }
+    if (tempEl) {
+      tempEl.textContent = '—';
+      tempEl.classList.remove('alert-badge'); tempEl.classList.add('text-ink');
+    }
     if (hiloEl) hiloEl.replaceChildren();
     $('wdetails').replaceChildren();
     return;
@@ -689,26 +695,33 @@ function renderWeather(w) {
   // w.alert.fields is computed server-side (bin/dashd-serve's
   // weather_alert(), #46/#48) against config.weather_alerts -- regex over
   // w.desc plus temp/high/rain% thresholds, same shape as the Log panel's
-  // config.logs.patterns. Only the specific out-of-range value turns red
-  // (text-crimson, true red in every theme) -- not the whole panel, which
-  // stays accent-amber regardless (#48: a single hot value highlighting
-  // the whole card was the wrong shape).
+  // config.logs.patterns. Only the specific out-of-range value gets the
+  // alert-badge treatment (white text, filled deep-red background, #49)
+  // -- not the whole panel, which stays accent-amber regardless (#48: a
+  // single hot value highlighting the whole card was the wrong shape).
+  // Elements with a static base color class (text-muted/text-ink) swap it
+  // out for alert-badge rather than stacking, so there's no same-
+  // specificity tie between the two to fight over.
   const alert = w.alert?.fields || {};
 
   if (descEl) {
     descEl.textContent = w.desc
       + (w.stale ? ` · ${Math.round(w.age_seconds / 60)}m old` : '');
-    descEl.classList.toggle('text-crimson', Boolean(alert.condition));
+    const hot = Boolean(alert.condition);
+    descEl.classList.toggle('alert-badge', hot);
+    descEl.classList.toggle('text-muted', !hot);
   }
   if (feelsEl) feelsEl.textContent = `feels ${w.apparent}${w.units.temp}`;
   if (tempEl) {
     tempEl.textContent = `${w.temp}${w.units.temp}`;
-    tempEl.classList.toggle('text-crimson', Boolean(alert.temp));
+    const hot = Boolean(alert.temp);
+    tempEl.classList.toggle('alert-badge', hot);
+    tempEl.classList.toggle('text-ink', !hot);
   }
   if (hiloEl) {
     const hi = document.createElement('span');
     hi.textContent = `H${w.high}°`;
-    if (alert.high) hi.classList.add('text-crimson');
+    if (alert.high) hi.classList.add('alert-badge');
     const lo = document.createElement('span');
     lo.className = 'ml-[0.5vmin]';
     lo.textContent = `L${w.low}°`;
@@ -721,7 +734,7 @@ function renderWeather(w) {
     lab.textContent = `${label}: `;
     const val = document.createElement('span');
     val.textContent = value;
-    if (hot) val.classList.add('text-crimson');
+    if (hot) val.classList.add('alert-badge');
     div.append(lab, val);
     return div;
   };

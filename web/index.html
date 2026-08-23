@@ -66,6 +66,15 @@
        Retro Terminal wants "off" read as a dim green next to "up"'s
        bright green, not a hue change. */
     --color-offline-dot: #e8615a;
+    /* Weather value alert badge (#49): a filled white-on-red badge for an
+       out-of-range reading (hot temp/forecast high, high rain %, severe
+       condition text -- see .alert-badge below and renderWeather() in
+       app.js). Deeper/more saturated than --color-crimson (that's tuned
+       to sit as text/border on a dark panel; this is a solid fill a white
+       label needs to read clearly against), and deliberately not themed
+       per-theme like --color-crimson-panel is -- same "stays genuinely
+       red regardless of theme" intent as --color-crimson itself. */
+    --color-alert-bg: #b3121a;
     /* CPU/MEM/BAT utilization-bar spectrum (#31's angled-bar graphic,
        app.js's spectrumColor()) -- read via getComputedStyle rather than
        hardcoded in JS so a theme can override them like every other
@@ -213,6 +222,13 @@
   .accent-cyan   {--panel-accent:var(--color-accent);  --panel-border:var(--color-cyan-border)}
   .accent-amber  {--panel-accent:var(--color-warm);    --panel-border:var(--color-amber-border)}
   .accent-crimson{--panel-accent:var(--color-crimson-panel); --panel-border:var(--color-crimson-panel-border)}
+
+  /* Weather out-of-range value badge (#49): filled white-on-red, not just
+     recolored text -- renderWeather() in app.js toggles this on the
+     specific span (current temp, forecast high, rain %, condition text)
+     that crossed a config.weather_alerts threshold. Sharp corners, no
+     radius, to match the panel/notch language rather than a soft pill. */
+  .alert-badge{background:var(--color-alert-bg); color:#fff; padding:0 0.3em}
 
   /* Notched cut-corner card, ported from CyberpunkUIKit's CyberpunkPad --
      solid dark fill, 2px accent-colored border, diagonal corner cut with a
@@ -615,11 +631,11 @@
         </section>
 
         <!-- WEATHER/FORECAST: current conditions + week. Stays accent-amber
-             always -- an out-of-range reading (renderWeather(), #48) turns
-             just that value's own text red (text-crimson), not the panel
-             accent; #46's first cut swapped the whole panel to red, which
-             was the wrong shape (a single hot value shouldn't make the
-             whole card read as an alert). -->
+             always -- an out-of-range reading (renderWeather(), #48/#49)
+             gets a filled alert-badge (white on deep red) on just that
+             value, not the panel accent; #46's first cut swapped the
+             whole panel to red, which was the wrong shape (a single hot
+             value shouldn't make the whole card read as an alert). -->
         <section class="accent-amber flex flex-col">
           <div class="panel px-[2.4vmin] py-[1.8vmin] flex flex-col gap-[1.3vmin]">
             <!-- Weather had no header at all (user feedback: "seems like

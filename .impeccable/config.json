@@ -122,6 +122,12 @@
         "value": "6px",
         "createdAt": "2026-08-21T04:23:55.290Z",
         "reason": "web/control is a standalone mobile config form (#30), deliberately not styled to DESIGN.md's Night Ops HUD -- same sanctioned exception as the other web/control color/radius ignores"
+      },
+      {
+        "rule": "design-system-color",
+        "value": "#fff",
+        "createdAt": "2026-08-23T19:47:19.783Z",
+        "reason": "user explicitly requested white text on the weather alert badge (issue #49) as the contrast color against the badge's deep-red fill"
       }
     ]
   }
