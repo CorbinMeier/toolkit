@@ -712,6 +712,8 @@ function renderWeather(w) {
   // out for alert-badge rather than stacking, so there's no same-
   // specificity tie between the two to fight over.
   const alert = w.alert?.fields || {};
+  // #51: 000F, not 000°F -- w.units.temp comes off the wire as "°F"/"°C".
+  const tempUnit = w.units.temp.replace('°', '');
 
   if (descEl) {
     descEl.textContent = w.desc
@@ -720,20 +722,20 @@ function renderWeather(w) {
     descEl.classList.toggle('alert-badge', hot);
     descEl.classList.toggle('text-muted', !hot);
   }
-  if (feelsEl) feelsEl.textContent = `${w.apparent}${w.units.temp}`;
+  if (feelsEl) feelsEl.textContent = `${w.apparent}${tempUnit}`;
   if (tempEl) {
-    tempEl.textContent = `${w.temp}${w.units.temp}`;
+    tempEl.textContent = `${w.temp}${tempUnit}`;
     const hot = Boolean(alert.temp);
     tempEl.classList.toggle('alert-badge', hot);
     tempEl.classList.toggle('text-ink', !hot);
   }
   if (hiloEl) {
     const hi = document.createElement('span');
-    hi.textContent = `${w.high}°`;
+    hi.textContent = `${w.high}${tempUnit}`;
     if (alert.high) hi.classList.add('alert-badge');
     const lo = document.createElement('span');
     lo.className = 'ml-[0.4vmin]';
-    lo.textContent = `/ ${w.low}°`;
+    lo.textContent = `/ ${w.low}${tempUnit}`;
     hiloEl.replaceChildren(hi, lo);
   }
   if (windEl) windEl.textContent = `${w.wind}${w.units.wind} ${compass(w.wind_dir)}`;

@@ -307,7 +307,15 @@
      "spreadsheet" read reuses this instead of inventing another grid. */
   .kv-grid{display:grid;grid-template-columns:auto 1fr;column-gap:1.2vmin;row-gap:0.3vmin}
   .kv-grid > .kv-key{text-align:left}
-  .kv-grid > .kv-val{text-align:right}
+  /* justify-self:end (#51), not the grid default stretch -- a value cell
+     is a direct grid item in the 1fr column, so without this it fills the
+     entire column width. That made .alert-badge's background stretch
+     full-width on a plain value (e.g. TEMP) while reading tight/small on
+     High/Low's alert-badge (nested one level deeper, on a plain inline
+     span inside the value cell, never a grid item itself) -- same badge,
+     wildly different apparent size. Shrinking every value cell to its own
+     content makes every badge hug just its text, uniformly. */
+  .kv-grid > .kv-val{text-align:right;justify-self:end}
 
   /* Per-output layout (config.json outputs.<name>.layout, plumbed onto
      <html data-layout> by app.js's apply() -- #3). 'auto' (the
