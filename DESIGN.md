@@ -66,7 +66,7 @@ The signature visual device, inherited from the CyberpunkUIKit template this sys
 **Key Characteristics:**
 - Notched, chamfered-corner panels — never rounded corners — each carrying a single committed accent (teal, gold, or red)
 - Flat surfaces at rest; glow (text-shadow / box-shadow used as light emission, never elevation) is reserved for real status
-- Dense, table-aligned metric rows, each table compact and sized to its own content rather than stretched to fill the panel: every System row (CPU/MEM/BAT included) shares one shape — icon → label → value → chart or badge (#31 retired the status LED that used to lead CPU/MEM/BAT; its slot is now an angled Utilization Bars graphic in the tail column, same as Storage/Network's chart)
+- Dense, grid-aligned metric rows, each grid compact and sized to its own content rather than stretched to fill the panel: every System row (CPU/MEM/BAT included) shares one shape — label → value (+ status bar/chart) → sub (#57 dropped icons and the separate tail column in favor of Weather's `.kv-grid` conventions — one font size, no stacked second line, a dash-prefixed third column for what used to be the sub-line; the Utilization Bars/mini bar/step chart status visualization is the one thing kept, now attached to the value cell)
 - Tabular numerals everywhere a value updates, so nothing visually jitters on refresh
 - A dark, slowly-drifting ambient gradient background (42s/55s cycles, deliberately desynced) is the only "alive" surface that isn't tied to real data
 
@@ -123,9 +123,9 @@ The page is a single fixed viewport (`overflow: hidden` on `html`/`body` — thi
 
 Page padding is `2.2vmin` on the sides, and top/bottom padding adds a configurable safe-area inset (`--safe-top`/`--safe-bottom`, sourced from `config.json`, default 48px) so content never renders under the user's own desktop panels. The grid gap between the two halves is `1.8vmin`.
 
-Within each half, panels are content-sized, not stretched: rows pack toward the top and leftover vertical space below them is left unfilled, deliberately. A panel never distributes its rows to fill the available height. Related but distinct data within one panel (System's cpu/mem/bat rows vs. its Storage table vs. its Network table; Forecast's current-conditions vs. Hourly vs. Week vs. Sun & Moon) is separated by a `1px` hairline border-top with a small heading, not by breaking into a second panel card — one notched panel per region, internally divided.
+Within each half, panels are content-sized, not stretched: rows pack toward the top and leftover vertical space below them is left unfilled, deliberately. A panel never distributes its rows to fill the available height. Related but distinct data within one panel (System's cpu/mem/bat rows vs. its Storage grid vs. its Network grid; Forecast's current-conditions vs. Hourly vs. Week vs. Sun & Moon) is separated by a `1px` hairline border-top with a small heading, not by breaking into a second panel card — one notched panel per region, internally divided.
 
-Every metric table is compact, not stretched (#17): no table carries `w-full` — each sizes to its own content instead of filling the panel, so a narrow value or a small right-aligned chart doesn't leave a dead gap between itself and its column boundary. Every System table now shares one `<colgroup>` shape (icon `1.6–1.7em`, label / value auto-sized to content, tail auto-sized) — CPU/MEM/BAT's table used to diverge with a leading status LED column (#17); that column is retired (#31) and CPU/MEM/BAT now carries its Utilization Bars graphic in the same tail slot Storage/Network already use.
+Every metric grid is compact, not stretched (#17): none carries `w-full` — each sizes to its own content instead of filling the panel, so a narrow value or a small right-aligned chart doesn't leave a dead gap between itself and its column boundary. Every System sub-panel now shares one `.sys-grid` shape (label / value+status-bar / sub, all auto-sized to content, #57) — CPU/MEM/BAT's table used to diverge first with a leading status LED column (#17, retired #31), then an icon column (retired #57); all three System sub-panels share the same plain grid shape now.
 
 ### Key:Value Grid (`.kv-grid`, #50)
 
@@ -133,7 +133,7 @@ A "spreadsheet" pattern for any panel whose content is fundamentally a list of n
 
 The Weather/Forecast panel is the first and, so far, only user: Condition, Temp, Feels, High/Low, Wind, Humidity, Rain, and UV are all one `.kv-grid`, replacing an earlier layout that paired unrelated values into a 2×2 table (description next to feels-like, temp next to high/low) above a separately-laid-out flex list for Wind/Humidity/Rain/UV — two different layout mechanisms whose value columns didn't align with each other.
 
-System/Music already express the same key-left/value-right idea through their own `icon | label | value | tail` table row shape (see Components below) and don't need to move to `.kv-grid` — that shape carries an icon and a chart/badge tail column `.kv-grid`'s plain two-column model doesn't have a slot for. Calendar stays a literal month grid; it isn't a list of named readings and reorganizing it into key:value rows wouldn't make sense. (Devices used to share this row shape too, but the panel was removed entirely — #56.)
+System now expresses the same key-left/value-right idea through its own `.sys-grid` (#57, see Components below) rather than moving to `.kv-grid` itself — a three-column grid (label | value + status bar/chart | sub) carrying a status visualization `.kv-grid`'s plain two-column model has no slot for. It shares every other convention `.kv-grid` established: no icons, one font size for every cell, no stacked second line (the old sub-line is the third column instead, dash-prefixed to read as subordinate). Music still uses its own bespoke layout (cover art + title/artist/progress), not a row grid at all. Calendar stays a literal month grid; it isn't a list of named readings and reorganizing it into key:value rows wouldn't make sense. (Devices used to share System's old icon-led row shape too, but the panel was removed entirely — #56.)
 
 ## Themes
 
@@ -221,12 +221,12 @@ Every surface in this system is read-only — there are no buttons, form inputs,
 - **Corner tab:** a `1.55rem × 3px` bar in the full-saturation accent, glowing (`box-shadow: 0 0 6px`), rotated into the notch. This is the panel's one constant "alive" signal — present at rest, not tied to a status condition.
 - **Padding:** `1.5–2.2vmin` depending on region density (System's panel is tighter than Forecast's).
 
-### Metric Row (System Table Row)
-- **Shape:** one `<tr>` — icon cell, uppercase label cell, right-aligned tabular-nums value cell (with an optional smaller Recessed-Grey sub-line), chart/badge cell. Every System row shares this shape now; CPU/MEM/BAT used to diverge with a leading LED cell (#17), retired in #31.
-- **Icon:** a hand-rolled 24×24 stroke-only SVG (`stroke-width: 1.6`, `currentColor`-driven), colored by the row's status tone (Signal Teal nominal, Ember Gold once past threshold). Storage icons are a floppy disk glyph (#17) — a cut top-right corner, metal shutter, and label area, reading as storage media at a glance.
+### Metric Row (`.sys-grid` Row, #57)
+- **Shape:** one `.sys-grid` row — uppercase label cell (left), value cell (right, tabular-nums, the row's status bar/chart attached inline), sub cell (right, dash-prefixed, Recessed-Grey). No icon and no separate tail column — both retired at #57 in favor of Weather's `.kv-grid` conventions (one font size for every cell, no stacked second line). CPU/MEM/BAT used to diverge with a leading LED cell (#17), then an icon cell (#31); both are gone now.
+- **Alert:** a row's value takes the same filled white-on-red badge Weather uses (see Weather Value Alert Badge, #49) once it crosses its hot threshold (CPU/MEM/Storage > 88%, Battery ≤ 35% unplugged) — this replaced the retired icon-tone signal (Signal Teal nominal, Ember Gold once past threshold) as the row's status alert. The status bar itself (Utilization Bars, mini fill bar, step chart) is unrelated and keeps its own independent coloring regardless of the badge.
 
 ### Utilization Bars
-- **Shape:** a row of ten slanted parallelogram segments (SVG `<polygon>`, sharing the leaning-right skew of the notch/corner-tab language) in the tail column of every CPU/MEM/BAT row, replacing the retired status LED (#31 — user feedback: the LED "wasn't working out"). Sized to sit inline with the row, same slot Storage/Network use for their chart/badge.
+- **Shape:** a row of ten slanted parallelogram segments (SVG `<polygon>`, sharing the leaning-right skew of the notch/corner-tab language) attached to the value cell of every CPU/MEM/BAT row, replacing the retired status LED (#31 — user feedback: the LED "wasn't working out"). Sized to sit inline with the row, same treatment Storage/Network use for their chart/badge.
 - **Fill count:** `round(pct / 100 * 10)` segments read as lit; the rest sit unlit.
 - **Color:** each lit segment takes a fixed spectrum color by its position in the bar — Distress Red at the low end, through Ember Gold, to Standby Green at the high end (see Status Bands under Colors) — not the metric's own live percentage. A half-full bar always shows the same red-to-gold gradient regardless of which metric it belongs to; only the *count* of lit segments encodes the percentage. Unlit segments are a flat, low-opacity Hairline-adjacent grey (`oklch(0.32 0.02 260 / .45)`), reading as the empty track.
 - Not interactive — a read-only status indicator, same as everything else in this system.
@@ -255,8 +255,9 @@ Every surface in this system is read-only — there are no buttons, form inputs,
 - **Do** use `font-variant-numeric: tabular-nums` on any text that holds a value which updates on a poll.
 - **Do** let a panel's content determine its height; leave unused vertical space rather than stretching rows to fill it.
 - **Do** reserve glow (box-shadow-as-light, text-shadow) for a real status condition — hot, charging, offline, or the panel corner tab's constant "this region is live" signal.
-- **Do** keep every System table's `<colgroup>` proportions identical (icon / label / value / tail) so their columns line up — all four now share the same shape since the CPU/MEM/BAT-only LED column was retired (#31).
-- **Do** size every metric table to its own content, not its parent panel (no `w-full`) — a narrow value or a small chart shouldn't leave a dead gap between itself and its column boundary.
+- **Do** keep every System `.sys-grid` shape identical (label / value+status-bar / sub) so their columns line up — CPU/MEM/BAT, Storage, and Network all share it (#57).
+- **Do** size every metric grid to its own content, not its parent panel (no `w-full`) — a narrow value or a small chart shouldn't leave a dead gap between itself and its column boundary.
+- **Do** reserve icons for cases that genuinely need a pictorial identity (there are none left in System or Weather, #41/#57) — a label in one consistent font already identifies a row; an icon column just adds a column to keep aligned for no informational gain.
 
 ### Don't:
 - **Don't** use large rounded corners or a soft-card look anywhere. The notch (pentagon `clip-path`, `1.15rem` chamfer) is this system's entire corner language; a `border-radius: 8px+` card would read as a different design system grafted on.

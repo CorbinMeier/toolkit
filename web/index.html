@@ -271,18 +271,20 @@
   .num{font-variant-numeric:tabular-nums;font-feature-settings:"tnum"}
 
   /* System table: icon | label | value | histograph/badge, one row per
-     metric, so everything lines up in real table columns instead of
-     independently-sized flex rows. width:fit-content (#33) --
-     the CPU/MEM/BAT table is a direct child of .panel's flex column, so
-     without this it inherits align-items:stretch and gets forced to the
-     panel's full cross-axis width, which then spreads its auto-sized
-     label/value/tail columns edge-to-edge. Storage/Network's tables never
-     hit this because they sit one level deeper inside a plain wrapper
-     <div> (the flex item), not as the table itself; harmless to apply
-     here too since their natural width already equals their content. */
-  .sys-table{width:fit-content}
-  .sys-table td{vertical-align:middle;padding:0.32vmin 0}
-  .sys-table .sysicon{width:1.05em;height:1.05em;display:block}
+     metric, so everything lines up in real grid columns instead of
+     independently-sized flex rows. No icons, one font size, no stacked
+     sub-line (#57 standardized System onto the same conventions Weather's
+     .kv-grid settled on) -- label | value(+status bar) | sub, the old
+     second line now a dedicated third column instead, dash-prefixed to
+     read as subordinate data. width:fit-content for the same reason
+     .kv-grid needs it: a direct child of .panel's flex column otherwise
+     inherits align-items:stretch and gets forced to the panel's full
+     cross-axis width. */
+  .sys-grid{display:grid;grid-template-columns:auto auto auto;
+    column-gap:1vmin;row-gap:0.3vmin;align-items:center;width:fit-content}
+  .sys-grid > .sys-key{text-align:left}
+  .sys-grid > .sys-val{justify-self:end;display:flex;align-items:center;gap:0.6vmin}
+  .sys-grid > .sys-sub{justify-self:end}
 
   /* Spreadsheet-style key:value grid (#50) -- key column left, value
      column right, one CSS grid so both columns line up across every row
@@ -310,18 +312,17 @@
      column; 'wide' (the 2560px Dell ultrawide, which has room to spare)
      switches back to the System | Forecast side-by-side split. The ID
      selector on #root outweighs Tailwind's grid-cols-1 utility class
-     regardless of source order, same specificity rule as the sys-table
-     td gotcha above. */
+     regardless of source order (a plain-CSS ID selector always beats a
+     single-class Tailwind utility on specificity). */
   [data-layout="wide"] #root{grid-template-columns:repeat(2, minmax(0, 1fr))}
 
-  /* Small inline sysIcon variants for spots that aren't a sys-table row --
-     the sun/moon rise/set readout and the Network row's down/up glyphs.
-     Same hand-rolled-SVG philosophy as .sysicon (no emoji, no external
-     assets, matches the System panel's technical/HUD line-art), just sized
-     and aligned for sitting next to a text baseline instead of a table
-     cell. */
+  /* Small inline sysIcon variant for the sun/moon rise/set readout --
+     same hand-rolled-SVG philosophy as .sysicon (no emoji, no external
+     assets, matches the System panel's technical/HUD line-art), just
+     sized and aligned for sitting next to a text baseline instead of a
+     table cell. (The Network row's down/up arrow glyphs that used to
+     share this were removed at #57 -- no icons in System anymore.) */
   .icon-inline{width:0.9em;height:0.9em;display:inline-block;vertical-align:-0.15em}
-  .icon-inline-sm{width:0.8em;height:0.8em;display:inline-block;vertical-align:-0.08em}
 
   /* Angled utilization bar (#31, replacing the retired status
      LED -- user feedback: "not working out"). A row of slanted parallelogram
@@ -448,33 +449,22 @@
       <div class="panel px-[2vmin] py-[1.5vmin] flex flex-col gap-[0.6vmin]">
         <h2 class="sec-head text-faint uppercase tracking-[0.3em] text-[clamp(.55rem,1.15vmin,.8rem)]">
           System</h2>
-        <!-- CPU, Memory, Battery -- table so icon / label / value / utilization
-             bar line up across every row (#31: the row shape now
-             matches Storage/Network -- icon, label, value, tail -- since the
-             leading status LED was retired). Compact, not w-full (#17) --
-             sized to its own content, not stretched to fill the panel.
-             The 30-minute trend graph that used to render beneath these
-             rows (#17, #33) was removed (#34) -- not wanted on the
-             wallpaper. Metrics collection is untouched (dashd-collect,
-             metrics.db, /api/history) for possible later use. -->
-        <table class="sys-table border-collapse">
-          <colgroup>
-            <col class="w-[1.6em]"><col><col><col>
-          </colgroup>
-          <tbody id="sys"></tbody>
-        </table>
+        <!-- CPU, Memory, Battery -- a .sys-grid (#57) so label / value
+             (+ Utilization Bars) / sub line up across every row without
+             icons or a stacked second line. Compact (width:fit-content,
+             #17), not stretched to fill the panel. The 30-minute trend
+             graph that used to render beneath these rows (#17, #33) was
+             removed (#34) -- not wanted on the wallpaper. Metrics
+             collection is untouched (dashd-collect, metrics.db,
+             /api/history) for possible later use. -->
+        <div id="sys" class="sys-grid text-[clamp(.56rem,1.2vmin,.88rem)]"></div>
 
         <!-- Storage: its own visually separated area, not mixed into the
              cpu/mem/bat metric rows above. -->
         <div class="pt-[0.6vmin] border-t border-[var(--color-hairline)]">
           <h3 class="sec-head text-faint uppercase tracking-[0.3em]
               text-[clamp(.48rem,1vmin,.68rem)] mb-[0.35vmin]">Storage</h3>
-          <table class="sys-table border-collapse">
-            <colgroup>
-              <col class="w-[1.7em]"><col><col><col>
-            </colgroup>
-            <tbody id="disks"></tbody>
-          </table>
+          <div id="disks" class="sys-grid text-[clamp(.56rem,1.2vmin,.88rem)]"></div>
         </div>
 
         <!-- Network: its own dedicated area below Storage, one row with a
@@ -482,12 +472,7 @@
         <div class="pt-[0.6vmin] border-t border-[var(--color-hairline)]">
           <h3 class="sec-head text-faint uppercase tracking-[0.3em]
               text-[clamp(.48rem,1vmin,.68rem)] mb-[0.35vmin]">Network</h3>
-          <table class="sys-table border-collapse">
-            <colgroup>
-              <col class="w-[1.7em]"><col><col><col>
-            </colgroup>
-            <tbody id="net"></tbody>
-          </table>
+          <div id="net" class="sys-grid text-[clamp(.56rem,1.2vmin,.88rem)]"></div>
         </div>
 
         <div id="sysfoot" class="text-faint num tracking-wide

@@ -69,20 +69,23 @@ bin/dashd-control   mobile control server (#30) -- see *Layout*'s process
                     list above and the docstring at the top of the file for
                     the token/loopback trust model
 web/index.html      panel structure (Tailwind utility classes); System
-                    renders as three compact <table>s (not w-full -- sized
-                    to content, #17), cpu/mem/bat led | icon | label | value
-                    (status LED leads the row), Storage/Network
-                    icon|label|value|chart-or-badge. CPU/Memory each add one
-                    row of three side-by-side step-line graphs (30S/5M/30M,
-                    corner-labeled tier name + value range) instead of three
-                    stacked rows; Battery has none (#17). Music (#26) is a
-                    fourth System sub-section below Network, same
-                    icon|label|value|tail row shape, hidden entirely when
-                    nothing is playing/paused. Tasks (#25) renders
-                    state.tasks.items as checkbox|text|due rows, empty state
-                    "No tasks". A Log panel (#28) follows System/Forecast --
-                    same sys-table/notched-panel treatment (Devices, #27,
-                    was removed entirely at #56 -- "basically just clutter")
+                    renders as three compact .sys-grid CSS grids (not
+                    w-full -- sized to content), one each for CPU/MEM/BAT,
+                    Storage, Network: label | value (+ Utilization Bars/
+                    mini bar/step chart) | sub, no icons, one font size,
+                    no stacked second line (#57 -- the old sub-line, e.g.
+                    CPU's temp/freq, is now a dash-prefixed third column
+                    instead). A row's value takes Weather's alert-badge
+                    treatment (#49) past its hot threshold, replacing the
+                    retired icon-tone signal. Music (#26) is a fourth
+                    System sub-section below Network with its own bespoke
+                    layout (cover art + title/artist/progress, not a row
+                    grid), hidden entirely when nothing is playing/paused.
+                    Tasks (#25) renders state.tasks.items as
+                    checkbox|text|due rows, empty state "No tasks". A Log
+                    panel (#28) follows System/Forecast -- same notched-
+                    panel treatment (Devices, #27, was removed entirely at
+                    #56 -- "basically just clutter")
 web/app.js          all rendering; pure function of last good state.
                     Two independent trend sources feed the step charts: an
                     in-memory ring buffer (this session's own /api/state
@@ -224,39 +227,26 @@ render loop.
   `bin/dashd-serve` or `bin/dashd-collect` (not `web/`) needs an explicit
   restart of that unit to actually ship -- `reload`ing `-host` alone is not
   enough and will not error, it just keeps serving stale logic.
-- **A `td`-level `pl-[...]`/`pr-[...]` Tailwind utility class silently does
-  nothing in the System tables.** `.sys-table td{padding:0.32vmin 0}` (a
-  class+element selector) has *higher* specificity than a single-class
-  Tailwind utility like `.pl-\[0\.9em\]{padding-left:0.9em}`, so the
-  shorthand's `0` left/right padding always wins regardless of source
-  order or which class was added later via JS. This was invisible for
-  years because the old percentage-based `<colgroup>` widths gave every
-  column enough natural separation on its own; it only surfaced once
-  tables became compact/content-sized (#17), where a longer label
-  ("RECOVERY") would otherwise sit flush against its value with zero gap.
-  Fix/pattern: set `element.style.paddingLeft`/`paddingRight` directly
-  instead of a `pl-*`/`pr-*` class on any `<td>` in these tables — inline
-  styles always win regardless of the shorthand rule's specificity.
-- **A `<table>` that is a *direct* child of a `flex flex-col` container
-  inherits `align-items: stretch` and gets forced to the container's full
-  cross-axis width, even with no `w-full` class anywhere** -- this silently
-  undid #17's "compact, sized to its own content" table sizing for exactly
-  one table. CPU/MEM/BAT's `<table class="sys-table">` sits directly inside
-  `.panel` (itself `flex flex-col`), so it stretched full width; its
-  unconstrained label/value/tail `<colgroup>` columns then absorbed that
-  extra width, spreading the row edge-to-edge with `value`/`tail`'s
-  right-aligned content hugging the far right (#33). Storage/Network never
-  hit this because their tables sit one level deeper inside a plain wrapper
-  `<div>` -- the div is the flex item and gets stretched, but the table
-  inside it is an ordinary block box sized by normal (shrink-to-fit) table
-  layout. Fix: `.sys-table{width:fit-content}` overrides the inherited
-  stretch regardless of DOM nesting -- applied table-wide since it's a
-  no-op for tables that were already content-sized. A second contributing
-  factor: CPU/MEM's 30-minute trend graph used to be a colspan row sharing
-  the same table's value/tail columns; its internal `width:100%` chart
-  compounded the blowout, so it was also pulled out into its own
-  `#sysgraphs` sibling container, decoupled from the value table's column
-  widths entirely.
+- **Historical (both resolved by #57's move off `<table>`, kept for the
+  general CSS mechanism they document):**
+  - A `td`-level `pl-[...]`/`pr-[...]` Tailwind utility class used to
+    silently do nothing in the System tables: `.sys-table td{padding:0.32vmin
+    0}` (a class+element selector) has *higher* specificity than a
+    single-class Tailwind utility like `.pl-\[0\.9em\]{padding-left:0.9em}`,
+    so the shorthand's `0` left/right padding always won regardless of
+    source order. General lesson: a compound class+element selector beats a
+    single-class utility on specificity regardless of source order — set
+    `element.style.paddingLeft` directly when that matters, don't fight it
+    with another class.
+  - A `<table>` that is a *direct* child of a `flex flex-col` container
+    inherits `align-items: stretch` and gets forced to the container's full
+    cross-axis width even with no `w-full` class anywhere — this used to
+    undo #17's "compact, sized to its own content" sizing for CPU/MEM/BAT's
+    `<table class="sys-table">` specifically (Storage/Network's tables sat
+    one level deeper inside a plain wrapper `<div>`, so the div stretched
+    instead of the table). `.sys-grid{width:fit-content}` (#57) carries the
+    same fix forward for the CSS Grid that replaced the table — the
+    principle applies to any block-level container that's a flex item.
 - **PyGObject version pinning**: `gi.require_version("Gdk", "3.0")` must come
   before the `from gi.repository import ...` line and before anything pulls in
   Gtk 4, or the import dies with `Requiring namespace 'Gdk' version '3.0', but
@@ -360,6 +350,21 @@ any other script can add panels without touching the server.
 
 ## Current state (2026-08-20)
 
+- #57 (2026-08-23): System (CPU/MEM/BAT, Storage, Network) standardized
+  onto the same conventions Weather's `.kv-grid` settled on (#50-#52):
+  a new `.sys-grid` (label | value+status-bar | sub) replaces the old
+  `<table class="sys-table">` icon|label|value|tail row shape. No icons
+  (the cpu/mem/disk/battery/net glyphs and the network up/down arrow
+  glyphs are gone -- `sysIcon()` shrank to just its one remaining live
+  case, sunrise/sunset); one font size for every cell; no stacked
+  second line (the old sub-line -- CPU temp/freq, MEM used/total, BAT
+  time-remaining, NET upload rate -- is a dash-prefixed third column
+  instead). A row's value gets Weather's `.alert-badge` treatment past
+  its existing hot threshold (CPU/MEM/Storage > 88%, Battery <= 35%
+  unplugged), replacing the retired icon-tone signal. Explicitly kept
+  as-is: the Utilization Bars/mini bar/step chart status visualization
+  itself, now attached to the value cell instead of a separate tail
+  column.
 - #56 (2026-08-23): the Devices panel (#27 and its follow-ups -- remembered-
   per-network registry, ipv6-first identification, self-pinning) was
   removed entirely (user: "remove devices. its basically just clutter"),

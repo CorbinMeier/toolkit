@@ -153,9 +153,12 @@ def main() -> int:
         if not w.get("unavailable"):
             check("temperature rendered", re.search(r"\d[FC]$", text_of("wtemp")),
                   "missing unit-suffixed value in #wtemp")
-        check("system table rendered", dom.count(">MEM<") >= 1, dom.count(">MEM<"))
-        check("disk rows rendered", dom.count("sysicon") >= 3,
-              "expected cpu+mem+>=1 disk row")
+        check("system grid rendered", dom.count(">MEM<") >= 1, dom.count(">MEM<"))
+        # #57: System dropped icons for a .sys-grid row shape (label | value
+        # | sub) -- sysicon no longer appears here, so row count is proven
+        # via sys-key (one per row: CPU/MEM/BAT/NET + >=1 disk = >=5).
+        check("system rows rendered", dom.count("sys-key") >= 5,
+              "expected cpu+mem+bat+net+>=1 disk row")
         check("storage section rendered", ">Storage<" in dom, "missing Storage header")
         check("network section rendered", ">Network<" in dom and ">NET<" in dom,
               "missing Network header/row")

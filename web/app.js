@@ -77,91 +77,17 @@ const POINTS = ['N', 'NNE', 'NE', 'ENE', 'E', 'ESE', 'SE', 'SSE',
 const compass = (deg) => POINTS[Math.round(deg / 22.5) % 16];
 
 /* ------------------------------------------------------------ sys panel */
-/* Hand-rolled system-metric icons, zero external asset dependency.
- * stroke/fill are set once on the root <svg> and inherit down through
- * SVG's normal property cascade; individual shapes only override fill
- * where they're meant to read as solid, not outlined. */
+/* Hand-rolled icons, zero external asset dependency. stroke/fill are set
+ * once on the root <svg> and inherit down through SVG's normal property
+ * cascade. sunrise/sunset (Sun & Moon's timeChip()) are the only live
+ * consumer now -- System (#57), Music, and Weather's per-stat rows (#41)
+ * have all dropped icons entirely; their cases were removed here rather
+ * than left as dead code. */
 function sysIcon(kind, tone = 'currentColor') {
   const g = el('svg', { viewBox: '0 0 24 24', class: 'sysicon',
     fill: 'none', stroke: tone, 'stroke-width': 1.6,
     'stroke-linecap': 'round', 'stroke-linejoin': 'round' });
   switch (kind) {
-    case 'cpu':
-      g.appendChild(el('rect', { x: 6, y: 6, width: 12, height: 12, rx: 1.2 }));
-      g.appendChild(el('rect', { x: 9.5, y: 9.5, width: 5, height: 5, rx: 0.6 }));
-      [9, 12, 15].forEach((p) => {
-        g.appendChild(el('line', { x1: p, y1: 1.5, x2: p, y2: 6 }));
-        g.appendChild(el('line', { x1: p, y1: 18, x2: p, y2: 22.5 }));
-        g.appendChild(el('line', { x1: 1.5, y1: p, x2: 6, y2: p }));
-        g.appendChild(el('line', { x1: 18, y1: p, x2: 22.5, y2: p }));
-      });
-      break;
-    case 'mem':
-      g.appendChild(el('rect', { x: 2.5, y: 7, width: 19, height: 9, rx: 1 }));
-      [6, 9.5, 13, 16.5, 20].forEach((x) => {
-        g.appendChild(el('line', { x1: x, y1: 16, x2: x, y2: 19.5 }));
-      });
-      break;
-    case 'disk':
-      // Floppy disk (#17): body with the classic cut top-right
-      // corner, a metal shutter near the top, and a label area below --
-      // reads as storage media at a glance, unlike the old plain-disk glyph.
-      g.appendChild(el('path', {
-        d: 'M4.5 3 H15.5 L20.5 8 V19.5 A1.5 1.5 0 0 1 19 21 H5 '
-          + 'A1.5 1.5 0 0 1 3.5 19.5 V4.5 A1.5 1.5 0 0 1 4.5 3 Z',
-      }));
-      g.appendChild(el('rect', { x: 7.5, y: 3, width: 7, height: 5.5 }));
-      g.appendChild(el('rect', { x: 6.5, y: 13, width: 11, height: 6.5, rx: 0.5 }));
-      break;
-    case 'battery':
-      g.appendChild(el('rect', { x: 1.5, y: 7, width: 17, height: 10, rx: 1.5 }));
-      g.appendChild(el('rect', { x: 19.5, y: 10, width: 2.2, height: 4, rx: 0.6, fill: tone }));
-      break;
-    case 'net':
-      g.appendChild(el('line', { x1: 8, y1: 3, x2: 8, y2: 15 }));
-      g.appendChild(el('polyline', { points: '4.5,11.5 8,15 11.5,11.5' }));
-      g.appendChild(el('line', { x1: 16, y1: 21, x2: 16, y2: 9 }));
-      g.appendChild(el('polyline', { points: '12.5,12.5 16,9 19.5,12.5' }));
-      break;
-    case 'music':
-      // Eighth note -- same hand-rolled stroke language as the rest of
-      // System's icons, no emoji/external asset.
-      g.appendChild(el('line', { x1: 15.5, y1: 3, x2: 15.5, y2: 16.5 }));
-      g.appendChild(el('line', { x1: 15.5, y1: 3, x2: 20, y2: 5.5 }));
-      g.appendChild(el('circle', { cx: 12, cy: 17.5, r: 3.2, fill: tone }));
-      break;
-    // Weather stat icons -- same hand-rolled stroke language as the System
-    // icons above (no emoji, no external asset), for the Wind/Humidity/
-    // Rain/UV rows and the sunrise/sunset readout (#9, Forecast
-    // brought to System's icon-led row treatment).
-    case 'wind':
-      g.appendChild(el('path', { d: 'M2 8 H13.5 a2.75 2.75 0 1 0 -2.75 -2.75' }));
-      g.appendChild(el('path', { d: 'M2 12.5 H17.5 a2.75 2.75 0 1 1 -2.75 2.75' }));
-      g.appendChild(el('path', { d: 'M2 17 H10' }));
-      break;
-    case 'humidity':
-      g.appendChild(el('path', {
-        d: 'M12 2.5 C12 2.5 5 11.2 5 15.5 A7 7 0 0 0 19 15.5 C19 11.2 12 2.5 12 2.5 Z',
-      }));
-      break;
-    case 'rain':
-      g.appendChild(el('path', {
-        d: 'M6 14.5 a4 4 0 0 1 0.4 -7.98 a5 5 0 0 1 9.5 -0.9 '
-          + 'a3.5 3.5 0 0 1 0.6 8.88 Z',
-      }));
-      g.appendChild(el('line', { x1: 9, y1: 18, x2: 8, y2: 21.5 }));
-      g.appendChild(el('line', { x1: 14, y1: 18, x2: 13, y2: 21.5 }));
-      break;
-    case 'uv':
-      g.appendChild(el('circle', { cx: 12, cy: 12, r: 5 }));
-      for (let i = 0; i < 8; i++) {
-        const a = (i * Math.PI) / 4;
-        g.appendChild(el('line', {
-          x1: 12 + Math.cos(a) * 8, y1: 12 + Math.sin(a) * 8,
-          x2: 12 + Math.cos(a) * 10.5, y2: 12 + Math.sin(a) * 10.5,
-        }));
-      }
-      break;
     case 'sunrise':
       g.appendChild(el('line', { x1: 2, y1: 20, x2: 22, y2: 20 }));
       g.appendChild(el('line', { x1: 12, y1: 8, x2: 12, y2: 16 }));
@@ -177,16 +103,6 @@ function sysIcon(kind, tone = 'currentColor') {
   return g;
 }
 
-// Same stroke-arrow language as the 'net' sysIcon, as an inline HTML string
-// for embedding inside a sysRow value/sub string (Network's down/up
-// throughput) instead of a plain unicode ↓/↑ glyph.
-function arrowGlyph(dir) {
-  const points = dir === 'up' ? '4,9 8,4 12,9' : '4,7 8,12 12,7';
-  const [y1, y2] = dir === 'up' ? [4, 13] : [2, 12];
-  return `<svg viewBox="0 0 16 16" class="icon-inline-sm" fill="none" stroke="currentColor"
-    stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
-    <polyline points="${points}"/><line x1="8" y1="${y1}" x2="8" y2="${y2}"/></svg>`;
-}
 
 // Three-stop hex interpolation used to color each segment of utilBars() --
 // a spectrum across the bar's full length, revealed proportionally by how
@@ -327,86 +243,66 @@ function miniBar(pct, tone = 'var(--color-accent)',
   return wrap;
 }
 
-// One <tr>: icon | label | value | tail node (utilization bar, histograph,
-// or mini bar). Same shape for every System row now -- CPU/MEM/BAT used to
-// lead with a status LED instead of a tail column (#16, #17);
-// that LED is retired (#31, "not working out") in favor of an angled
-// utilization-bar graphic in the same tail slot Storage/Network already
-// use, so every row shares one column layout -- a real <table>, not
-// independently-sized rows.
-function sysRow({ icon, iconNode, label, value, sub = '', tail = null, tone = 'var(--color-accent)' }) {
-  const tr = document.createElement('tr');
+// One .sys-grid row: label | value (+ status bar/chart) | sub (#57,
+// standardizing System onto the same conventions Weather's .kv-grid
+// settled on -- no icons, one font size everywhere, no stacked second
+// line). `hot` swaps the value to the same alert-badge treatment Weather
+// uses (#49) instead of the retired icon-tone signal; the bar/chart
+// itself is unrelated and keeps its own independent coloring (DESIGN.md's
+// Utilization Bars component is a fixed position-based spectrum, not a
+// threshold). `sub` is the old second-line info (CPU temp/freq, MEM
+// used/total, BAT time-remaining, NET upload rate) as a dash-prefixed
+// third column instead of a stacked line under the value.
+function sysRow({ label, value, hot = false, bar = null, sub = '' }) {
+  const key = document.createElement('div');
+  key.className = 'sys-key text-faint tracking-[0.1em] uppercase truncate';
+  key.textContent = label;
 
-  const iconTd = document.createElement('td');
-  iconTd.style.color = tone;
-  iconTd.appendChild(iconNode || sysIcon(icon, tone));
+  const val = document.createElement('div');
+  val.className = 'sys-val num';
+  const valText = document.createElement('span');
+  valText.className = hot ? 'alert-badge' : 'text-ink';
+  valText.textContent = value;
+  val.appendChild(valText);
+  if (bar) val.appendChild(bar);
 
-  const labelTd = document.createElement('td');
-  labelTd.className = 'text-muted tracking-[0.1em] uppercase pl-[0.6vmin] ' +
-    'text-[clamp(.44rem,.92vmin,.66rem)] truncate';
-  labelTd.textContent = label;
+  const subEl = document.createElement('div');
+  subEl.className = 'sys-sub num text-faint';
+  subEl.textContent = sub ? `- ${sub}` : '';
 
-  // #55: text-ink, not text-ink/90 -- every "value" cell across the
-  // system reads at full brightness now (#52's rule for Weather/Calendar),
-  // reserving color for actual status (icon tone, Utilization Bars) rather
-  // than an arbitrary opacity step.
-  const valueTd = document.createElement('td');
-  valueTd.className = 'num text-right text-ink text-[clamp(.48rem,1.02vmin,.74rem)]';
-  // Inline, not a pl-[...] utility class: .sys-table td{padding:0.32vmin 0}
-  // is a class+element selector, higher specificity than a single-class
-  // Tailwind utility, so it silently zeroes any pl-*/pr-* class applied to
-  // a <td> here. Relying on a wide auto-sized label column to create
-  // separation isn't an option either now that tables are compact (#17) --
-  // the label column tracks its own content width, so a longer label like
-  // "RECOVERY" would otherwise sit flush against the value with no gap.
-  valueTd.style.paddingLeft = '0.9em';
-  valueTd.innerHTML = sub
-    ? `${value}<div class="text-faint text-[clamp(.4rem,.82vmin,.58rem)] leading-tight">${sub}</div>`
-    : value;
-
-  const tailTd = document.createElement('td');
-  tailTd.className = 'pl-[0.6vmin]';
-  if (tail) tailTd.appendChild(tail);
-  tr.append(iconTd, labelTd, valueTd, tailTd);
-  return tr;
+  return [key, val, subEl];
 }
 
 // CPU/Memory/Battery value rows. Trend graphs used to render here (#17,
 // #33) but were removed (#34) -- not wanted on the wallpaper. Metrics
 // collection is untouched (dashd-collect, metrics.db, /api/history all still
-// live) for possible later use. Each row's tail column is an angled
-// utilization-bar graphic (#31, replacing the retired status LED).
+// live) for possible later use. Each row's status bar is the angled
+// Utilization Bars graphic (#31, replacing the retired status LED).
 function renderCpuMemBat(s) {
   const box = $('sys');
   box.replaceChildren();
-  const hot = (p) => p > 88 ? 'var(--color-warm)' : 'var(--color-accent)';
+  const isHot = (p) => p > 88;
   const pad2 = (n) => String(Math.round(n)).padStart(2, '0');
 
-  const cpuTone = hot(s.cpu);
-  box.appendChild(sysRow({
-    icon: 'cpu', label: 'CPU', tone: cpuTone,
-    value: `${pad2(s.cpu)}%`,
+  box.append(...sysRow({
+    label: 'CPU', value: `${pad2(s.cpu)}%`, hot: isHot(s.cpu),
+    bar: utilBars(s.cpu),
     sub: [s.temp_c ? `${s.temp_c}°C` : null,
       s.cpu_freq ? `${(s.cpu_freq / 1000).toFixed(1)}GHz` : null].filter(Boolean).join(' · '),
-    tail: utilBars(s.cpu),
   }));
 
-  const memTone = hot(s.mem.pct);
-  box.appendChild(sysRow({
-    icon: 'mem', label: 'MEM', tone: memTone,
-    value: `${pad2(s.mem.pct)}%`,
+  box.append(...sysRow({
+    label: 'MEM', value: `${pad2(s.mem.pct)}%`, hot: isHot(s.mem.pct),
+    bar: utilBars(s.mem.pct),
     sub: `${bytes(s.mem.used)} / ${bytes(s.mem.total)}`,
-    tail: utilBars(s.mem.pct),
   }));
 
   if (s.battery) {
-    const battTone = s.battery.pct <= 35 && !s.battery.plugged
-      ? 'var(--color-warm)' : 'var(--color-accent)';
-    box.appendChild(sysRow({
-      icon: 'battery', label: 'BAT', tone: battTone,
-      value: `${pad2(s.battery.pct)}%`,
+    const battHot = s.battery.pct <= 35 && !s.battery.plugged;
+    box.append(...sysRow({
+      label: 'BAT', value: `${pad2(s.battery.pct)}%`, hot: battHot,
+      bar: utilBars(s.battery.pct),
       sub: !s.battery.plugged && s.battery.secs_left ? dur(s.battery.secs_left) : '',
-      tail: utilBars(s.battery.pct),
     }));
   }
 
@@ -427,16 +323,18 @@ function renderCpuMemBat(s) {
 function renderDisks(disks) {
   const box = $('disks');
   box.replaceChildren();
-  const hot = (p) => p > 88 ? 'var(--color-warm)' : 'var(--color-accent)';
+  const isHot = (p) => p > 88;
+  const barTone = (p) => isHot(p) ? 'var(--color-warm)' : 'var(--color-accent)';
   disks.forEach((d) => {
     const label = d.mount && d.mount !== '[SWAP]'
       ? (d.mount.split('/').filter(Boolean).pop() || '/') : d.name;
-    box.appendChild(sysRow({
-      icon: 'disk', label: label.toUpperCase(), tone: hot(d.pct ?? 0),
+    box.append(...sysRow({
+      label: label.toUpperCase(),
       value: d.pct != null ? `${d.pct.toFixed(0)}%` : bytes(d.size),
+      hot: isHot(d.pct ?? 0),
       // Square corners (user request); width/height use miniBar()'s
       // default scale, unified with CPU/MEM/BAT's utilBars() (#42).
-      tail: miniBar(d.pct, hot(d.pct ?? 0), undefined, 'rounded-none'),
+      bar: miniBar(d.pct, barTone(d.pct ?? 0), undefined, 'rounded-none'),
     }));
   });
 }
@@ -445,18 +343,19 @@ function renderDisks(disks) {
 // lines (download/upload). No long-term storage for this one (see
 // #12) -- it's the ring buffer's fine 5s resolution that makes
 // brief throughput bursts visible at all, so a DB-backed tier would just
-// flatten them.
+// flatten them. No hot/alert threshold defined for throughput, so the
+// value never gets the badge treatment.
 function renderNetwork(s) {
   const box = $('net');
   box.replaceChildren();
-  box.appendChild(sysRow({
-    icon: 'net', label: 'NET', tone: 'var(--color-accent)',
-    value: `${arrowGlyph('down')}${bytes(s.net.down)}/s`,
-    sub: `${arrowGlyph('up')}${bytes(s.net.up)}/s`,
-    tail: stepChart([
+  box.append(...sysRow({
+    label: 'NET',
+    value: `down ${bytes(s.net.down)}/s`,
+    bar: stepChart([
       { values: ringSince('down', RING_WINDOW_MS), tone: 'var(--color-accent)' },
       { values: ringSince('up', RING_WINDOW_MS), tone: 'var(--color-warm)' },
     ]),
+    sub: `up ${bytes(s.net.up)}/s`,
   }));
 }
 
