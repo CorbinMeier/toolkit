@@ -685,7 +685,7 @@ function renderWeather(w) {
     if (hiloEl) hiloEl.textContent = '';
     $('wdetails').replaceChildren();
     if (panelEl) {
-      panelEl.classList.remove('accent-crimson');
+      panelEl.classList.remove('accent-alert');
       panelEl.classList.add('accent-amber');
     }
     return;
@@ -694,9 +694,11 @@ function renderWeather(w) {
   // w.alert is computed server-side (bin/dashd-serve's weather_alert(), #46)
   // against config.weather_alerts -- regex over w.desc plus temp/rain%
   // thresholds, same shape as the Log panel's config.logs.patterns.
+  // accent-alert (not accent-crimson) -- true red across every theme, see
+  // that class's comment in index.html.
   const alertActive = Boolean(w.alert?.active);
   if (panelEl) {
-    panelEl.classList.toggle('accent-crimson', alertActive);
+    panelEl.classList.toggle('accent-alert', alertActive);
     panelEl.classList.toggle('accent-amber', !alertActive);
   }
 
