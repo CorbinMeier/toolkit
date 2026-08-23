@@ -831,15 +831,21 @@ function renderCalendar(extra) {
     const cell = document.createElement('div');
     cell.className = 'flex flex-col items-center justify-center gap-[0.1vmin]';
 
-    // #41/#42: the border marks today, not just bolder/brighter text, so it
-    // reads at a glance -- but it wraps only the number itself (fixed 2px,
-    // fit-content box), not the whole grid cell, so it stays a small compact
-    // square instead of stretching to the column width.
+    // #41/#42: a filled box marks today, not just bolder/brighter text, so
+    // it reads at a glance -- but it wraps only the number itself (fixed 2px
+    // border, fit-content box), not the whole grid cell, so it stays a
+    // small compact square instead of stretching to the column width.
+    // #47: filled solid (bg + border), not just outlined -- an unfilled
+    // ring read as barely-there against the panel background. Text goes
+    // dark (fixed near-black, not a themed color) since every theme's
+    // --color-warm is a bright fill the light --color-ink text would wash
+    // out on.
     const num = document.createElement('span');
     num.className = 'num inline-flex items-center justify-center leading-none ' +
       'text-[clamp(.48rem,1vmin,.7rem)] p-1 box-border ' +
       (isToday
-        ? 'text-ink font-medium border-2 border-[var(--color-warm)]'
+        ? 'font-medium border-2 border-[var(--color-warm)] ' +
+          'bg-[var(--color-warm)] text-[oklch(0.16_0_0)]'
         : 'text-muted border-2 border-transparent');
     num.textContent = String(day);
     cell.appendChild(num);

@@ -213,6 +213,20 @@ render loop.
 
 ## Non-obvious gotchas
 
+- **A `bin/dashd-serve`/`bin/dashd-collect` code change does not take effect
+  until that unit is *restarted*, not just reloaded.** `scripts/update-
+  desktop.sh` (`pnpm run deploy`) only `systemctl --user reload desktop-
+  dashboard-host` on a green chain -- by design, `reload` is the one always-
+  safe verb (SIGHUP re-render of an already-running surface), while
+  restarting `-serve`/`-collect` is deliberately left out of the automated
+  deploy path. This bit #46/#47: `weather_alert()` was merged and deployed,
+  but the long-running `desktop-dashboard-serve` process kept executing the
+  pre-merge code in memory (a Python `systemctl reload` doesn't re-exec the
+  interpreter), so `/api/state`'s `weather.alert` was silently absent until
+  a manual `systemctl --user restart desktop-dashboard-serve`. Any change to
+  `bin/dashd-serve` or `bin/dashd-collect` (not `web/`) needs an explicit
+  restart of that unit to actually ship -- `reload`ing `-host` alone is not
+  enough and will not error, it just keeps serving stale logic.
 - **A `td`-level `pl-[...]`/`pr-[...]` Tailwind utility class silently does
   nothing in the System tables.** `.sys-table td{padding:0.32vmin 0}` (a
   class+element selector) has *higher* specificity than a single-class
