@@ -666,29 +666,38 @@ function renderLog(lines) {
 }
 
 /* -------------------------------------------------------- weather panels */
-// No icons in this card (user request, #41). A header-less two-row,
-// two-column grid: row1 is description | feels-like temp, row2 is current
-// temp | today's high/low. Wind/Humidity/Rain/UV drop the value column
-// entirely -- one "LABEL: value" line each in #wdetails. Upcoming
-// (renderWeek) is removed from this card (still called, targets a hidden
-// node -- #40's pattern for Hourly/Sun & Moon).
+// No icons in this card (user request, #41). Spreadsheet-style key:value
+// grid (#50, .kv-grid in index.html) -- Condition/Temp/Feels/High-Low/Wind/
+// Humidity/Rain/UV each get one row, key column left, value column right,
+// all sharing one CSS grid so the value column lines up top to bottom
+// (the old 2x2 table plus a separately-laid-out Wind/Humid/Rain/UV list
+// didn't share a column grid, so their value columns started at different
+// x positions). Upcoming (renderWeek) is removed from this card (still
+// called, targets a hidden node -- #40's pattern for Hourly/Sun & Moon).
 function renderWeather(w) {
   const descEl = $('wdesc');
   const feelsEl = $('wfeels');
   const tempEl = $('wtemp');
   const hiloEl = $('whilo');
+  const windEl = $('wwind');
+  const humidEl = $('whumid');
+  const rainEl = $('wrain');
+  const uvEl = $('wuv');
   if (w.unavailable) {
     if (descEl) {
       descEl.textContent = 'weather unavailable';
       descEl.classList.remove('alert-badge'); descEl.classList.add('text-muted');
     }
-    if (feelsEl) feelsEl.textContent = '';
+    if (feelsEl) feelsEl.textContent = '—';
     if (tempEl) {
       tempEl.textContent = '—';
       tempEl.classList.remove('alert-badge'); tempEl.classList.add('text-ink');
     }
     if (hiloEl) hiloEl.replaceChildren();
-    $('wdetails').replaceChildren();
+    if (windEl) windEl.textContent = '—';
+    if (humidEl) humidEl.textContent = '—';
+    if (rainEl) rainEl.textContent = '—';
+    if (uvEl) uvEl.textContent = '—';
     return;
   }
 
@@ -711,7 +720,7 @@ function renderWeather(w) {
     descEl.classList.toggle('alert-badge', hot);
     descEl.classList.toggle('text-muted', !hot);
   }
-  if (feelsEl) feelsEl.textContent = `feels ${w.apparent}${w.units.temp}`;
+  if (feelsEl) feelsEl.textContent = `${w.apparent}${w.units.temp}`;
   if (tempEl) {
     tempEl.textContent = `${w.temp}${w.units.temp}`;
     const hot = Boolean(alert.temp);
@@ -720,30 +729,22 @@ function renderWeather(w) {
   }
   if (hiloEl) {
     const hi = document.createElement('span');
-    hi.textContent = `H${w.high}°`;
+    hi.textContent = `${w.high}°`;
     if (alert.high) hi.classList.add('alert-badge');
     const lo = document.createElement('span');
-    lo.className = 'ml-[0.5vmin]';
-    lo.textContent = `L${w.low}°`;
+    lo.className = 'ml-[0.4vmin]';
+    lo.textContent = `/ ${w.low}°`;
     hiloEl.replaceChildren(hi, lo);
   }
-
-  const detailLine = (label, value, hot = false) => {
-    const div = document.createElement('div');
-    const lab = document.createElement('span');
-    lab.textContent = `${label}: `;
-    const val = document.createElement('span');
-    val.textContent = value;
-    if (hot) val.classList.add('alert-badge');
-    div.append(lab, val);
-    return div;
-  };
-  $('wdetails').replaceChildren(
-    detailLine('Wind', `${w.wind}${w.units.wind} ${compass(w.wind_dir)}`),
-    detailLine('Humid', `${w.humidity}%`),
-    detailLine('Rain', `${w.precip_prob ?? 0}%`, Boolean(alert.rain)),
-    detailLine('UV', w.uv == null ? '—' : `${Math.round(w.uv)}`),
-  );
+  if (windEl) windEl.textContent = `${w.wind}${w.units.wind} ${compass(w.wind_dir)}`;
+  if (humidEl) humidEl.textContent = `${w.humidity}%`;
+  if (rainEl) {
+    rainEl.textContent = `${w.precip_prob ?? 0}%`;
+    const hot = Boolean(alert.rain);
+    rainEl.classList.toggle('alert-badge', hot);
+    rainEl.classList.toggle('text-ink/90', !hot);
+  }
+  if (uvEl) uvEl.textContent = w.uv == null ? '—' : `${Math.round(w.uv)}`;
 
   renderHourly(w);
   renderWeek(w);

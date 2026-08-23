@@ -39,6 +39,15 @@
      keeps its own copy so text-accent/text-crimson/bg-crimson etc. still
      generate -- the two are intentionally redundant. */
   :root{
+    /* #50: same "Tailwind's scanner never emits an @theme token onto :root
+       unless a class in markup names it" gotcha as the --color-* restated
+       below -- no element carries a font-mono/font-sans utility class or
+       [family-name:var(--font-mono)] arbitrary value, so the @theme block's
+       copies above are never actually live. Restating here, in a plain
+       <style> tag the browser parses unconditionally, is what makes
+       body{font-family:var(--font-mono)} below actually resolve. */
+    --font-sans: "Fira Sans", system-ui, sans-serif;
+    --font-mono: "Fira Mono", ui-monospace, monospace;
     --color-ink:      oklch(0.96 0.01 250);
     --color-muted:    oklch(0.70 0.03 255);
     --color-faint:    oklch(0.52 0.03 258);
@@ -146,7 +155,6 @@
     --spectrum-hi:  #39ff88;
   }
   html[data-theme="retro_terminal"] body{
-    font-family:"Fira Mono",ui-monospace,monospace;
     background:#040a06;
   }
   html[data-theme="retro_terminal"] body.transparent{background:transparent}
@@ -191,7 +199,6 @@
     --spectrum-hi:  #ff9a2e;
   }
   html[data-theme="retro_orange"] body{
-    font-family:"Fira Mono",ui-monospace,monospace;
     background:#0a0503;
   }
   html[data-theme="retro_orange"] body.transparent{background:transparent}
@@ -201,7 +208,12 @@
   html,body{height:100%;margin:0;overflow:hidden}
   body{
     color:var(--color-ink);
-    font-family:"Fira Sans",system-ui,sans-serif;
+    /* #50: monospace is the one voice everywhere now, not a CRT-theme-only
+       detail -- previously only retro_terminal/retro_orange overrode this
+       to Fira Mono while night_ops (the default palette) stayed on Fira
+       Sans. var(--font-mono), not a literal, so this and the @theme token
+       (used by any future font-mono utility class) can't drift apart. */
+    font-family:var(--font-mono);
     -webkit-font-smoothing:antialiased;
     background:
       radial-gradient(55% 48% at 30% 8%,  rgb(70 22 22 / .45), transparent 72%),
@@ -285,10 +297,17 @@
   .sys-table td{vertical-align:middle;padding:0.32vmin 0}
   .sys-table .sysicon{width:1.05em;height:1.05em;display:block}
 
-  /* Weather card's two-column current-conditions grid (no icons, no
-     header row -- see #41). */
-  .weather-grid td{padding-top:0.3vmin}
-  .weather-grid td:last-child{padding-left:1.2vmin}
+  /* Spreadsheet-style key:value grid (#50) -- key column left, value
+     column right, one CSS grid so both columns line up across every row
+     instead of each stat picking its own layout mechanism (the old
+     Weather panel paired unrelated values into a 2x2 table above a
+     separately-laid-out flex list below, so the value column didn't
+     start at the same x position row to row). Used by Weather/Forecast's
+     current-conditions block; any future panel wanting the same
+     "spreadsheet" read reuses this instead of inventing another grid. */
+  .kv-grid{display:grid;grid-template-columns:auto 1fr;column-gap:1.2vmin;row-gap:0.3vmin}
+  .kv-grid > .kv-key{text-align:left}
+  .kv-grid > .kv-val{text-align:right}
 
   /* Per-output layout (config.json outputs.<name>.layout, plumbed onto
      <html data-layout> by app.js's apply() -- #3). 'auto' (the
@@ -645,28 +664,41 @@
             <h2 class="sec-head text-faint uppercase tracking-[0.3em] text-[clamp(.55rem,1.15vmin,.8rem)]">
               <span>Weather</span>
             </h2>
-            <!-- No icons in this card (user request). Two-column, two-row
-                 grid, no header row -- "Weather"/"Feels Like" were data
-                 placeholders in the user's spec (description + apparent
-                 temp), not column labels. Row 1: description | feels-like
-                 temp. Row 2: current temp | today's high/low. Wind/Humid/
-                 Rain/UV drop the value column entirely -- one "LABEL:
-                 value" line each. -->
-            <table class="weather-grid border-collapse w-full">
-              <colgroup><col><col></colgroup>
-              <tbody>
-                <tr>
-                  <td id="wdesc" class="text-muted text-[clamp(.56rem,1.2vmin,.88rem)] align-top"></td>
-                  <td id="wfeels" class="num text-muted text-[clamp(.56rem,1.2vmin,.88rem)] align-top"></td>
-                </tr>
-                <tr>
-                  <td id="wtemp" class="num text-ink text-[clamp(.7rem,1.6vmin,1.05rem)] align-top"></td>
-                  <td id="whilo" class="num text-muted text-[clamp(.6rem,1.3vmin,.9rem)] align-top"></td>
-                </tr>
-              </tbody>
-            </table>
-            <div id="wdetails" class="flex flex-col gap-[0.3vmin] num text-ink/90
-                 text-[clamp(.56rem,1.2vmin,.88rem)] tracking-wide"></div>
+            <!-- No icons in this card (user request). Spreadsheet-style
+                 key:value grid (#50, .kv-grid) -- every stat is one row,
+                 key column left (uppercase label, matching the system's
+                 existing Label typography role) and value column right,
+                 all in the same grid so the value column starts at one
+                 consistent x position top to bottom. Replaces the old
+                 2x2 table (which paired unrelated values -- description
+                 next to feels-like, temp next to high/low) plus a
+                 separately-laid-out flex list for Wind/Humid/Rain/UV that
+                 didn't share a column grid with it. -->
+            <div class="kv-grid text-[clamp(.56rem,1.2vmin,.88rem)]">
+              <span class="kv-key text-faint uppercase tracking-[0.1em]">Condition</span>
+              <span id="wdesc" class="kv-val num text-muted"></span>
+
+              <span class="kv-key text-faint uppercase tracking-[0.1em]">Temp</span>
+              <span id="wtemp" class="kv-val num text-ink"></span>
+
+              <span class="kv-key text-faint uppercase tracking-[0.1em]">Feels</span>
+              <span id="wfeels" class="kv-val num text-muted"></span>
+
+              <span class="kv-key text-faint uppercase tracking-[0.1em]">High / Low</span>
+              <span id="whilo" class="kv-val num text-muted"></span>
+
+              <span class="kv-key text-faint uppercase tracking-[0.1em]">Wind</span>
+              <span id="wwind" class="kv-val num text-ink/90"></span>
+
+              <span class="kv-key text-faint uppercase tracking-[0.1em]">Humidity</span>
+              <span id="whumid" class="kv-val num text-ink/90"></span>
+
+              <span class="kv-key text-faint uppercase tracking-[0.1em]">Rain</span>
+              <span id="wrain" class="kv-val num text-ink/90"></span>
+
+              <span class="kv-key text-faint uppercase tracking-[0.1em]">UV</span>
+              <span id="wuv" class="kv-val num text-ink/90"></span>
+            </div>
 
             <!-- Hourly strip hidden -- user feedback: too much dead space on
                  the wallpaper. Markup/render code kept intact (renderHourly()

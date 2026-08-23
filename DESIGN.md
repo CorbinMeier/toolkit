@@ -15,30 +15,19 @@ colors:
   distress-red-dim: "#9c3230"
   standby-green: "#2bfea0"
 typography:
-  display:
-    fontFamily: "Fira Sans, system-ui, sans-serif"
-    fontSize: "clamp(2.4rem, 8vmin, 6.5rem)"
-    fontWeight: 100
-    lineHeight: 0.85
-    letterSpacing: "-0.04em"
-  headline:
-    fontFamily: "Fira Sans, system-ui, sans-serif"
-    fontSize: "clamp(0.9rem, 2.3vmin, 1.7rem)"
-    fontWeight: 300
-    lineHeight: 1.2
   title:
-    fontFamily: "Fira Sans, system-ui, sans-serif"
+    fontFamily: "Fira Mono, ui-monospace, monospace"
     fontSize: "clamp(0.8rem, 2vmin, 1.5rem)"
-    fontWeight: 300
+    fontWeight: 400
     lineHeight: 1.3
   body:
-    fontFamily: "Fira Sans, system-ui, sans-serif"
+    fontFamily: "Fira Mono, ui-monospace, monospace"
     fontSize: "clamp(0.48rem, 1.02vmin, 0.74rem)"
     fontWeight: 400
     lineHeight: 1.3
     fontFeature: "tnum"
   label:
-    fontFamily: "Fira Sans, system-ui, sans-serif"
+    fontFamily: "Fira Mono, ui-monospace, monospace"
     fontSize: "clamp(0.44rem, 0.95vmin, 0.8rem)"
     fontWeight: 400
     letterSpacing: "0.1em to 0.3em"
@@ -114,17 +103,16 @@ Each Utilization Bars segment is colored off its fixed position in the bar, not 
 
 ## Typography
 
-**Display/Body Font:** Fira Sans, with `system-ui, sans-serif` fallback
-**Label/Mono Font:** Fira Mono is declared in the token set but not actually applied anywhere — every numeric alignment need is met by `font-variant-numeric: tabular-nums` on Fira Sans instead of switching families. Treat `--font-mono` as reserved, not a live typographic voice.
+**Font:** Fira Mono, with `ui-monospace, monospace` fallback — the single voice for every role, every theme (#50). Previously Fira Sans was the base body font and Fira Mono was reserved for the two CRT themes only (`retro_terminal`/`retro_orange`); monospace is now universal, reinforcing the "instrumented console / spreadsheet of live data" read the system has always gone for, rather than being a CRT-only costume.
 
-**Character:** One typeface doing every job, kept legible at wallpaper viewing distance through weight and tracking alone — thin (100) for the one hero number, light (300) for secondary large text, default weight for dense data, and wide uppercase tracking for every label. No serif, no display face; the system deliberately doesn't reach for a second typeface to signal "brand."
+**Character:** One typeface doing every job, kept legible at wallpaper viewing distance. Fira Mono ships only Regular (400) and Bold (700) as static faces on this machine — there is no thin/light weight to lean on, so hierarchy comes from size, color, tracking, and (sparingly) bold, not a wide weight range. No serif, no display face; the system deliberately doesn't reach for a second typeface to signal "brand."
 
 ### Hierarchy
-- **Display** (weight 100, `clamp(2.4rem, 8vmin, 6.5rem)`, line-height 0.85, tracking -0.04em): the current temperature only. The single glow-text element that earns hero treatment.
-- **Headline** (weight 300, `clamp(0.9rem, 2.3vmin, 1.7rem)`): the four weather-stat numbers (Wind/Humidity/Rain/UV).
-- **Title** (weight 300, `clamp(0.8rem, 2vmin, 1.5rem)`): the weather description line ("Partly Cloudy"); a lighter-weight variant handles the week list's day names and hi/lo range.
+- **Title** (weight 400, `clamp(0.8rem, 2vmin, 1.5rem)`): the weather description line ("Partly Cloudy"); a similar-weight variant handles the week list's day names and hi/lo range.
 - **Body** (weight 400, tabular-nums, `clamp(0.48rem, 1.02vmin, 0.74rem)` scaling up to `~1rem` for hourly temps): every live metric readout — system-table values, hourly temps, footer stats. This is the workhorse size; most of the screen's text lives here.
-- **Label** (weight 400, uppercase, tracking 0.1em–0.3em, `clamp(0.4rem, 0.82vmin, 0.8rem)`): section headers ("System", "Storage", "Network", "Hourly", "Week", "Sun & Moon"), table row labels (CPU/MEM/BAT/NET, tier captions like "30S"/"5M"), and weather-stat keys. Wider tracking (0.3em) marks a section header; tighter tracking (0.1em) marks a row label — the tracking width itself signals the hierarchy level.
+- **Label** (weight 400, uppercase, tracking 0.1em–0.3em, `clamp(0.4rem, 0.82vmin, 0.8rem)`): section headers ("System", "Storage", "Network", "Weather"), table row labels (CPU/MEM/BAT/NET, tier captions like "30S"/"5M"), and every key column in a `.kv-grid` (see Layout). Wider tracking (0.3em) marks a section header; tighter tracking (0.1em) marks a row label — the tracking width itself signals the hierarchy level.
+
+A **Display** role (weight 100, `clamp(2.4rem, 8vmin, 6.5rem)`, a single hero-sized current-temperature readout) previously existed in this system but is retired — the Weather panel dropped the oversized hero number in favor of uniform rows (#40/#41, formalized into `.kv-grid` at #50); nothing in the current markup uses it. Don't resurrect it without a real design decision to do so.
 
 ### Named Rules
 **The Tabular Numerals Rule.** Every element carrying a value that updates on a poll gets `font-variant-numeric: tabular-nums`. A refreshing CPU percentage or download rate never shifts its neighbors horizontally.
@@ -138,6 +126,14 @@ Page padding is `2.2vmin` on the sides, and top/bottom padding adds a configurab
 Within each half, panels are content-sized, not stretched: rows pack toward the top and leftover vertical space below them is left unfilled, deliberately. A panel never distributes its rows to fill the available height. Related but distinct data within one panel (System's cpu/mem/bat rows vs. its Storage table vs. its Network table; Forecast's current-conditions vs. Hourly vs. Week vs. Sun & Moon) is separated by a `1px` hairline border-top with a small heading, not by breaking into a second panel card — one notched panel per region, internally divided.
 
 Every metric table is compact, not stretched (#17): no table carries `w-full` — each sizes to its own content instead of filling the panel, so a narrow value or a small right-aligned chart doesn't leave a dead gap between itself and its column boundary. Every System table now shares one `<colgroup>` shape (icon `1.6–1.7em`, label / value auto-sized to content, tail auto-sized) — CPU/MEM/BAT's table used to diverge with a leading status LED column (#17); that column is retired (#31) and CPU/MEM/BAT now carries its Utilization Bars graphic in the same tail slot Storage/Network already use.
+
+### Key:Value Grid (`.kv-grid`, #50)
+
+A "spreadsheet" pattern for any panel whose content is fundamentally a list of named readings: a two-column CSS grid (`grid-template-columns: auto 1fr`), key column left (uppercase Label styling, left-aligned), value column right (Body styling, right-aligned, `.num` for tabular figures). Every row shares the same grid, so the value column starts at one consistent x position from the first row to the last — the thing that makes it read as a spreadsheet rather than a stack of independently-laid-out lines.
+
+The Weather/Forecast panel is the first and, so far, only user: Condition, Temp, Feels, High/Low, Wind, Humidity, Rain, and UV are all one `.kv-grid`, replacing an earlier layout that paired unrelated values into a 2×2 table (description next to feels-like, temp next to high/low) above a separately-laid-out flex list for Wind/Humidity/Rain/UV — two different layout mechanisms whose value columns didn't align with each other.
+
+System/Devices/Music already express the same key-left/value-right idea through their own `icon | label | value | tail` table row shape (see Components below) and don't need to move to `.kv-grid` — that shape carries an icon and a chart/badge tail column `.kv-grid`'s plain two-column model doesn't have a slot for. Calendar stays a literal month grid; it isn't a list of named readings and reorganizing it into key:value rows wouldn't make sense.
 
 ## Themes
 
@@ -155,7 +151,7 @@ on that.
 
 ### Night Ops HUD (default)
 The system described everywhere else in this document — teal/gold/red
-accent triad, Fira Sans, backdrop blur, drifting ambient gradient glow.
+accent triad, Fira Mono, backdrop blur, drifting ambient gradient glow.
 
 ### Retro Terminal
 A CRT/green-phosphor console look. Same panel shapes, table layout, and
@@ -167,9 +163,8 @@ treatment change:
   monochrome instrument instead of the tri-color HUD — matching the
   reference aesthetic of a single-color terminal, not a stylistic
   shortcut.
-- **Typography:** switches to Fira Mono (`--font-mono` is declared in the
-  base token set but deliberately unused by Night Ops HUD — Retro Terminal
-  is its first live consumer).
+- **Typography:** unchanged — Fira Mono is now the base token set's font
+  for every theme (#50), not a Retro Terminal-only switch.
 - **Surface:** panel `backdrop-filter` blur is turned off (flat, not
   glassy — closer to a real terminal) and the ambient drifting glow blobs
   (`.glow`, `.g1`/`.g2`) are hidden — that ambient cyberpunk lighting is a
