@@ -322,6 +322,62 @@ class TestWeatherCache(unittest.TestCase):
         self.assertTrue(out["unavailable"])
         self.assertTrue(out["stale"])
 
+    def test_alert_attached_when_fresh_cache_matches_thresholds(self):
+        import time
+        payload = {"temp": 95, "desc": "Clear", "precip_prob": 0,
+                   "fetched_at": time.time()}
+        (dashd.DATA / "weather.json").write_text(json.dumps(payload))
+        cfg = self._cfg(600)
+        cfg["weather_alerts"] = {"temp_high_f": 90, "rain_pct": 40,
+                                  "condition_patterns": []}
+        out = dashd.cached_weather(cfg)
+        self.assertTrue(out["alert"]["active"])
+        self.assertIn("95°", out["alert"]["reasons"])
+
+    def test_alert_not_attached_when_unavailable(self):
+        def boom(_cfg):
+            raise TimeoutError("network down")
+
+        orig, dashd.fetch_weather = dashd.fetch_weather, boom
+        try:
+            out = dashd.cached_weather(self._cfg(600))
+        finally:
+            dashd.fetch_weather = orig
+        self.assertNotIn("alert", out)
+
+
+class TestWeatherAlert(unittest.TestCase):
+    def _cfg(self, **overrides):
+        alerts = {"temp_high_f": 90, "rain_pct": 40,
+                  "condition_patterns": [
+                      {"regex": "rain|shower|storm", "label": "Severe weather"}]}
+        alerts.update(overrides)
+        return {"weather_alerts": alerts}
+
+    def test_hot_temp_triggers(self):
+        out = dashd.weather_alert({"temp": 92, "desc": "Clear", "precip_prob": 0},
+                                   self._cfg())
+        self.assertTrue(out["active"])
+        self.assertIn("92°", out["reasons"])
+
+    def test_condition_regex_triggers(self):
+        out = dashd.weather_alert(
+            {"temp": 70, "desc": "Light showers", "precip_prob": 0}, self._cfg())
+        self.assertTrue(out["active"])
+        self.assertIn("Severe weather", out["reasons"])
+
+    def test_rain_probability_triggers(self):
+        out = dashd.weather_alert(
+            {"temp": 70, "desc": "Clear", "precip_prob": 45}, self._cfg())
+        self.assertTrue(out["active"])
+        self.assertIn("45% rain", out["reasons"])
+
+    def test_no_alert_when_nothing_matches(self):
+        out = dashd.weather_alert(
+            {"temp": 70, "desc": "Clear", "precip_prob": 5}, self._cfg())
+        self.assertFalse(out["active"])
+        self.assertEqual(out["reasons"], [])
+
 
 class TestBuildState(unittest.TestCase):
     def setUp(self):

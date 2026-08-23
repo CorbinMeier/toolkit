@@ -614,8 +614,10 @@
           </div>
         </section>
 
-        <!-- WEATHER/FORECAST: current conditions + week. -->
-        <section class="accent-amber flex flex-col">
+        <!-- WEATHER/FORECAST: current conditions + week. accent swaps
+             amber -> crimson (renderWeather(), #46) when w.alert.active --
+             same traffic-light language as System's LED (critical=crimson). -->
+        <section id="weather-panel" class="accent-amber flex flex-col">
           <div class="panel px-[2.4vmin] py-[1.8vmin] flex flex-col gap-[1.3vmin]">
             <!-- Weather had no header at all (user feedback: "seems like
                  the weather panel doesn't have a label") -- every other

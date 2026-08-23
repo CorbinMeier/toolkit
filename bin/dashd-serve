@@ -36,6 +36,7 @@ import json
 import math
 import mimetypes
 import os
+import re
 import sys
 import threading
 import time
@@ -198,12 +199,47 @@ def fetch_weather(cfg: dict) -> dict:
     }
 
 
+def weather_alert(w: dict, cfg: dict) -> dict:
+    """Config-driven alert check against the current conditions -- same
+    "regex patterns in config.json, matched fresh every call" shape as
+    lib/logsrc.py's log patterns, so a threshold/pattern edit takes effect
+    on the next poll rather than waiting for the next weather refetch.
+    """
+    alerts_cfg = cfg.get("weather_alerts", {})
+    reasons = []
+
+    temp_high = alerts_cfg.get("temp_high_f")
+    temp = w.get("temp")
+    if temp_high is not None and temp is not None and temp >= temp_high:
+        reasons.append(f"{temp}°")
+
+    desc = w.get("desc", "")
+    for pat in alerts_cfg.get("condition_patterns", []):
+        if re.search(pat["regex"], desc, re.IGNORECASE):
+            reasons.append(pat.get("label", desc))
+            break
+
+    rain_pct = alerts_cfg.get("rain_pct")
+    precip = w.get("precip_prob")
+    if rain_pct is not None and precip is not None and precip >= rain_pct:
+        reasons.append(f"{precip}% rain")
+
+    return {"active": bool(reasons), "reasons": reasons}
+
+
 def cached_weather(cfg: dict) -> dict:
     """Return cached weather, refetching past its TTL.
 
     On failure the stale cache is served with stale=True rather than raising --
     a dashboard that shows slightly old weather beats one showing an error.
     """
+    w = _fetch_or_cache_weather(cfg)
+    if not w.get("unavailable"):
+        w["alert"] = weather_alert(w, cfg)
+    return w
+
+
+def _fetch_or_cache_weather(cfg: dict) -> dict:
     path = DATA / "weather.json"
     ttl = cfg["refresh"]["weather_seconds"]
     with _lock:

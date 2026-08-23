@@ -49,6 +49,17 @@
       }
     ]
   },
+  "weather_alerts": {
+    "_comment": "Weather panel highlight (#46). temp_high_f/rain_pct compare directly against weather.temp/precip_prob, which are already in units.temperature/units above -- assumes fahrenheit, matching this config's units. condition_patterns are regex over weather.desc, same {regex, label} shape as logs.patterns above; first match wins.",
+    "temp_high_f": 90,
+    "rain_pct": 40,
+    "condition_patterns": [
+      {
+        "regex": "rain|shower|drizzle|storm|thunder|hail|snow|sleet",
+        "label": "Severe weather"
+      }
+    ]
+  },
   "display": {
     "layer": "BOTTOM",
     "transparent": true,

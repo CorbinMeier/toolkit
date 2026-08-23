@@ -677,17 +677,32 @@ function renderWeather(w) {
   const feelsEl = $('wfeels');
   const tempEl = $('wtemp');
   const hiloEl = $('whilo');
+  const panelEl = $('weather-panel');
   if (w.unavailable) {
     if (descEl) descEl.textContent = 'weather unavailable';
     if (feelsEl) feelsEl.textContent = '';
     if (tempEl) tempEl.textContent = '—';
     if (hiloEl) hiloEl.textContent = '';
     $('wdetails').replaceChildren();
+    if (panelEl) {
+      panelEl.classList.remove('accent-crimson');
+      panelEl.classList.add('accent-amber');
+    }
     return;
+  }
+
+  // w.alert is computed server-side (bin/dashd-serve's weather_alert(), #46)
+  // against config.weather_alerts -- regex over w.desc plus temp/rain%
+  // thresholds, same shape as the Log panel's config.logs.patterns.
+  const alertActive = Boolean(w.alert?.active);
+  if (panelEl) {
+    panelEl.classList.toggle('accent-crimson', alertActive);
+    panelEl.classList.toggle('accent-amber', !alertActive);
   }
 
   if (descEl) {
     descEl.textContent = w.desc
+      + (alertActive ? ` · ${w.alert.reasons.join(', ')}` : '')
       + (w.stale ? ` · ${Math.round(w.age_seconds / 60)}m old` : '');
   }
   if (feelsEl) feelsEl.textContent = `feels ${w.apparent}${w.units.temp}`;
