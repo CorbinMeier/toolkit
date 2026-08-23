@@ -174,14 +174,20 @@ function utilBars(pct, segments = 10) {
  * preserveAspectRatio="none": these are bare paths with no text/marker
  * children to distort (see CLAUDE.md's gotcha on that attribute), so
  * stretching to exactly fill a fixed small box is exactly what's wanted
- * here. */
+ * here.
+ *
+ * `domain` ([lo, hi]) overrides the scale this chart would derive from its
+ * own series. Two charts drawn side by side are two SVGs and so cannot share
+ * a scale implicitly the way two series in one box do -- Network (#59) passes
+ * the same domain to both so its down and up boxes stay directly comparable,
+ * which is the property the single dual-line box had by construction. */
 let gradientSeq = 0;
-function stepChart(series, cls) {
+function stepChart(series, cls, domain = null) {
   const svg = el('svg', { viewBox: '0 0 100 30', preserveAspectRatio: 'none',
     class: cls || 'w-[clamp(3.4rem,9vmin,6.4rem)] h-[clamp(0.8rem,1.8vmin,1.05rem)] shrink-0 ml-auto' });
   const all = series.flatMap((sr) => sr.values);
   if (all.length < 2) return svg;
-  const lo = Math.min(...all), hi = Math.max(...all);
+  const [lo, hi] = domain || [Math.min(...all), Math.max(...all)];
   const span = Math.max(hi - lo, 1);
   const pad = 2;
   const baseline = 30;
@@ -343,24 +349,67 @@ function renderDisks(disks) {
   });
 }
 
-// Network: dedicated area below Storage, one row, one step chart with two
-// lines (download/upload). No long-term storage for this one (see
-// #12) -- it's the ring buffer's fine 5s resolution that makes
-// brief throughput bursts visible at all, so a DB-backed tier would just
-// flatten them. No hot/alert threshold defined for throughput, so the
-// value never gets the badge treatment.
+// One captioned chart in Network's graph row. The caption takes the same
+// faint uppercase treatment as a .sys-key label rather than being tinted to
+// match its line -- sitting directly above its own chart already identifies
+// it, and colored text would spend an accent on a label (DESIGN.md's
+// one-accent-per-region rule) to say what position already says.
+function netGraph(label, values, tone, domain) {
+  const cell = document.createElement('div');
+  cell.className = 'flex flex-col gap-[0.25vmin]';
+
+  const cap = document.createElement('div');
+  cap.className = 'sys-key text-faint tracking-[0.1em] uppercase';
+  cap.textContent = label;
+
+  // Explicit width, not w-full: .sys-grid is width:fit-content, so a
+  // percentage width would resolve against whatever the text rows happen to
+  // measure. Sizing the charts and letting the grid widen to them keeps
+  // "every metric grid is content-sized" true (#17) with the graph row in it.
+  cell.append(cap, stepChart([{ values, tone }],
+    'w-[clamp(3.4rem,9vmin,6.4rem)] h-[clamp(1.6rem,3.6vmin,2.4rem)] block', domain));
+  return cell;
+}
+
+// Network: dedicated area below Storage. The NET label/value/sub row keeps
+// the standard .sys-grid shape (#57) so its columns still line up with
+// CPU/MEM/BAT and Storage; the chart moved off that row into a full-width
+// row beneath it (#59), split into separate download and upload boxes side
+// by side instead of two lines sharing one box.
+//
+// Both boxes are drawn on one explicit domain spanning both series. Two SVGs
+// cannot share a scale the way two series in one box did, and letting each
+// self-scale would make a 40K/s upload draw the same shape as a 40M/s
+// download -- the comparison the shared scale existed to protect.
+//
+// No long-term storage for this one (see #12) -- it's the ring buffer's fine
+// 5s resolution that makes brief throughput bursts visible at all, so a
+// DB-backed tier would just flatten them. No hot/alert threshold defined for
+// throughput, so the value never gets the badge treatment.
 function renderNetwork(s) {
   const box = $('net');
   box.replaceChildren();
   box.append(...sysRow({
     label: 'NET',
     value: `down ${bytes(s.net.down)}/s`,
-    bar: stepChart([
-      { values: ringSince('down', RING_WINDOW_MS), tone: 'var(--color-accent)' },
-      { values: ringSince('up', RING_WINDOW_MS), tone: 'var(--color-warm)' },
-    ]),
     sub: `up ${bytes(s.net.up)}/s`,
   }));
+
+  const down = ringSince('down', RING_WINDOW_MS);
+  const up = ringSince('up', RING_WINDOW_MS);
+  const all = down.concat(up);
+  // Under two samples every series is a single point and stepChart draws
+  // nothing; emit no graph row at all rather than a pair of empty boxes.
+  if (all.length < 2) return;
+  const domain = [Math.min(...all), Math.max(...all)];
+
+  const graphs = document.createElement('div');
+  graphs.className = 'sys-graph flex gap-[0.8vmin]';
+  graphs.append(
+    netGraph('DOWN', down, 'var(--color-accent)', domain),
+    netGraph('UP', up, 'var(--color-warm)', domain)
+  );
+  box.appendChild(graphs);
 }
 
 // Music: its own top-level component, pinned to the bottom-right corner of

@@ -285,6 +285,13 @@
   .sys-grid > .sys-key{text-align:left}
   .sys-grid > .sys-val{justify-self:end;display:flex;align-items:center;gap:0.6vmin}
   .sys-grid > .sys-sub{justify-self:end;grid-column:2}
+  /* A chart that has outgrown the value cell and taken its own row (#59,
+     Network's side-by-side down/up boxes). Spans both columns so it is not
+     bound to the value column's width, and adds a little top margin so it
+     reads as its own band rather than a third line of the row above. The
+     metric row itself keeps the standard shape -- this is an extra row
+     under it, not a change to its geometry. */
+  .sys-grid > .sys-graph{grid-column:1 / -1;margin-top:0.35vmin}
 
   /* Spreadsheet-style key:value grid (#50) -- key column left, value
      column right, one CSS grid so both columns line up across every row
@@ -467,8 +474,9 @@
           <div id="disks" class="sys-grid text-[clamp(.56rem,1.2vmin,.88rem)]"></div>
         </div>
 
-        <!-- Network: its own dedicated area below Storage, one row with a
-             dual-line (down/up) step chart. -->
+        <!-- Network: its own dedicated area below Storage. The NET metric
+             row, then a full-width graph row under it holding separate
+             download and upload step charts side by side (#59). -->
         <div class="pt-[0.6vmin] border-t border-[var(--color-hairline)]">
           <h3 class="sec-head text-faint uppercase tracking-[0.3em]
               text-[clamp(.48rem,1vmin,.68rem)] mb-[0.35vmin]">Network</h3>

@@ -352,6 +352,17 @@ any other script can add panels without touching the server.
 
 ## Current state (2026-08-20)
 
+- #59 (2026-08-23): Network's chart moved off the NET metric row onto its
+  own full-width row beneath it (`.sys-graph{grid-column:1/-1}`), and split
+  from one dual-line box into separate DOWN and UP boxes side by side, each
+  captioned. The NET label/value/sub row keeps the standard `.sys-grid`
+  shape (#57) so System's columns still line up. `stepChart()` gained an
+  optional `domain` argument: two side-by-side SVGs cannot share a scale
+  implicitly the way two series in one box did, so both boxes are drawn on
+  one domain spanning both series -- without it a 40K/s upload would draw
+  the same shape as a 40M/s download. The charts carry explicit width
+  clamps rather than `w-full`, since `.sys-grid` is `width:fit-content` and
+  a percentage would resolve against whatever the text rows measure.
 - #58 (2026-08-23): follow-up to #57 -- the dash-prefixed sub line (CPU
   temp/freq, MEM used/total, BAT time-remaining, NET upload rate) moved
   from a third `.sys-grid` column beside the value onto its own line
