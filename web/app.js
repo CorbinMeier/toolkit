@@ -686,7 +686,7 @@ function renderWeather(w) {
   if (w.unavailable) {
     if (descEl) {
       descEl.textContent = 'weather unavailable';
-      descEl.classList.remove('alert-badge'); descEl.classList.add('text-muted');
+      descEl.classList.remove('alert-badge'); descEl.classList.add('text-ink');
     }
     if (feelsEl) feelsEl.textContent = '—';
     if (tempEl) {
@@ -708,9 +708,10 @@ function renderWeather(w) {
   // alert-badge treatment (white text, filled deep-red background, #49)
   // -- not the whole panel, which stays accent-amber regardless (#48: a
   // single hot value highlighting the whole card was the wrong shape).
-  // Elements with a static base color class (text-muted/text-ink) swap it
-  // out for alert-badge rather than stacking, so there's no same-
-  // specificity tie between the two to fight over.
+  // Every value cell shares one base color, text-ink (#52 -- three
+  // different colors used to be scattered across these rows), so it
+  // swaps out for alert-badge rather than stacking, avoiding a same-
+  // specificity tie between the two.
   const alert = w.alert?.fields || {};
   // #51: 000F, not 000°F -- w.units.temp comes off the wire as "°F"/"°C".
   const tempUnit = w.units.temp.replace('°', '');
@@ -720,7 +721,7 @@ function renderWeather(w) {
       + (w.stale ? ` · ${Math.round(w.age_seconds / 60)}m old` : '');
     const hot = Boolean(alert.condition);
     descEl.classList.toggle('alert-badge', hot);
-    descEl.classList.toggle('text-muted', !hot);
+    descEl.classList.toggle('text-ink', !hot);
   }
   if (feelsEl) feelsEl.textContent = `${w.apparent}${tempUnit}`;
   if (tempEl) {
@@ -744,7 +745,7 @@ function renderWeather(w) {
     rainEl.textContent = `${w.precip_prob ?? 0}%`;
     const hot = Boolean(alert.rain);
     rainEl.classList.toggle('alert-badge', hot);
-    rainEl.classList.toggle('text-ink/90', !hot);
+    rainEl.classList.toggle('text-ink', !hot);
   }
   if (uvEl) uvEl.textContent = w.uv == null ? '—' : `${Math.round(w.uv)}`;
 

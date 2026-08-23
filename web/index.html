@@ -682,30 +682,38 @@
                  next to feels-like, temp next to high/low) plus a
                  separately-laid-out flex list for Wind/Humid/Rain/UV that
                  didn't share a column grid with it. -->
+            <!-- Every value cell is text-ink (#52) -- three different
+                 colors (text-muted, text-ink, text-ink/90) used to be
+                 spread across these rows, left over from three different
+                 layout mechanisms that predated .kv-grid (#50) and were
+                 never reconciled once merged into one grid. A spreadsheet
+                 keeps cell data at one consistent contrast; .alert-badge
+                 alone carries emphasis now (DESIGN.md's Status-Only Glow
+                 Rule -- nothing calls for attention decoratively). -->
             <div class="kv-grid text-[clamp(.56rem,1.2vmin,.88rem)]">
               <span class="kv-key text-faint uppercase tracking-[0.1em]">Condition</span>
-              <span id="wdesc" class="kv-val num text-muted"></span>
+              <span id="wdesc" class="kv-val num text-ink"></span>
 
               <span class="kv-key text-faint uppercase tracking-[0.1em]">Temp</span>
               <span id="wtemp" class="kv-val num text-ink"></span>
 
               <span class="kv-key text-faint uppercase tracking-[0.1em]">Feels</span>
-              <span id="wfeels" class="kv-val num text-muted"></span>
+              <span id="wfeels" class="kv-val num text-ink"></span>
 
               <span class="kv-key text-faint uppercase tracking-[0.1em]">High / Low</span>
-              <span id="whilo" class="kv-val num text-muted"></span>
+              <span id="whilo" class="kv-val num text-ink"></span>
 
               <span class="kv-key text-faint uppercase tracking-[0.1em]">Wind</span>
-              <span id="wwind" class="kv-val num text-ink/90"></span>
+              <span id="wwind" class="kv-val num text-ink"></span>
 
               <span class="kv-key text-faint uppercase tracking-[0.1em]">Humidity</span>
-              <span id="whumid" class="kv-val num text-ink/90"></span>
+              <span id="whumid" class="kv-val num text-ink"></span>
 
               <span class="kv-key text-faint uppercase tracking-[0.1em]">Rain</span>
-              <span id="wrain" class="kv-val num text-ink/90"></span>
+              <span id="wrain" class="kv-val num text-ink"></span>
 
               <span class="kv-key text-faint uppercase tracking-[0.1em]">UV</span>
-              <span id="wuv" class="kv-val num text-ink/90"></span>
+              <span id="wuv" class="kv-val num text-ink"></span>
             </div>
 
             <!-- Hourly strip hidden -- user feedback: too much dead space on
