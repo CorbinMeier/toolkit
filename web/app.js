@@ -838,12 +838,18 @@ function renderCalendar(extra) {
   title.className = 'text-muted tracking-wide text-[clamp(.52rem,1.1vmin,.82rem)] mb-[0.5vmin]';
   title.textContent = first.toLocaleDateString(undefined, { month: 'long', year: 'numeric' });
 
+  // One shared font size on the grid itself (#53), not a per-element
+  // text-[...] class on the weekday headers and day numbers separately --
+  // those used to be two different sizes (headers smaller than numbers),
+  // the same "each piece picked its own size" drift #50 fixed for Weather's
+  // kv-grid by putting the size on the parent once and letting every child
+  // inherit it.
   const grid = document.createElement('div');
-  grid.className = 'grid grid-cols-7 gap-y-[0.3vmin] text-center';
+  grid.className = 'grid grid-cols-7 gap-y-[0.3vmin] text-center text-[clamp(.48rem,1vmin,.7rem)]';
 
   ['S', 'M', 'T', 'W', 'T', 'F', 'S'].forEach((d) => {
     const head = document.createElement('div');
-    head.className = 'text-faint uppercase text-[clamp(.42rem,.85vmin,.6rem)]';
+    head.className = 'text-faint uppercase';
     head.textContent = d;
     grid.appendChild(head);
   });
@@ -865,14 +871,17 @@ function renderCalendar(extra) {
     // ring read as barely-there against the panel background. Text goes
     // dark (fixed near-black, not a themed color) since every theme's
     // --color-warm is a bright fill the light --color-ink text would wash
-    // out on.
+    // out on. #53: non-today numbers are text-ink (uniform "data"
+    // brightness, matching every other value in the system since #52) --
+    // today's filled box is the one deliberate exception, same role as
+    // Weather's alert-badge, so the rest don't need to also be dimmed.
     const num = document.createElement('span');
     num.className = 'num inline-flex items-center justify-center leading-none ' +
-      'text-[clamp(.48rem,1vmin,.7rem)] p-1 box-border ' +
+      'p-1 box-border ' +
       (isToday
         ? 'font-medium border-2 border-[var(--color-warm)] ' +
           'bg-[var(--color-warm)] text-[oklch(0.16_0_0)]'
-        : 'text-muted border-2 border-transparent');
+        : 'text-ink border-2 border-transparent');
     num.textContent = String(day);
     cell.appendChild(num);
 
