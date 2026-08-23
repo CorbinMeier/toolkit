@@ -213,15 +213,6 @@
   .accent-cyan   {--panel-accent:var(--color-accent);  --panel-border:var(--color-cyan-border)}
   .accent-amber  {--panel-accent:var(--color-warm);    --panel-border:var(--color-amber-border)}
   .accent-crimson{--panel-accent:var(--color-crimson-panel); --panel-border:var(--color-crimson-panel-border)}
-  /* True-red alert accent (#46 weather highlight): unlike .accent-crimson
-     above (--color-crimson-panel, which themes recolor for Devices/Log's
-     panel identity -- green under retro_terminal, orange under
-     retro_orange), this reads --color-crimson/-border directly, which every
-     theme keeps genuinely red for actual alert states (offline banner,
-     critical log status, offline device dot). Always red regardless of
-     theme is the point, so a real weather alert can't blend into a theme's
-     palette. */
-  .accent-alert{--panel-accent:var(--color-crimson); --panel-border:var(--color-crimson-border)}
 
   /* Notched cut-corner card, ported from CyberpunkUIKit's CyberpunkPad --
      solid dark fill, 2px accent-colored border, diagonal corner cut with a
@@ -623,13 +614,13 @@
           </div>
         </section>
 
-        <!-- WEATHER/FORECAST: current conditions + week. accent swaps
-             amber -> alert (renderWeather(), #46) when w.alert.active --
-             true red (--color-crimson) regardless of theme, not
-             .accent-crimson's themed --color-crimson-panel (see that
-             class's comment) -- same traffic-light language as System's
-             LED (critical=crimson). -->
-        <section id="weather-panel" class="accent-amber flex flex-col">
+        <!-- WEATHER/FORECAST: current conditions + week. Stays accent-amber
+             always -- an out-of-range reading (renderWeather(), #48) turns
+             just that value's own text red (text-crimson), not the panel
+             accent; #46's first cut swapped the whole panel to red, which
+             was the wrong shape (a single hot value shouldn't make the
+             whole card read as an alert). -->
+        <section class="accent-amber flex flex-col">
           <div class="panel px-[2.4vmin] py-[1.8vmin] flex flex-col gap-[1.3vmin]">
             <!-- Weather had no header at all (user feedback: "seems like
                  the weather panel doesn't have a label") -- every other

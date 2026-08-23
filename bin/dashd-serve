@@ -204,27 +204,33 @@ def weather_alert(w: dict, cfg: dict) -> dict:
     "regex patterns in config.json, matched fresh every call" shape as
     lib/logsrc.py's log patterns, so a threshold/pattern edit takes effect
     on the next poll rather than waiting for the next weather refetch.
+
+    Per-field flags (#48), not a single active+reasons blob (#46's first
+    cut) -- the frontend highlights the specific value that crossed a
+    threshold (current temp, today's forecast high, rain %, or the
+    condition text), not the whole panel, so each check needs to be
+    addressable on its own.
     """
     alerts_cfg = cfg.get("weather_alerts", {})
-    reasons = []
-
     temp_high = alerts_cfg.get("temp_high_f")
-    temp = w.get("temp")
-    if temp_high is not None and temp is not None and temp >= temp_high:
-        reasons.append(f"{temp}°")
-
+    rain_pct = alerts_cfg.get("rain_pct")
+    temp, high, precip = w.get("temp"), w.get("high"), w.get("precip_prob")
     desc = w.get("desc", "")
+
+    condition_label = None
     for pat in alerts_cfg.get("condition_patterns", []):
         if re.search(pat["regex"], desc, re.IGNORECASE):
-            reasons.append(pat.get("label", desc))
+            condition_label = pat.get("label", desc)
             break
 
-    rain_pct = alerts_cfg.get("rain_pct")
-    precip = w.get("precip_prob")
-    if rain_pct is not None and precip is not None and precip >= rain_pct:
-        reasons.append(f"{precip}% rain")
-
-    return {"active": bool(reasons), "reasons": reasons}
+    fields = {
+        "temp": temp_high is not None and temp is not None and temp >= temp_high,
+        "high": temp_high is not None and high is not None and high >= temp_high,
+        "rain": rain_pct is not None and precip is not None and precip >= rain_pct,
+        "condition": condition_label is not None,
+    }
+    return {"active": any(fields.values()), "fields": fields,
+            "condition_label": condition_label}
 
 
 def cached_weather(cfg: dict) -> dict:

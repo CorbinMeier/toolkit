@@ -332,7 +332,7 @@ class TestWeatherCache(unittest.TestCase):
                                   "condition_patterns": []}
         out = dashd.cached_weather(cfg)
         self.assertTrue(out["alert"]["active"])
-        self.assertIn("95°", out["alert"]["reasons"])
+        self.assertTrue(out["alert"]["fields"]["temp"])
 
     def test_alert_not_attached_when_unavailable(self):
         def boom(_cfg):
@@ -354,29 +354,46 @@ class TestWeatherAlert(unittest.TestCase):
         alerts.update(overrides)
         return {"weather_alerts": alerts}
 
-    def test_hot_temp_triggers(self):
-        out = dashd.weather_alert({"temp": 92, "desc": "Clear", "precip_prob": 0},
-                                   self._cfg())
+    def test_hot_temp_triggers_only_the_temp_field(self):
+        out = dashd.weather_alert({"temp": 92, "high": 80, "desc": "Clear",
+                                    "precip_prob": 0}, self._cfg())
         self.assertTrue(out["active"])
-        self.assertIn("92°", out["reasons"])
+        self.assertTrue(out["fields"]["temp"])
+        self.assertFalse(out["fields"]["high"])
+
+    def test_hot_forecast_high_triggers_only_the_high_field(self):
+        # #48: the user's report was specifically "H100 is not highlighting"
+        # -- the daily forecast high is a distinct field from current temp
+        # and must be checked (and flagged) independently.
+        out = dashd.weather_alert({"temp": 70, "high": 100, "desc": "Clear",
+                                    "precip_prob": 0}, self._cfg())
+        self.assertTrue(out["active"])
+        self.assertFalse(out["fields"]["temp"])
+        self.assertTrue(out["fields"]["high"])
 
     def test_condition_regex_triggers(self):
         out = dashd.weather_alert(
-            {"temp": 70, "desc": "Light showers", "precip_prob": 0}, self._cfg())
+            {"temp": 70, "high": 75, "desc": "Light showers", "precip_prob": 0},
+            self._cfg())
         self.assertTrue(out["active"])
-        self.assertIn("Severe weather", out["reasons"])
+        self.assertTrue(out["fields"]["condition"])
+        self.assertEqual(out["condition_label"], "Severe weather")
 
-    def test_rain_probability_triggers(self):
+    def test_rain_probability_triggers_only_the_rain_field(self):
         out = dashd.weather_alert(
-            {"temp": 70, "desc": "Clear", "precip_prob": 45}, self._cfg())
+            {"temp": 70, "high": 75, "desc": "Clear", "precip_prob": 45},
+            self._cfg())
         self.assertTrue(out["active"])
-        self.assertIn("45% rain", out["reasons"])
+        self.assertTrue(out["fields"]["rain"])
+        self.assertFalse(out["fields"]["temp"])
 
     def test_no_alert_when_nothing_matches(self):
         out = dashd.weather_alert(
-            {"temp": 70, "desc": "Clear", "precip_prob": 5}, self._cfg())
+            {"temp": 70, "high": 75, "desc": "Clear", "precip_prob": 5},
+            self._cfg())
         self.assertFalse(out["active"])
-        self.assertEqual(out["reasons"], [])
+        self.assertFalse(any(out["fields"].values()))
+        self.assertIsNone(out["condition_label"])
 
 
 class TestBuildState(unittest.TestCase):

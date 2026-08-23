@@ -677,49 +677,58 @@ function renderWeather(w) {
   const feelsEl = $('wfeels');
   const tempEl = $('wtemp');
   const hiloEl = $('whilo');
-  const panelEl = $('weather-panel');
   if (w.unavailable) {
-    if (descEl) descEl.textContent = 'weather unavailable';
+    if (descEl) { descEl.textContent = 'weather unavailable'; descEl.classList.remove('text-crimson'); }
     if (feelsEl) feelsEl.textContent = '';
-    if (tempEl) tempEl.textContent = '—';
-    if (hiloEl) hiloEl.textContent = '';
+    if (tempEl) { tempEl.textContent = '—'; tempEl.classList.remove('text-crimson'); }
+    if (hiloEl) hiloEl.replaceChildren();
     $('wdetails').replaceChildren();
-    if (panelEl) {
-      panelEl.classList.remove('accent-alert');
-      panelEl.classList.add('accent-amber');
-    }
     return;
   }
 
-  // w.alert is computed server-side (bin/dashd-serve's weather_alert(), #46)
-  // against config.weather_alerts -- regex over w.desc plus temp/rain%
-  // thresholds, same shape as the Log panel's config.logs.patterns.
-  // accent-alert (not accent-crimson) -- true red across every theme, see
-  // that class's comment in index.html.
-  const alertActive = Boolean(w.alert?.active);
-  if (panelEl) {
-    panelEl.classList.toggle('accent-alert', alertActive);
-    panelEl.classList.toggle('accent-amber', !alertActive);
-  }
+  // w.alert.fields is computed server-side (bin/dashd-serve's
+  // weather_alert(), #46/#48) against config.weather_alerts -- regex over
+  // w.desc plus temp/high/rain% thresholds, same shape as the Log panel's
+  // config.logs.patterns. Only the specific out-of-range value turns red
+  // (text-crimson, true red in every theme) -- not the whole panel, which
+  // stays accent-amber regardless (#48: a single hot value highlighting
+  // the whole card was the wrong shape).
+  const alert = w.alert?.fields || {};
 
   if (descEl) {
     descEl.textContent = w.desc
-      + (alertActive ? ` · ${w.alert.reasons.join(', ')}` : '')
       + (w.stale ? ` · ${Math.round(w.age_seconds / 60)}m old` : '');
+    descEl.classList.toggle('text-crimson', Boolean(alert.condition));
   }
   if (feelsEl) feelsEl.textContent = `feels ${w.apparent}${w.units.temp}`;
-  if (tempEl) tempEl.textContent = `${w.temp}${w.units.temp}`;
-  if (hiloEl) hiloEl.textContent = `H${w.high}° L${w.low}°`;
+  if (tempEl) {
+    tempEl.textContent = `${w.temp}${w.units.temp}`;
+    tempEl.classList.toggle('text-crimson', Boolean(alert.temp));
+  }
+  if (hiloEl) {
+    const hi = document.createElement('span');
+    hi.textContent = `H${w.high}°`;
+    if (alert.high) hi.classList.add('text-crimson');
+    const lo = document.createElement('span');
+    lo.className = 'ml-[0.5vmin]';
+    lo.textContent = `L${w.low}°`;
+    hiloEl.replaceChildren(hi, lo);
+  }
 
-  const detailLine = (label, value) => {
+  const detailLine = (label, value, hot = false) => {
     const div = document.createElement('div');
-    div.textContent = `${label}: ${value}`;
+    const lab = document.createElement('span');
+    lab.textContent = `${label}: `;
+    const val = document.createElement('span');
+    val.textContent = value;
+    if (hot) val.classList.add('text-crimson');
+    div.append(lab, val);
     return div;
   };
   $('wdetails').replaceChildren(
     detailLine('Wind', `${w.wind}${w.units.wind} ${compass(w.wind_dir)}`),
     detailLine('Humid', `${w.humidity}%`),
-    detailLine('Rain', `${w.precip_prob ?? 0}%`),
+    detailLine('Rain', `${w.precip_prob ?? 0}%`, Boolean(alert.rain)),
     detailLine('UV', w.uv == null ? '—' : `${Math.round(w.uv)}`),
   );
 
