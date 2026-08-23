@@ -346,8 +346,12 @@ function sysRow({ icon, iconNode, label, value, sub = '', tail = null, tone = 'v
     'text-[clamp(.44rem,.92vmin,.66rem)] truncate';
   labelTd.textContent = label;
 
+  // #55: text-ink, not text-ink/90 -- every "value" cell across the
+  // system reads at full brightness now (#52's rule for Weather/Calendar),
+  // reserving color for actual status (icon tone, Utilization Bars) rather
+  // than an arbitrary opacity step.
   const valueTd = document.createElement('td');
-  valueTd.className = 'num text-right text-ink/90 text-[clamp(.48rem,1.02vmin,.74rem)]';
+  valueTd.className = 'num text-right text-ink text-[clamp(.48rem,1.02vmin,.74rem)]';
   // Inline, not a pl-[...] utility class: .sys-table td{padding:0.32vmin 0}
   // is a class+element selector, higher specificity than a single-class
   // Tailwind utility, so it silently zeroes any pl-*/pr-* class applied to
