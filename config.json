@@ -20,11 +20,6 @@
     "host": "0.0.0.0",
     "port": 4321
   },
-  "devices": {
-    "_comment": "Networked-devices panel (#27), editable from the Control Backend. scan_target must match this machine's actual subnet (`ip -4 addr show`) -- it was previously left at a placeholder (192.168.1.0/24) that didn't match this network at all, so it was ping-sweeping a subnet the user isn't even part of. lib/devices.py now refuses to scan a target outside every local interface's subnet as a backstop, but keep this correct regardless.",
-    "scan_interval_seconds": 300,
-    "scan_target": "10.1.0.0/23"
-  },
   "logs": {
     "_comment": "Log-highlighter panel (#28), source editable from the Control Backend. source_type is 'journalctl' or 'file'.",
     "source_type": "journalctl",

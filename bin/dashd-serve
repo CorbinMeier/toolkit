@@ -55,7 +55,6 @@ DATA = ROOT / "data"
 CONFIG = ROOT / "config.json"
 
 sys.path.insert(0, str(ROOT / "lib"))
-import devices  # noqa: E402 -- needs ROOT on sys.path first
 import logsrc  # noqa: E402
 import metrics  # noqa: E402
 import sysinfo  # noqa: E402,F401 -- ditto; tests patch dashd.sysinfo.subprocess
@@ -270,98 +269,6 @@ def _fetch_or_cache_weather(cfg: dict) -> dict:
             return {"error": str(exc), "stale": True, "unavailable": True}
 
 
-# ------------------------------------------------------------- devices/logs
-
-_devices_scan_lock = threading.Lock()
-_devices_scanning = False
-
-
-def _run_device_scan(target: str, gateway: dict, path: Path) -> None:
-    """Runs off the request thread -- see cached_devices() below. Merges
-    into the on-disk registry rather than overwriting it, so devices from
-    other networks (or this network's devices that just didn't answer this
-    round -- see merge_scan()'s offline handling) survive. full_scan(), not
-    scan_devices() directly, so each device's IPv6 address (user request:
-    "I want ipv6 to be the main way to identify devices") gets layered in
-    by the one ipv6_neighbors() call this also needs for the gateway's own
-    address."""
-    global _devices_scanning
-    try:
-        found, gateway_ipv6 = devices.full_scan(target, gateway)
-        with _lock:
-            registry = devices.load_registry(path)
-            devices.merge_scan(registry, gateway, found, gateway_ipv6=gateway_ipv6)
-            path.write_text(json.dumps(registry))
-    finally:
-        with _devices_scan_lock:
-            _devices_scanning = False
-
-
-def cached_devices(cfg: dict) -> dict:
-    """LAN device sweep, remembered per-network in data/devices.json (#27,
-    plus the "remember devices" and "ipv6" follow-ups), refreshed by a
-    background thread rather than inline: an nmap -sn ping sweep (plus an
-    IPv6 neighbor-discovery ping) can take real seconds (longer still if
-    scan_target isn't actually reachable), and running it synchronously
-    inside an /api/state request would stall that poll -- and every other
-    client polling at the same time, since it's the handler thread that
-    would block.
-
-    Returns {"gateway": {...}|None, "devices": [...]} for the CURRENT
-    network only (identified by the default gateway's MAC, see
-    devices.network_key()) -- a device remembered from a different
-    network the machine was on before never leaks into today's list, so
-    hopping networks doesn't show a pile of stale "offline" entries that
-    were never on this network to begin with. The gateway dict is enriched
-    with its last-known "ipv6" from the registry here -- default_gateway()
-    itself deliberately stays IPv6-free (it's called on every request;
-    ipv6_neighbors() pings the segment and isn't cheap enough for that).
-    Kicks off a fresh scan once devices.scan_interval_seconds has elapsed
-    for THIS network, at most one at a time.
-    """
-    dev_cfg = cfg.get("devices", {})
-    target = dev_cfg.get("scan_target")
-    gateway = devices.default_gateway()
-    path = DATA / "devices.json"
-
-    with _lock:
-        registry = devices.load_registry(path)
-    device_list = devices.devices_for_network(registry, gateway)
-
-    gw_rec = None
-    display_gateway = None
-    if gateway:
-        gw_rec = devices.find_gateway(registry, devices.network_key(gateway))
-        display_gateway = {**gateway, "ipv6": gw_rec["ipv6"] if gw_rec else None}
-
-    if target and gateway:
-        last_scan = gw_rec.get("last_scan") if gw_rec else None
-        age = time.time() - (last_scan or 0)
-        ttl = dev_cfg.get("scan_interval_seconds", 300)
-
-        global _devices_scanning
-        if age >= ttl:
-            with _devices_scan_lock:
-                if not _devices_scanning:
-                    _devices_scanning = True
-                    threading.Thread(
-                        target=_run_device_scan, args=(target, gateway, path),
-                        daemon=True).start()
-
-    return {"gateway": display_gateway, "devices": device_list}
-
-
-def devices_scanning() -> bool:
-    """Whether a background nmap sweep is in flight right now -- drives the
-    Devices panel's spinner (#27 follow-up). Read under the same lock
-    _run_device_scan clears it under, so the frontend never sees a scan
-    reported as still running after it's actually finished writing the
-    cache file.
-    """
-    with _devices_scan_lock:
-        return _devices_scanning
-
-
 # ---------------------------------------------------------------- system
 #
 # disk_tree(), battery_charging(), system_stats() now live in
@@ -445,7 +352,6 @@ def build_state(cfg: dict) -> dict:
         except (json.JSONDecodeError, OSError) as exc:
             extra = {"_error": str(exc)}
     sys_stats = system_stats()
-    dev = cached_devices(cfg)
     return {
         "ts": time.time(),
         "config": {"units": cfg["units"], "display": cfg["display"],
@@ -461,12 +367,6 @@ def build_state(cfg: dict) -> dict:
         "sys": sys_stats,
         "music": now_playing(),
         "tasks": load_tasks(),
-        "devices": dev["devices"],
-        # The current network's identity (default gateway), so the
-        # frontend can show which "profile" it's connected to (#27
-        # follow-up) -- None when there's no network at all.
-        "devices_gateway": dev["gateway"],
-        "devices_scanning": devices_scanning(),
         "logs": logsrc.read_log_lines(cfg),
         "extra": extra,
     }

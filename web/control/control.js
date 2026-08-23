@@ -23,8 +23,6 @@ const FIELDS = [
   { section: 'display', key: 'transparent', label: 'Transparent background', type: 'checkbox' },
   { section: 'display', key: 'safe_area_top', label: 'Safe area top (px)', type: 'number' },
   { section: 'display', key: 'safe_area_bottom', label: 'Safe area bottom (px)', type: 'number' },
-  { section: 'devices', key: 'scan_interval_seconds', label: 'Device scan interval (s)', type: 'number' },
-  { section: 'devices', key: 'scan_target', label: 'Device scan target (CIDR)', type: 'text' },
   { section: 'logs', key: 'source_type', label: 'Log source type', type: 'select', options: ['journalctl', 'file'] },
   { section: 'logs', key: 'journalctl_unit', label: 'journalctl unit', type: 'text' },
   { section: 'logs', key: 'file_path', label: 'Log file path', type: 'text' },

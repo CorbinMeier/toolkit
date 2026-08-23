@@ -4,7 +4,6 @@ data/tasks.json
 data/metrics.db
 data/metrics.db-wal
 data/metrics.db-shm
-data/devices.json
 data/control_token.txt
 __pycache__/
 .venv/

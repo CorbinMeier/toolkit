@@ -49,14 +49,12 @@ class TestMergePatch(unittest.TestCase):
         self.assertNotIn("bogus", cfg["units"])
         self.assertEqual(rejected, ["units.bogus"])
 
-    def test_devices_and_logs_sections_are_editable(self):
+    def test_logs_section_is_editable(self):
         cfg = {}
         rejected = ctrl.merge_patch(cfg, {
-            "devices": {"scan_interval_seconds": 60, "scan_target": "10.0.0.0/24"},
             "logs": {"journalctl_unit": "sshd"},
         })
         self.assertEqual(rejected, [])
-        self.assertEqual(cfg["devices"]["scan_interval_seconds"], 60)
         self.assertEqual(cfg["logs"]["journalctl_unit"], "sshd")
 
     def test_non_dict_patch_is_wholly_rejected(self):

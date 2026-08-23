@@ -62,9 +62,6 @@ lib/sysinfo.py      shared psutil sampling (system_stats() for dashd-serve's
                     playing/paused or playerctl isn't installed
 lib/metrics.py      SQLite historical-metrics store (cpu/mem/battery_pct);
                     self-migrates ALTER TABLE ADD COLUMN for an older DB
-lib/devices.py      LAN device-presence sweep (#27): shells out to
-                    `nmap -sn` (ping sweep, no root needed), parsed from
-                    grepable -oG output
 lib/logsrc.py       filtered/highlighted log tailing (#28): journalctl unit
                     or arbitrary file, matched against config.logs.patterns
                     (regex -> status/label); returns only matched lines
@@ -83,9 +80,9 @@ web/index.html      panel structure (Tailwind utility classes); System
                     icon|label|value|tail row shape, hidden entirely when
                     nothing is playing/paused. Tasks (#25) renders
                     state.tasks.items as checkbox|text|due rows, empty state
-                    "No tasks". A stacked Monitor section (Devices + Log,
-                    #27/#28) follows System/Forecast -- same sys-table/
-                    notched-panel treatment
+                    "No tasks". A Log panel (#28) follows System/Forecast --
+                    same sys-table/notched-panel treatment (Devices, #27,
+                    was removed entirely at #56 -- "basically just clutter")
 web/app.js          all rendering; pure function of last good state.
                     Two independent trend sources feed the step charts: an
                     in-memory ring buffer (this session's own /api/state
@@ -104,9 +101,9 @@ web/control/        standalone mobile control UI served by bin/dashd-control
                     wallpaper surface)
 config.json         location, units, port, display layer, per-output overrides,
                     metrics sample/retain interval, control host/port,
-                    devices scan interval/target, log source/patterns (#30)
-data/               weather.json cache, extra.json, metrics.db, devices.json
-                    cache, control_token.txt (all gitignored)
+                    log source/patterns (#30)
+data/               weather.json cache, extra.json, metrics.db,
+                    control_token.txt (all gitignored)
 scripts/smoke.py    the "build" stage — end-to-end render assertions
 tests/test_dashd.py unittest suite (hermetic, no network)
 tests/test_control.py unit tests for dashd-control's auth/whitelist logic
@@ -363,6 +360,19 @@ any other script can add panels without touching the server.
 
 ## Current state (2026-08-20)
 
+- #56 (2026-08-23): the Devices panel (#27 and its follow-ups -- remembered-
+  per-network registry, ipv6-first identification, self-pinning) was
+  removed entirely (user: "remove devices. its basically just clutter"),
+  not just hidden. `lib/devices.py`, `scripts/nmap.py` (a standalone
+  on-demand scan script that also depended on it, `pnpm run nmap`),
+  `bin/dashd-serve`'s background nmap-sweep thread and `devices`/
+  `devices_gateway`/`devices_scanning` state keys, `config.json`'s
+  `devices` block, and `bin/dashd-control`/`web/control/control.js`'s
+  devices fields are all gone -- not just the frontend panel. `statusDot()`
+  and the `.spinner`/`--color-offline-dot` CSS were also removed since
+  Devices was their only consumer. `data/devices.json` is no longer
+  written; existing copies on disk are harmless leftovers (gitignored,
+  nothing reads them anymore).
 - #26 (2026-08-20): new Music component -- MPRIS now-playing state via
   `playerctl` (`lib/sysinfo.now_playing()`), source-agnostic (picks up any
   local player or browser tab registered over MPRIS, no per-service
@@ -401,7 +411,8 @@ any other script can add panels without touching the server.
   this dev machine since sshd isn't running here, which is correct
   behavior, not a bug.
 - #30: added `bin/dashd-control`, a LAN-reachable mobile config surface
-  (units/display/devices/logs, whitelisted) paired via a QR code
+  (units/display/logs, whitelisted -- devices was whitelisted too until
+  it was removed at #56) paired via a QR code
   (`qrencode`, already packaged -- no new dependency). Token-gated past
   `/api/health`; QR rendering and token rotation are further loopback-only.
   Its systemd unit exists but is **not enabled** (Gatekeeper Protocol).

@@ -19,8 +19,8 @@ Trust model, since a LAN-bound write surface needs one:
     route from a local browser/SSH tunnel), not by discovering it over
     the LAN.
   - POST /api/control/config only ever writes fields in EDITABLE below --
-    an attacker with a stolen token can flip units/devices/logs settings,
-    not repoint the server, change ports, or touch location/credentials.
+    an attacker with a stolen token can flip units/logs settings, not
+    repoint the server, change ports, or touch location/credentials.
 
 QR rendering shells out to `qrencode` (already packaged, no sudo needed on
 this machine -- see CLAUDE.md) rather than vendoring or hand-rolling a QR
@@ -52,7 +52,6 @@ TOKEN_PATH = DATA / "control_token.txt"
 EDITABLE = {
     "units": {"temperature", "wind", "precipitation", "clock24"},
     "display": {"transparent", "safe_area_top", "safe_area_bottom"},
-    "devices": {"scan_interval_seconds", "scan_target"},
     "logs": {"source_type", "journalctl_unit", "file_path", "max_lines"},
 }
 

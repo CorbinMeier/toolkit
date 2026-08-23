@@ -8,8 +8,7 @@
     "lint": "pnpm run lint:js && pnpm run lint:py",
     "test": "python3 -m unittest discover -s tests",
     "build": "python3 scripts/smoke.py",
-    "deploy": "scripts/update-desktop.sh",
-    "nmap": "python3 scripts/nmap.py"
+    "deploy": "scripts/update-desktop.sh"
   },
   "devDependencies": {
     "@eslint/js": "^9",

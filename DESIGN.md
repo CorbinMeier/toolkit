@@ -133,7 +133,7 @@ A "spreadsheet" pattern for any panel whose content is fundamentally a list of n
 
 The Weather/Forecast panel is the first and, so far, only user: Condition, Temp, Feels, High/Low, Wind, Humidity, Rain, and UV are all one `.kv-grid`, replacing an earlier layout that paired unrelated values into a 2×2 table (description next to feels-like, temp next to high/low) above a separately-laid-out flex list for Wind/Humidity/Rain/UV — two different layout mechanisms whose value columns didn't align with each other.
 
-System/Devices/Music already express the same key-left/value-right idea through their own `icon | label | value | tail` table row shape (see Components below) and don't need to move to `.kv-grid` — that shape carries an icon and a chart/badge tail column `.kv-grid`'s plain two-column model doesn't have a slot for. Calendar stays a literal month grid; it isn't a list of named readings and reorganizing it into key:value rows wouldn't make sense.
+System/Music already express the same key-left/value-right idea through their own `icon | label | value | tail` table row shape (see Components below) and don't need to move to `.kv-grid` — that shape carries an icon and a chart/badge tail column `.kv-grid`'s plain two-column model doesn't have a slot for. Calendar stays a literal month grid; it isn't a list of named readings and reorganizing it into key:value rows wouldn't make sense. (Devices used to share this row shape too, but the panel was removed entirely — #56.)
 
 ## Themes
 

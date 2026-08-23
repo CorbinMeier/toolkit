@@ -61,20 +61,13 @@
     --color-crimson-border:#9c3230;
     --color-online:        #2bfea0;
     /* Panel-chrome-only crimson (border/underline for .accent-crimson,
-       e.g. Devices/Log): separate from --color-crimson/-border above,
-       which stay semantic red for alert states (offline banner, offline
-       device dot, critical log status) even under Retro Terminal -- #38
-       asked for the panel chrome to go green, not for alerts to lose
-       their signal color. Same values as --color-crimson by default, so
-       night_ops looks unchanged. */
+       e.g. Log): separate from --color-crimson/-border above, which stay
+       semantic red for alert states (offline banner, critical log status)
+       even under Retro Terminal -- #38 asked for the panel chrome to go
+       green, not for alerts to lose their signal color. Same values as
+       --color-crimson by default, so night_ops looks unchanged. */
     --color-crimson-panel:        #e8615a;
     --color-crimson-panel-border: #9c3230;
-    /* Per-device offline dot (statusDot() in app.js) -- separate from
-       --color-crimson so a theme can dim it instead of recoloring it
-       (#44): night_ops keeps the same red as every other alert, but
-       Retro Terminal wants "off" read as a dim green next to "up"'s
-       bright green, not a hue change. */
-    --color-offline-dot: #e8615a;
     /* Weather value alert badge (#49): a filled white-on-red badge for an
        out-of-range reading (hot temp/forecast high, high rain %, severe
        condition text -- see .alert-badge below and renderWeather() in
@@ -139,15 +132,12 @@
     --color-amber-border:   #1c6b3f;
     --color-crimson-border: #7a2a1f;
     --color-online:         #39ff88;
-    /* #38: Devices/Log panel chrome (border/underline) converges on the
+    /* #38: Log panel chrome (border/underline) converges on the
        same green as every other panel; --color-crimson/-border above
        stay red so alert states (offline banner/dot, critical log) still
        stand out on the phosphor screen. */
     --color-crimson-panel:        #39ff88;
     --color-crimson-panel-border: #1c6b3f;
-    /* #44: offline devices read as a dim green dot next to "up"'s bright
-       --color-online, instead of switching to red. */
-    --color-offline-dot: #1c6b3f;
     /* #39: CPU/MEM/BAT utilization bars go all-green too -- graduated
        dim -> bright phosphor instead of the red/gold/green spectrum. */
     --spectrum-lo:  #145c33;
@@ -183,15 +173,12 @@
     --color-amber-border:   #8a4f14;
     --color-crimson-border: #7a2a1f;
     --color-online:         #ff9a2e;
-    /* Devices/Log panel chrome (border/underline) converges on the same
+    /* Log panel chrome (border/underline) converges on the same
        amber as every other panel; --color-crimson/-border above stay red
        so alert states (offline banner/dot, critical log) still stand out
        on the phosphor screen. */
     --color-crimson-panel:        #ff9a2e;
     --color-crimson-panel-border: #8a4f14;
-    /* Offline devices read as a dim amber dot next to "up"'s bright
-       --color-online, instead of switching to red. */
-    --color-offline-dot: #8a4f14;
     /* CPU/MEM/BAT utilization bars go all-amber too -- graduated dim ->
        bright phosphor instead of the red/gold/green spectrum. */
     --spectrum-lo:  #5c3210;
@@ -336,21 +323,6 @@
   .icon-inline{width:0.9em;height:0.9em;display:inline-block;vertical-align:-0.15em}
   .icon-inline-sm{width:0.8em;height:0.8em;display:inline-block;vertical-align:-0.08em}
 
-  /* Devices panel scan spinner (#27 follow-up) -- shown while dashd-serve's
-     background nmap sweep is in flight (state.devices_scanning). A plain
-     rotating ring, not another hand-rolled sysIcon glyph: every other icon
-     here is a static line-art symbol, and "in progress" is motion, not a
-     shape, so borrowing that language would just be a slower-reading
-     static icon. transform, not a layout property, same reasoning as the
-     miniBar fix elsewhere in this file. */
-  .spinner{
-    width:0.85em;height:0.85em;border-radius:50%;
-    border:2px solid color-mix(in oklab, var(--panel-accent, var(--color-accent)) 30%, transparent);
-    border-top-color:var(--panel-accent, var(--color-accent));
-    animation:spin .8s linear infinite;
-  }
-  @keyframes spin{to{transform:rotate(360deg)}}
-
   /* Angled utilization bar (#31, replacing the retired status
      LED -- user feedback: "not working out"). A row of slanted parallelogram
      <polygon> segments built in app.js's utilBars(); this rule just gives
@@ -472,13 +444,6 @@
          align-items:stretch would force both sides to match each other's
          height instead of each hugging its own content. -->
     <div class="col-span-full flex items-start justify-between gap-[1.8vmin]">
-    <!-- System + Devices, stacked -- Devices sits directly under System
-         (user request) rather than its previous fixed bottom-center
-         anchor. A plain flex-col wrapper is enough here (no position:fixed
-         needed): "under System" just means normal top-to-bottom DOM flow
-         within System's own column of the top row, not a literal
-         screen-corner position the way Log/Music/Calendar+Weather are. -->
-    <div class="flex flex-col gap-[1.8vmin]">
     <section class="accent-cyan flex flex-col min-h-0">
       <div class="panel px-[2vmin] py-[1.5vmin] flex flex-col gap-[0.6vmin]">
         <h2 class="sec-head text-faint uppercase tracking-[0.3em] text-[clamp(.55rem,1.15vmin,.8rem)]">
@@ -531,68 +496,6 @@
       </div>
     </section>
 
-    <!-- DEVICES: networked-device presence sweep (#27), now "remembered"
-         per-network (user request) -- lib/devices.py's registry is a list
-         of gateways, each with a list of connected devices (user request:
-         "structured data"), keyed internally by MAC (stable across DHCP/
-         IP changes) and marks a previously-seen device "offline" instead
-         of dropping it when a scan doesn't find it, scoped to the current
-         default gateway's identity so hopping networks doesn't show a
-         pile of some other network's stale devices. Was combined with Log
-         under a "Monitor" heading; Log moved up front so this stood alone
-         with a fixed bottom-center anchor for a while, now moved again to
-         sit directly under System. Each row is status-dot | identifier |
-         device name -- see statusDot()/renderDevices() in app.js, no more
-         node-glyph icon. The identifier is IPv6 first (user request: "I
-         want ipv6 to be the main way to identify devices"), falling back
-         to IPv4 or MAC when IPv6 isn't known for that device yet; the
-         name is a user-settable name_override (hand-edited into
-         data/devices.json, never touched by a scan once set) first, then
-         the resolved hostname -- a device with neither still gets a row
-         (user request: "if there's no name, and no override, it should
-         show on the devices list"). Scan target/interval are set via the
-         Control Backend (#30); this just renders dashd-serve's cached
-         sweep result. #devicesCount (user request) shows the device count
-         in parens right after the "Devices" label. The header's right
-         side shows #devicesNetwork (the current gateway's IPv6, falling
-         back to IPv4 -- "which profile we're connecting to", user
-         request) and #devicesSpinner (hidden by default) while
-         state.devices_scanning is true -- an nmap sweep can take real
-         seconds, so this is the "still working" signal instead of a panel
-         that silently doesn't update for a while. -->
-    <section class="accent-crimson flex flex-col">
-      <div class="panel px-[2vmin] py-[1.5vmin] flex flex-col gap-[0.6vmin]">
-        <h2 class="sec-head text-faint uppercase tracking-[0.3em] text-[clamp(.55rem,1.15vmin,.8rem)]
-             flex items-center justify-between gap-[0.8vmin]">
-          <span class="shrink-0">Devices<span id="devicesCount" class="text-faint"></span></span>
-          <span class="flex items-center gap-[0.6vmin] min-w-0">
-            <span id="devicesNetwork" class="normal-case tracking-normal text-faint num
-                 min-w-0 truncate text-[clamp(.44rem,.92vmin,.66rem)]"></span>
-            <span id="devicesSpinner" class="hidden spinner shrink-0"></span>
-          </span>
-        </h2>
-        <!-- Clamped + auto-cycle (#29): the remembered-devices list (this
-             device, the gateway, everything the registry has ever seen on
-             this network, up or offline) can run well past what fits in
-             the panel -- user report: "it's going off screen already".
-             max-h-[22vmin] gives it a real box to overflow, auto-cycle
-             (see app.js's refreshAutoCycles(), already built generically
-             for exactly this and explicitly name-checked "networked
-             devices" as a future user -- this is that) then passively
-             scrolls through the rest over time, since there's no pointer
-             on this surface to grab a scrollbar with. -->
-        <div class="max-h-[22vmin] auto-cycle">
-          <table class="sys-table border-collapse">
-            <colgroup>
-              <col class="w-[1.6em]"><col><col><col>
-            </colgroup>
-            <tbody id="devices"></tbody>
-          </table>
-        </div>
-      </div>
-    </section>
-    </div>
-
     <!-- ============ RIGHT STACK: Calendar + Weather, Music, Log ============ -->
     <!-- Moved here from a fixed bottom-right anchor (user request: "keeping
          the same layout for the calendar, weather, and music, move it to
@@ -636,8 +539,8 @@
       <div class="grid grid-cols-2 items-stretch gap-[1.8vmin]">
         <!-- CALENDAR (#22): current-month grid. Reuses Forecast's amber
              accent (date/schedule data, same family as weather) rather
-             than inventing a fourth color, same reasoning System/Devices/
-             Log share teal/crimson. Source-agnostic -- optional event dots
+             than inventing a fourth color, same reasoning System/Log
+             share teal/crimson. Source-agnostic -- optional event dots
              come from state.extra.calendar (data/extra.json, same
              pass-through pattern as everything else under "extra"), so a
              future ICS/CalDAV sync script can populate it without

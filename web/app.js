@@ -558,86 +558,6 @@ function renderMusic(music) {
   }
 }
 
-// A small glowing circle -- green/up or dim/offline -- replacing the old
-// node-glyph icon (user feedback: "the icon you used here is odd").
-// Reuses .dot (same status-dot CSS the offline banner already uses).
-// --color-offline-dot (not --color-crimson) so a theme can dim this
-// instead of recoloring it (#44) -- night_ops keeps it red like every
-// other alert, Retro Terminal makes it a dark green next to "up"'s
-// bright green.
-function statusDot(status) {
-  const dot = document.createElement('span');
-  dot.className = 'dot';
-  const color = status === 'up' ? 'var(--color-online)' : 'var(--color-offline-dot)';
-  dot.style.background = color;
-  dot.style.boxShadow = `0 0 4px ${color}`;
-  return dot;
-}
-
-// Networked devices (#27): one row per remembered device -- status dot |
-// identifier | device name, same sys-table shape as everything else in
-// System. Devices are remembered per-network (lib/devices.py's registry,
-// a list of gateways each with a list of connected devices -- user
-// request: "structured data"), keyed by the default gateway's identity,
-// not just whatever the last scan happened to find: a device that
-// doesn't answer this round shows "offline" (red dot) instead of
-// disappearing, and hopping onto a different network shows that
-// network's own remembered devices, not a pile of stale entries from
-// wherever the laptop was before.
-//
-// IPv6 is the main identifier now (user request: "I want ipv6 to be the
-// main way to identify devices") -- d.ipv6 falls back to d.ip (IPv4) and
-// then d.mac only when IPv6 hasn't been resolved for that device yet, so
-// there's always SOMETHING to identify it by even without a name. The
-// name column is d.name_override (user-settable, hand-edited into
-// data/devices.json -- see lib/devices.py's merge_scan(), which never
-// touches it once set) first, then the resolved d.hostname, then nothing
-// -- a device with neither still gets a row (user request: "if there's
-// no name, and no override, it should show on the devices list"), it
-// just has a blank name cell instead of being filtered out.
-//
-// scan_target/scan_interval_seconds live in config.json, editable from the
-// Control Backend (#30) -- this panel just renders whatever dashd-serve's
-// cached_devices() last found. `scanning` (state.devices_scanning) toggles
-// the header spinner while a background nmap sweep is actually running.
-// `gateway` (state.devices_gateway) is the current network's identity,
-// shown top-right in the header as "which profile we're connecting to"
-// (user request) -- its IPv6 when known, else its IPv4, same identifier
-// preference as the device rows.
-function renderDevices(devices, scanning, gateway) {
-  const spinner = $('devicesSpinner');
-  if (spinner) spinner.classList.toggle('hidden', !scanning);
-
-  const netLabel = $('devicesNetwork');
-  if (netLabel) netLabel.textContent = gateway ? (gateway.ipv6 || gateway.ip) : '';
-
-  // Device count in parens right after the "Devices" label (user
-  // request) -- total remembered rows, up + offline alike, matching what
-  // actually renders below rather than just the "up" subset.
-  const count = $('devicesCount');
-  if (count) count.textContent = devices && devices.length ? ` (${devices.length})` : '';
-
-  const box = $('devices');
-  box.replaceChildren();
-  if (!devices || !devices.length) {
-    const tr = document.createElement('tr');
-    const td = document.createElement('td');
-    td.colSpan = 4;
-    td.className = 'text-faint text-[clamp(.42rem,.85vmin,.6rem)] py-[0.2vmin]';
-    td.textContent = gateway ? 'no devices found' : 'no network connection';
-    tr.appendChild(td);
-    box.appendChild(tr);
-    return;
-  }
-  devices.forEach((d) => {
-    box.appendChild(sysRow({
-      iconNode: statusDot(d.status),
-      label: d.ipv6 || d.ip || d.mac || '',
-      value: d.name_override || d.hostname || '—',
-    }));
-  });
-}
-
 // Log highlighter (#28): filtered/highlighted lines only (see
 // lib/logsrc.py) -- not a full tail. Status -> accent color, matching the
 // System panel's traffic-light language (critical=crimson, warn=amber,
@@ -1087,7 +1007,6 @@ function apply(s) {
   renderNetwork(s.sys);
   renderMusic(s.music);
   renderCalendar(s.extra);
-  renderDevices(s.devices, s.devices_scanning, s.devices_gateway);
   renderLog(s.logs);
   refreshAutoCycles();
 
