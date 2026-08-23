@@ -854,12 +854,13 @@ function renderCalendar(extra) {
     grid.appendChild(head);
   });
 
-  for (let i = 0; i < first.getDay(); i++) grid.appendChild(document.createElement('div'));
+  const isoOf = (y, m, d) => `${y}-${String(m + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
 
-  for (let day = 1; day <= daysInMonth; day++) {
-    const iso = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-    const isToday = day === today;
-
+  // #54: a day cell from ANY month -- adjacent-month spillover (dim=true)
+  // shares this with the current month's own days, rather than duplicating
+  // the markup, so the today-highlight/event-dot logic can't drift between
+  // the two.
+  const dayCell = (day, iso, isToday, dim) => {
     const cell = document.createElement('div');
     cell.className = 'flex flex-col items-center justify-center gap-[0.1vmin]';
 
@@ -875,13 +876,19 @@ function renderCalendar(extra) {
     // brightness, matching every other value in the system since #52) --
     // today's filled box is the one deliberate exception, same role as
     // Weather's alert-badge, so the rest don't need to also be dimmed.
+    // #54: dim (leading/trailing adjacent-month days) is a third state,
+    // text-faint -- the same "de-emphasized" role the weekday headers
+    // already use -- so last-July/early-September context reads as
+    // present but clearly not this month's data.
     const num = document.createElement('span');
     num.className = 'num inline-flex items-center justify-center leading-none ' +
       'p-1 box-border ' +
       (isToday
         ? 'font-medium border-2 border-[var(--color-warm)] ' +
           'bg-[var(--color-warm)] text-[oklch(0.16_0_0)]'
-        : 'text-ink border-2 border-transparent');
+        : dim
+          ? 'text-faint border-2 border-transparent'
+          : 'text-ink border-2 border-transparent');
     num.textContent = String(day);
     cell.appendChild(num);
 
@@ -892,7 +899,31 @@ function renderCalendar(extra) {
       cell.appendChild(dot);
     }
 
-    grid.appendChild(cell);
+    return cell;
+  };
+
+  // Leading days: the tail end of the previous month, filling the grid up
+  // to this month's first weekday instead of leaving blank cells.
+  const leading = first.getDay();
+  const prevMonthDays = new Date(year, month, 0).getDate();
+  const prevYear = month === 0 ? year - 1 : year;
+  const prevMonth = month === 0 ? 11 : month - 1;
+  for (let i = leading - 1; i >= 0; i--) {
+    const day = prevMonthDays - i;
+    grid.appendChild(dayCell(day, isoOf(prevYear, prevMonth, day), false, true));
+  }
+
+  for (let day = 1; day <= daysInMonth; day++) {
+    grid.appendChild(dayCell(day, isoOf(year, month, day), day === today, false));
+  }
+
+  // Trailing days: the start of the next month, filling the last row out
+  // to a full multiple of 7 the same way.
+  const trailing = (7 - ((leading + daysInMonth) % 7)) % 7;
+  const nextYear = month === 11 ? year + 1 : year;
+  const nextMonth = month === 11 ? 0 : month + 1;
+  for (let day = 1; day <= trailing; day++) {
+    grid.appendChild(dayCell(day, isoOf(nextYear, nextMonth, day), false, true));
   }
 
   host.replaceChildren(title, grid);
