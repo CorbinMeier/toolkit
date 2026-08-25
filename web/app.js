@@ -261,7 +261,7 @@ function miniBar(pct, tone = 'var(--color-accent)',
 // second-line info (CPU temp/freq, MEM used/total, BAT time-remaining,
 // NET upload rate) -- omitted entirely (not an empty row) when there's
 // nothing to show, e.g. Storage.
-function sysRow({ label, value, hot = false, bar = null, sub = '' }) {
+function sysRow({ label, value = '', hot = false, bar = null, sub = '' }) {
   const key = document.createElement('div');
   key.className = 'sys-key text-faint tracking-[0.1em] uppercase truncate';
   key.textContent = label;
@@ -349,12 +349,17 @@ function renderDisks(disks) {
   });
 }
 
-// One captioned chart in Network's graph row. The caption takes the same
-// faint uppercase treatment as a .sys-key label rather than being tinted to
-// match its line -- sitting directly above its own chart already identifies
-// it, and colored text would spend an accent on a label (DESIGN.md's
-// one-accent-per-region rule) to say what position already says.
-function netGraph(label, values, tone, domain) {
+// One captioned chart in Network's graph row: caption above, chart, then
+// the actual rate directly underneath -- #60 moved the down/up values here
+// from the NET metric row above, since a caption with no number next to
+// its chart forced a look back up at a disconnected row to read the rate.
+// The caption itself keeps the same faint uppercase treatment as a
+// .sys-key label rather than being tinted to match its line -- position
+// already identifies it, and colored text would spend an accent on a
+// label (DESIGN.md's one-accent-per-region rule) to say what position
+// already says. The rate below is text-ink, same brightness as every
+// other value in the system (#55/#57).
+function netGraph(label, value, values, tone, domain) {
   const cell = document.createElement('div');
   cell.className = 'flex flex-col gap-[0.25vmin]';
 
@@ -366,16 +371,25 @@ function netGraph(label, values, tone, domain) {
   // percentage width would resolve against whatever the text rows happen to
   // measure. Sizing the charts and letting the grid widen to them keeps
   // "every metric grid is content-sized" true (#17) with the graph row in it.
-  cell.append(cap, stepChart([{ values, tone }],
-    'w-[clamp(3.4rem,9vmin,6.4rem)] h-[clamp(1.6rem,3.6vmin,2.4rem)] block', domain));
+  const chart = stepChart([{ values, tone }],
+    'w-[clamp(3.4rem,9vmin,6.4rem)] h-[clamp(1.6rem,3.6vmin,2.4rem)] block', domain);
+
+  const valEl = document.createElement('div');
+  valEl.className = 'num text-ink';
+  valEl.textContent = value;
+
+  cell.append(cap, chart, valEl);
   return cell;
 }
 
-// Network: dedicated area below Storage. The NET label/value/sub row keeps
-// the standard .sys-grid shape (#57) so its columns still line up with
-// CPU/MEM/BAT and Storage; the chart moved off that row into a full-width
-// row beneath it (#59), split into separate download and upload boxes side
-// by side instead of two lines sharing one box.
+// Network: dedicated area below Storage. The NET label row keeps the
+// standard .sys-grid shape (#57) so its columns still line up with
+// CPU/MEM/BAT and Storage, but carries no value/sub of its own (#60) --
+// down/up now render as captions under their own chart instead, so
+// showing them again here would just duplicate the same two numbers with
+// no chart next to them. The chart itself sits in a full-width row
+// beneath the label row (#59), split into separate download and upload
+// boxes side by side instead of two lines sharing one box.
 //
 // Both boxes are drawn on one explicit domain spanning both series. Two SVGs
 // cannot share a scale the way two series in one box did, and letting each
@@ -389,25 +403,31 @@ function netGraph(label, values, tone, domain) {
 function renderNetwork(s) {
   const box = $('net');
   box.replaceChildren();
-  box.append(...sysRow({
-    label: 'NET',
-    value: `down ${bytes(s.net.down)}/s`,
-    sub: `up ${bytes(s.net.up)}/s`,
-  }));
 
   const down = ringSince('down', RING_WINDOW_MS);
   const up = ringSince('up', RING_WINDOW_MS);
   const all = down.concat(up);
   // Under two samples every series is a single point and stepChart draws
-  // nothing; emit no graph row at all rather than a pair of empty boxes.
-  if (all.length < 2) return;
-  const domain = [Math.min(...all), Math.max(...all)];
+  // nothing -- fall back to the plain label/value/sub row (same shape
+  // every other System row uses) so the rate is still visible before the
+  // ring buffer has enough history for a chart, rather than showing
+  // nothing at all.
+  if (all.length < 2) {
+    box.append(...sysRow({
+      label: 'NET',
+      value: `down ${bytes(s.net.down)}/s`,
+      sub: `up ${bytes(s.net.up)}/s`,
+    }));
+    return;
+  }
+  box.append(...sysRow({ label: 'NET' }));
 
+  const domain = [Math.min(...all), Math.max(...all)];
   const graphs = document.createElement('div');
   graphs.className = 'sys-graph flex gap-[0.8vmin]';
   graphs.append(
-    netGraph('DOWN', down, 'var(--color-accent)', domain),
-    netGraph('UP', up, 'var(--color-warm)', domain)
+    netGraph('DOWN', `down ${bytes(s.net.down)}/s`, down, 'var(--color-accent)', domain),
+    netGraph('UP', `up ${bytes(s.net.up)}/s`, up, 'var(--color-warm)', domain),
   );
   box.appendChild(graphs);
 }
