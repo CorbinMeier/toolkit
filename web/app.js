@@ -426,8 +426,11 @@ function renderNetwork(s) {
   const graphs = document.createElement('div');
   graphs.className = 'sys-graph flex gap-[0.8vmin]';
   graphs.append(
-    netGraph('DOWN', `down ${bytes(s.net.down)}/s`, down, 'var(--color-accent)', domain),
-    netGraph('UP', `up ${bytes(s.net.up)}/s`, up, 'var(--color-warm)', domain),
+    // #61: no "down"/"up" word here -- the DOWN/UP caption above each
+    // chart already says which is which, so repeating it in the value
+    // would just be noise.
+    netGraph('DOWN', `${bytes(s.net.down)}/s`, down, 'var(--color-accent)', domain),
+    netGraph('UP', `${bytes(s.net.up)}/s`, up, 'var(--color-warm)', domain),
   );
   box.appendChild(graphs);
 }
