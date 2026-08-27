@@ -9,10 +9,11 @@ wallpaper image on a timer: a real WebKit view with CSS animation and JS,
 one surface per monitor, sitting below the windows. No digital clock,
 date, or location readout -- the user's own system already shows all
 three (#5, #9). Two halves: System (left) | Forecast — current
-conditions, hourly, week, sun/moon, all one panel (right, #10) — plus a
-source-agnostic Tasks panel (#25) and a Schedule panel (#23, a compact
-today's-agenda list via `data/extra.json`'s `schedule` array; no source
-is wired up yet) stacked below.
+conditions, hourly, week, sun/moon, all one panel (right, #10) — with a
+Log panel (#28) below. The Tasks (#25) and Schedule (#23) panels that
+used to stack under those two are **gone from the frontend** (removed at
+583229d, 2026-08-21); their server-side data sources are still live and
+unrendered — see *Layout* and *Current state*.
 
 Four processes:
 
@@ -47,7 +48,14 @@ bin/dashd-serve     HTTP server; /api/state merges weather+sys+extra (and
                     data/metrics.db, it never writes to it (#14). sys.disks
                     comes from lsblk (sysinfo.disk_tree()), not just
                     psutil's mounted-partition view; battery gets a real
-                    charging flag from /sys/class/power_supply (see gotchas)
+                    charging flag from /sys/class/power_supply (see gotchas).
+                    load_tasks() still merges data/tasks.json in as `tasks`
+                    and extra.json's `schedule` array still rides along in
+                    `extra`, but NOTHING RENDERS EITHER -- both panels were
+                    deleted from web/ (#63). Deliberately kept: the reads
+                    are harmless (missing file is not an error), source-
+                    agnostic, and smoke.py asserts on `tasks`, so dropping
+                    them is a code change with test fallout, not cleanup
 bin/dashd-collect   standalone timer loop (config.metrics_sample_seconds);
                     the sole writer of data/metrics.db, independent of
                     whether any view or dashd-serve poll is happening (#14)
@@ -94,11 +102,13 @@ web/index.html      panel structure (Tailwind utility classes); System
                     System sub-section below Network with its own bespoke
                     layout (cover art + title/artist/progress, not a row
                     grid), hidden entirely when nothing is playing/paused.
-                    Tasks (#25) renders state.tasks.items as
-                    checkbox|text|due rows, empty state "No tasks". A Log
-                    panel (#28) follows System/Forecast -- same notched-
-                    panel treatment (Devices, #27, was removed entirely at
-                    #56 -- "basically just clutter")
+                    A Log panel (#28) follows System/Forecast -- same
+                    notched-panel treatment. Three panels are gone and
+                    stay gone: Devices (#27) removed entirely at #56
+                    ("basically just clutter"), and Tasks (#25) +
+                    Schedule (#23) deleted "for now" at 583229d --
+                    no markup, no renderTasks()/renderSchedule(), even
+                    though the server still serves both feeds (#63)
 web/app.js          all rendering; pure function of last good state.
                     Two independent trend sources feed the step charts: an
                     in-memory ring buffer (this session's own /api/state
@@ -119,8 +129,9 @@ config.json         location, units, port, display layer, per-output overrides,
                     metrics sample/retain interval, control host/port,
                     log source/patterns (#30), projects refresh/staleness
                     window (#62)
-data/               weather.json cache, extra.json, metrics.db,
-                    projects.json cache (#62), control_token.txt (all
+data/               weather.json cache, extra.json, tasks.json (read but
+                    unrendered, #63), metrics.db, projects.json cache
+                    (#62), control_token.txt (all
                     gitignored)
 scripts/smoke.py    the "build" stage — end-to-end render assertions
 tests/test_dashd.py unittest suite (hermetic, no network)
@@ -365,6 +376,21 @@ any other script can add panels without touching the server.
 
 ## Current state (2026-08-20)
 
+- #63 (2026-08-27): documentation-only correction, no rendering change.
+  This file had gone on describing the Tasks (#25) and Schedule (#23)
+  panels as if they shipped; both were actually deleted from `web/` at
+  583229d (2026-08-21) and never returned -- `scripts/smoke.py` had the
+  truth in a comment the whole time, this file didn't. Intro paragraph,
+  the `web/index.html` Layout entry, and the #25/#23 *Current state*
+  entries now say so. The split that made this confusing is worth
+  remembering: **the frontend went away, the backend did not.**
+  `load_tasks()` still serves `tasks` and `extra.schedule` still passes
+  through, both unrendered. Decided to KEEP them rather than finish the
+  removal -- harmless (a missing file isn't an error), source-agnostic,
+  already asserted by the smoke stage, and they're exactly what a future
+  Tasks panel would need. Ripping them out is a code change with test
+  fallout, so it wants its own issue and its own sign-off, not a
+  drive-by during a doc fix.
 - #62 (2026-08-27): new Projects panel -- per-repo GitHub issue stats, in
   the left column under System. Three counts per repo, colored by what they
   ask of the user: RED (`--color-crimson`) = open issues labeled
@@ -458,7 +484,12 @@ any other script can add panels without touching the server.
   visually verified with an actual track playing -- no player had an
   active track during this session, so eyeball the populated state on the
   live desktop next time something is playing.
-- #23 (2026-08-20): new Schedule panel, section below System/Forecast
+- #23 (2026-08-20, **REMOVED 2026-08-21 at 583229d** -- deleted "for
+  now", along with Tasks/#25; the `extra.schedule` passthrough it read
+  survives untouched, since `extra` is merged verbatim and isn't
+  schedule-specific. History kept for the design rationale only -- there
+  is no Schedule panel, see #63): new Schedule panel, section below
+  System/Forecast
   (`accent-crimson`, completing the teal/gold/red triad). Distinct from a
   full calendar grid -- a compact today's-agenda list (`renderSchedule()` in
   `web/app.js`), reading `state.extra.schedule` (an array of `{time,
@@ -500,8 +531,13 @@ any other script can add panels without touching the server.
   `cosmic-bg`'s wallpaper, backdrop blur included — but it reads poorly
   against the current black-hole wallpaper, so it was reverted. One-key flip
   in `config.json` plus a host restart if revisited against calmer imagery.
-- #25 (2026-08-20): new Tasks component, a third stacked panel below System/
-  Forecast. Source-agnostic per the issue -- `bin/dashd-serve` reads
+- #25 (2026-08-20, **FRONTEND REMOVED 2026-08-21 at 583229d** -- deleted
+  "for now", along with Schedule/#23. The backend half is deliberately
+  still live: `load_tasks()` keeps merging `tasks` into `/api/state` and
+  `scripts/smoke.py` keeps asserting it, with nothing on the page
+  consuming it. History kept for the design rationale only -- there is no
+  Tasks panel, see #63): new Tasks component, a third stacked panel below
+  System/Forecast. Source-agnostic per the issue -- `bin/dashd-serve` reads
   `data/tasks.json` (`{"items": [{"text","done","due"}]}`) verbatim and
   merges it into `/api/state` as `tasks`, same read-only passthrough
   pattern as `extra.json`; no task source/API was wired up, so the panel
