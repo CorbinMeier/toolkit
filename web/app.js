@@ -459,6 +459,22 @@ function renderMusic(music) {
   const art = $('musicArt');
   const box = $('musicBody');
   box.replaceChildren();
+
+  // Controls (#65) are disabled rather than hidden with no player -- the
+  // section is meant to sit idle, not reflow. The toggle's glyph tracks the
+  // live state (playing => show pause), since a fixed icon can't say which
+  // way the toggle is about to go; it falls back to the neutral play/pause
+  // glyph when there's nothing to describe.
+  ['musicPrev', 'musicToggle', 'musicNext'].forEach((id) => {
+    const btn = $(id);
+    if (btn) btn.disabled = !music;
+  });
+  const toggle = $('musicToggle');
+  if (toggle) {
+    toggle.textContent = music ? (music.playing ? '⏸' : '▶') : '⏯';
+    toggle.setAttribute('aria-label', music && music.playing ? 'Pause' : 'Play');
+  }
+
   if (!music) {
     art.classList.add('hidden');
     art.removeAttribute('src');
@@ -591,9 +607,23 @@ function projNote(p) {
   return null;
 }
 
+/* Page size lives in CSS (.proj-scroll's --proj-page), not here: that one
+ * value also computes the box height, so reading it back keeps the visible
+ * row count a single layout fact instead of a magic number duplicated on
+ * both sides. Falls back to the same 8 the stylesheet ships with. */
+function projPageSize() {
+  const box = $('projscroll');
+  if (!box) return 8;
+  const n = parseInt(getComputedStyle(box).getPropertyValue('--proj-page'), 10);
+  return Number.isFinite(n) && n > 0 ? n : 8;
+}
+
+let projPage = 0;
+
 function renderProjects(p) {
   const grid = $('projgrid');
   const totals = $('projtotals');
+  const pager = $('projpager');
   if (!grid) return;
   grid.replaceChildren();
   const info = p || { pending: true };
@@ -601,6 +631,7 @@ function renderProjects(p) {
   const note = projNote(info);
   if (note) {
     if (totals) totals.textContent = '';
+    if (pager) pager.classList.add('hidden');
     const row = document.createElement('div');
     // Span every column -- a status line is about the panel, not one repo.
     row.style.gridColumn = '1 / -1';
@@ -623,6 +654,7 @@ function renderProjects(p) {
   }
 
   if (!rows.length) {
+    if (pager) pager.classList.add('hidden');
     const row = document.createElement('div');
     row.style.gridColumn = '1 / -1';
     row.className = 'text-faint';
@@ -631,7 +663,21 @@ function renderProjects(p) {
     return;
   }
 
-  rows.forEach((r) => {
+  // Clamp every render, not just on click: the row list is refetched on a
+  // background thread, so repos can disappear (archived, or gone stale past
+  // projects.stale_after_days) while the user is parked on the last page.
+  const size = projPageSize();
+  const pages = Math.max(1, Math.ceil(rows.length / size));
+  projPage = Math.min(Math.max(0, projPage), pages - 1);
+
+  if (pager) {
+    pager.classList.toggle('hidden', pages === 1);
+    $('projpage').textContent = `${projPage + 1}/${pages}`;
+    $('projprev').disabled = projPage === 0;
+    $('projnext').disabled = projPage >= pages - 1;
+  }
+
+  rows.slice(projPage * size, projPage * size + size).forEach((r) => {
     const name = document.createElement('div');
     name.className = 'truncate text-ink';
     // Owner prefix only in the tooltip -- the card shows the repo, which is
@@ -1118,6 +1164,50 @@ async function poll() {
   }
 }
 
+/* --------------------------------------------------------------- controls
+ * Live since #36: the surface used to have an empty input region, so nothing
+ * on the page could ever be clicked. dashd-host now leaves the region at its
+ * default (display.interactive), while keyboard mode stays NONE -- so these
+ * controls work without the dashboard ever stealing focus from a real window.
+ */
+
+/* A one-shot refresh, deliberately NOT poll(). poll() re-arms itself with
+ * setTimeout, so calling it from a click handler would fork a second polling
+ * chain and permanently double the request rate for the life of the page. */
+async function refreshNow() {
+  try {
+    const r = await fetch('/api/state', { cache: 'no-store' });
+    if (r.ok) apply(await r.json());
+  } catch { /* the regular poll is still running; it will catch up */ }
+}
+
+async function musicCommand(command) {
+  try {
+    await fetch('/api/music/command', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ command }),
+    });
+  } catch { /* nothing useful to show on a wallpaper; next poll re-syncs */ }
+  // Players report the new state asynchronously over MPRIS, so an immediate
+  // re-read usually still returns the old status. One short delay is enough
+  // to make the button feel like it did something.
+  setTimeout(refreshNow, 250);
+}
+
+function wireControls() {
+  const step = (delta) => {
+    projPage += delta;
+    if (state) renderProjects(state.projects);
+  };
+  $('projprev')?.addEventListener('click', () => step(-1));
+  $('projnext')?.addEventListener('click', () => step(1));
+
+  $('musicPrev')?.addEventListener('click', () => musicCommand('previous'));
+  $('musicNext')?.addEventListener('click', () => musicCommand('next'));
+  $('musicToggle')?.addEventListener('click', () => musicCommand('play-pause'));
+}
+
 // SVG geometry is computed from measured pixel sizes, so a monitor change or
 // layout reflow has to redraw rather than just rescale.
 let resizeTimer;
@@ -1126,4 +1216,5 @@ addEventListener('resize', () => {
   resizeTimer = setTimeout(() => { if (state) apply(state); }, 200);
 });
 
+wireControls();
 poll();

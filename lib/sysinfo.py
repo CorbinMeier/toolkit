@@ -215,6 +215,32 @@ def now_playing() -> dict | None:
     return candidates[0] if candidates else None
 
 
+MUSIC_COMMANDS = ("play-pause", "next", "previous")
+
+
+def music_command(command: str) -> bool:
+    """Send a transport command to the active MPRIS player (#65).
+
+    `command` MUST be one of MUSIC_COMMANDS -- it is checked against that
+    whitelist rather than sanitised, so a request body can never reach
+    playerctl's argv as anything but one of three fixed literals.
+
+    Targets the same player now_playing() reports on: `-a` picks whichever
+    player responds, matching that function's source-agnostic posture.
+    Returns False (never raises) when playerctl is missing or the player
+    refuses, so a dead control is a no-op rather than a 500.
+    """
+    if command not in MUSIC_COMMANDS:
+        raise ValueError(f"unknown music command: {command!r}")
+    try:
+        out = subprocess.run(
+            ["playerctl", "-a", command],
+            capture_output=True, text=True, timeout=3)
+    except (OSError, subprocess.SubprocessError):
+        return False
+    return out.returncode == 0
+
+
 def system_stats() -> dict:
     """Full live snapshot for /api/state -- everything sample_stats() covers
     plus disks, per-core detail, load, swap, uptime, process count, host.

@@ -213,7 +213,9 @@ Outside the panel level, corner treatment drops to two simple cases: a perfect c
 
 ## Components
 
-Every surface in this system is read-only — there are no buttons, form inputs, or navigation, since the dashboard has no interactive affordances at all. The components below are the actual repeating primitives: the panel container, the metric row, the utilization bars, the compact tier graph, the step-line chart, the section header, and the status dot/banner pairing.
+This system was read-only for most of its life — no buttons, no inputs, no navigation — because the wallpaper surface had no pointer reach at all. That premise ended at #36: `dashd-host` now leaves the layer-shell input region at its default instead of blanking it, so the page receives pointer events. Interaction is therefore allowed, but it is the *exception*, and the bar is high: a control has to do something a passive display genuinely cannot (turn a page, command a player). Status indicators stay read-only — see the Read-Only-By-Default Rule under Don'ts.
+
+The components below are the repeating primitives: the panel container, the metric row, the utilization bars, the compact tier graph, the step-line chart, the section header, the status dot/banner pairing, and the control button.
 
 ### Panel (Notched Container)
 - **Shape:** pentagon `clip-path` chamfering the bottom-right corner (`1.15rem` cut), `2px` solid border in the region's dim accent color, `backdrop-filter: blur(6px)`.
@@ -252,8 +254,15 @@ Every surface in this system is read-only — there are no buttons, form inputs,
 - **Dot:** a `0.55em` solid circle in the banner's accent color, `50%` border-radius, sitting inline before the message text.
 - **Banner:** a small notched panel (same pentagon `clip-path` as every other panel) in the Distress Red accent, fixed to the top-center of the viewport, hidden by default and shown only after two consecutive failed polls — deliberately debounced so a single dropped request never flashes the banner.
 
+### Control Button (`.ctl-btn`, #36)
+- **Shape:** a `1px` solid rectangle in the panel's own dim accent (`--panel-border`), sharp-cornered. No radius — the notch is the system's only corner language, and a rounded button would read as a grafted-on design system (see Don'ts).
+- **States:** Recessed Grey at rest → Bone White text with a full-accent border on hover → full accent text while active. Deliberately **no glow on hover**: glow is reserved for a real status condition (see the Status-Only Glow Rule), and spending it on "your cursor is here" would dilute the one signal that means "this is live".
+- **Disabled:** `0.3` opacity, default cursor, control stays in place. Never hide a control that has become unavailable — a pager whose buttons vanish at the ends reflows the row every time you reach one.
+- **Reflow discipline:** a control whose state changes on a poll (Music's play/pause) keeps a fixed footprint; swap the glyph, never the element's size.
+- **Consumers:** Projects pagination (#64), Music transport (#65).
+
 ### Auto-Cycle Reveal
-- **Problem:** the desktop surface has no pointer or keyboard reach — it sits below every window — so a panel whose content outgrows its box has no scrollbar a user could ever grab (ISSUES.md #29).
+- **Problem:** the desktop surface *had* no pointer or keyboard reach — it sits below every window — so a panel whose content outgrew its box had no scrollbar a user could ever grab (ISSUES.md #29). Since #36 the surface does accept pointer input, so this is no longer the only option: Projects, its one shipped consumer, moved to real pagination at #64. The mechanism stays for content that should reveal itself *without* being asked (a log tail, a marquee) — Music's scrolling title still uses the horizontal variant.
 - **Mechanism:** opt in per-element with `class="auto-cycle"` plus a CSS height/max-height so it can actually overflow (`overflow-y:hidden` — no visible scrollbar, since it's never user-driven). `app.js`'s `refreshAutoCycles()` (called every `apply()`) scrolls it slowly to the bottom, dwells, resets to the top, and repeats; an element that already fits its box is left alone.
 - **Status:** general-purpose only — no shipped panel needs it yet. Future components (networked devices, log highlighter, tasks, ...) adopt it as they're built rather than reinventing their own reveal behavior.
 
@@ -272,4 +281,5 @@ Every surface in this system is read-only — there are no buttons, form inputs,
 - **Don't** use large rounded corners or a soft-card look anywhere. The notch (pentagon `clip-path`, `1.15rem` chamfer) is this system's entire corner language; a `border-radius: 8px+` card would read as a different design system grafted on.
 - **Don't** add a drop shadow for hierarchy or lift. This system has no elevation model — depth comes from blur and ambient background layering only (see the Flat-By-Default Rule).
 - **Don't** mix two accents on one panel, or apply an accent color to an element outside its region.
-- **Don't** add an interactive affordance (button, input, hover-driven control) — this is a read-only, no-input wallpaper surface. If a status element (like the Utilization Bars) looks like it could be a button, that's a bug, not an invitation to wire up a click handler.
+- **Don't** make a status element interactive. **The Read-Only-By-Default Rule.** The surface accepts pointer input since #36, but that is not licence to wire up click handlers: a control earns its place only by doing something a passive display cannot (paginate, command a player). If a status element — the Utilization Bars, a step chart, a metric row — merely *looks* like it could be a button, that is still a bug, not an invitation. Anything clickable must look clickable (`.ctl-btn`), and anything that isn't must not.
+- **Don't** let a control glow on hover, or grow/shrink as its state changes. Glow means "live status"; size changes reflow the panel. See Control Button.

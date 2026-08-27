@@ -12,6 +12,13 @@ composite over the photo wallpaper cosmic-bg is still cycling underneath.
 
 Verified on cosmic-comp (COSMIC / Pop!_OS 24.04): surfaces map, receive frame
 callbacks at ~30fps, and never take keyboard focus.
+
+Pointer input is governed by display.interactive (#36). When false the surface
+gets an EMPTY input region and every click/scroll falls through to whatever is
+behind it -- the original wallpaper behaviour. When true the region is left at
+its default (the whole surface), so the WebKit view receives pointer events and
+the page's own controls work. Keyboard mode stays NONE either way, which is what
+keeps a click on the dashboard from stealing focus from the foreground window.
 """
 from __future__ import annotations
 
@@ -81,6 +88,7 @@ class Host:
         geo = mon.get_geometry()
         transparent = bool(self.cfg["display"].get("transparent"))
         layer = self.cfg["display"].get("layer", "BOTTOM").upper()
+        interactive = bool(self.cfg["display"].get("interactive", True))
 
         win = Gtk.Window()
         GtkLayerShell.init_for_window(win)
@@ -111,8 +119,9 @@ class Host:
         else:
             view.set_background_color(Gdk.RGBA(0.07, 0.08, 0.11, 1))
 
-        # A wallpaper must never steal input.
-        view.set_can_focus(False)
+        # Never take keyboard focus, interactive or not: clicking a control on
+        # the dashboard must not pull focus away from the window you're in.
+        view.set_can_focus(interactive)
         win.set_accept_focus(False)
 
         view.load_uri(self.url_for(name, geo))
@@ -121,11 +130,13 @@ class Host:
 
         # Empty input region => clicks/scrolls fall through to whatever is
         # behind. Must happen after realize, when the GdkWindow exists.
-        if (gdk_win := win.get_window()) is not None:
+        # Leaving it alone (interactive) keeps the default full-surface region.
+        if not interactive and (gdk_win := win.get_window()) is not None:
             gdk_win.input_shape_combine_region(cairo.Region(), 0, 0)
 
         print(f"  + {name:22s} {geo.width}x{geo.height} @{geo.x},{geo.y} "
-              f"layer={layer} transparent={transparent}", flush=True)
+              f"layer={layer} transparent={transparent} "
+              f"interactive={interactive}", flush=True)
         return win
 
     def sync(self) -> None:

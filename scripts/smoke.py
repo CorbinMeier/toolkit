@@ -14,6 +14,7 @@ Exits non-zero on the first failure. `--no-browser` skips the Chrome pass.
 from __future__ import annotations
 
 import json
+import os
 import re
 import shutil
 import subprocess
@@ -25,7 +26,14 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 CFG = json.loads((ROOT / "config.json").read_text())
-BASE = f"http://{CFG['server']['host']}:{CFG['server']['port']}"
+# DASHD_PORT overrides config so a git worktree can smoke-test ITSELF.
+# Without it this is a silent false-green: main() only starts a server when
+# the configured port is closed, so with the real desktop-dashboard-serve
+# unit already listening on 4320, smoke.py happily reuses it -- and that
+# process serves the MAIN checkout's web/, not the worktree's. Every render
+# assertion then passes against code the branch never touched.
+_PORT = int(os.environ.get("DASHD_PORT") or CFG["server"]["port"])
+BASE = f"http://{CFG['server']['host']}:{_PORT}"
 
 ok_count = 0
 
@@ -195,6 +203,20 @@ def main() -> int:
                       else state["projects"].get("error") or "no open issues")
             print("  \033[33mwarn\033[0m projects cache cold "
                   f"({reason}) -- skipping row assertions")
+        # #36/#64/#65: the interactive controls. These are the first
+        # clickable elements in the project, and they are only reachable
+        # because dashd-host stopped blanking its input region -- so assert
+        # the markup actually reaches the DOM rather than trusting that a
+        # render happened. A missing .ctl-btn means the controls silently
+        # vanished and the panel went back to being read-only.
+        check("music transport controls rendered",
+              'id="musicControls"' in dom and dom.count("ctl-btn") >= 3,
+              "missing Music play/pause/next/prev buttons")
+        # The pager hides itself when everything fits on one page, so the
+        # element must exist unconditionally but is only *shown* with more
+        # rows than a page holds -- assert existence, not visibility.
+        check("projects pager present", 'id="projpager"' in dom,
+              "missing Projects pagination controls")
         # #34: trend graphs are deliberately not shown on the
         # wallpaper anymore (collection continues server-side) -- assert
         # they stay gone rather than silently reappearing on a regression.

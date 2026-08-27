@@ -64,6 +64,7 @@
   },
   "display": {
     "layer": "BOTTOM",
+    "interactive": true,
     "transparent": true,
     "theme": "retro_orange",
     "_theme_options": [

@@ -179,6 +179,46 @@ class TestNowPlaying(unittest.TestCase):
         self.assertTrue(music["playing"])
 
 
+class TestMusicCommand(unittest.TestCase):
+    """Transport controls (#65). The whitelist is the security boundary --
+    request data must never reach playerctl's argv as anything but one of
+    three fixed literals."""
+
+    def _run(self, returncode=0):
+        return type("CP", (), {"returncode": returncode, "stdout": ""})()
+
+    def test_known_commands_are_forwarded_verbatim(self):
+        for command in ("play-pause", "next", "previous"):
+            with patch.object(dashd.sysinfo.subprocess, "run",
+                               return_value=self._run()) as run:
+                self.assertTrue(dashd.sysinfo.music_command(command))
+            self.assertEqual(run.call_args[0][0], ["playerctl", "-a", command])
+
+    def test_unknown_command_raises_before_spawning_anything(self):
+        for bad in ("stop; rm -rf /", "volume", "", "PLAY-PAUSE", None):
+            with patch.object(dashd.sysinfo.subprocess, "run") as run:
+                with self.assertRaises(ValueError):
+                    dashd.sysinfo.music_command(bad)
+                run.assert_not_called()
+
+    def test_missing_playerctl_is_a_no_op_not_an_error(self):
+        with patch.object(dashd.sysinfo.subprocess, "run",
+                           side_effect=FileNotFoundError("no playerctl")):
+            self.assertFalse(dashd.sysinfo.music_command("next"))
+
+    def test_player_refusal_reports_false(self):
+        with patch.object(dashd.sysinfo.subprocess, "run",
+                           return_value=self._run(returncode=1)):
+            self.assertFalse(dashd.sysinfo.music_command("next"))
+
+    def test_route_whitelist_matches_the_implementation(self):
+        """The handler validates against sysinfo.MUSIC_COMMANDS; if that
+        tuple and the accepted verbs ever drift, the route silently starts
+        rejecting (or worse, forwarding) something unexpected."""
+        self.assertEqual(set(dashd.sysinfo.MUSIC_COMMANDS),
+                          {"play-pause", "next", "previous"})
+
+
 class TestMusicArt(unittest.TestCase):
     """GET /api/music/art's logic, factored out as music_art_response() so
     it's testable without a live HTTP handler -- see now_playing() note
@@ -595,6 +635,12 @@ class TestConfig(unittest.TestCase):
         """BACKGROUND renders but is invisible under cosmic-bg. See CLAUDE.md."""
         cfg = dashd.load_config()
         self.assertNotEqual(cfg["display"]["layer"], "BACKGROUND")
+
+    def test_interactive_is_a_bool(self):
+        """display.interactive (#36) gates dashd-host's input region. A
+        string here would be truthy regardless of its value, so "false"
+        would silently make the surface interactive."""
+        self.assertIsInstance(dashd.load_config()["display"]["interactive"], bool)
 
 
 def _repo(name, open_n, blocked, closed, pushed):

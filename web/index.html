@@ -339,13 +339,41 @@
      rows that have something. Dimmed rather than blanked so the columns
      still read as columns. */
   .proj-grid > .proj-num.is-zero{color:var(--color-faint);opacity:0.45}
-  /* The box the auto-cycle (#29) scrolls. The height is what defines
-     "top 8": a ninth repo is what starts the passive reveal, rather than
-     an arbitrary JS slice. Eight line boxes plus the SEVEN gaps between
-     them -- not eight gaps; counting one gap per row overshoots by a gap
-     and lets a sliver of row nine show. 1.5em tracks .proj-grid's pinned
-     line-height above; the two must move together. */
-  .proj-scroll{max-height:calc(8 * 1.5em + 7 * 0.28vmin);overflow:hidden}
+  /* One page of repo rows (#64). This used to be the box the auto-cycle
+     (#29) passively scrolled, because the surface had no pointer to grab a
+     scrollbar with; since #36 it does, so Projects paginates instead and
+     is no longer an auto-cycle consumer (the mechanism itself stays, it
+     just has no shipped consumer again).
+     --proj-page is the SINGLE source of truth for the page size: this
+     height is computed from it, and renderProjects() reads it back off the
+     computed style to size its slice. Keeping the count in one place
+     preserves the property the auto-cycle version had -- the visible row
+     count is one layout fact that adapts if the font scales, not a magic
+     number duplicated in CSS and JS.
+     Eight line boxes plus the SEVEN gaps between them -- not eight gaps;
+     counting one gap per row overshoots by a gap and lets a sliver of a
+     ninth row show. 1.5em tracks .proj-grid's pinned line-height above;
+     the two must move together.
+     height, not max-height: a short last page would otherwise shrink the
+     panel and make the whole card jump on every page turn. */
+  .proj-scroll{--proj-page:8;
+    height:calc(var(--proj-page) * 1.5em + (var(--proj-page) - 1) * 0.28vmin);
+    overflow:hidden}
+
+  /* Control Button (#36) -- the system's first interactive affordance.
+     DESIGN.md's shape language has no rounded-rectangle vocabulary, so
+     these are sharp-cornered; and since glow is reserved for a real status
+     condition there, hover/active shift border+text color rather than
+     lighting up. Disabled is the honest end-of-range signal for pagination:
+     the control stays in place (so the row doesn't reflow) and goes flat. */
+  .ctl-btn{appearance:none;background:transparent;cursor:pointer;
+    border:1px solid var(--panel-border, var(--color-hairline));
+    color:var(--color-faint);font:inherit;line-height:1;
+    padding:0.25em 0.5em;transition:color .12s linear,border-color .12s linear}
+  .ctl-btn:hover:not(:disabled){color:var(--color-ink);
+    border-color:var(--panel-accent, var(--color-accent))}
+  .ctl-btn:active:not(:disabled){color:var(--panel-accent, var(--color-accent))}
+  .ctl-btn:disabled{opacity:0.3;cursor:default}
 
   /* Spreadsheet-style key:value grid (#50) -- key column left, value
      column right, one CSS grid so both columns line up across every row
@@ -577,12 +605,20 @@
           <div id="projtotals" class="num text-faint
                text-[clamp(.42rem,.85vmin,.6rem)]"></div>
         </div>
-        <!-- The auto-cycle hook (#29). .proj-scroll's max-height is what
-             makes "top 8" concrete: with nine or more repos the box
-             overflows and refreshAutoCycles() passively reveals the rest --
-             the only way to read past the fold on a surface with no pointer
-             reach. Fewer than nine rows and it never starts. -->
-        <div id="projscroll" class="proj-scroll auto-cycle
+        <!-- Pager (#64). Replaces the auto-cycle hook (#29) that used to
+             reveal rows past the fold: that existed only because the
+             surface had no pointer reach, which #36 fixed. The whole
+             control strip is hidden by renderProjects() when everything
+             fits on one page -- a pager for a single page is chrome. -->
+        <div id="projpager" class="hidden flex items-center justify-end
+             gap-[0.6vmin] num text-faint text-[clamp(.42rem,.85vmin,.6rem)]">
+          <button id="projprev" type="button" class="ctl-btn"
+                  aria-label="Previous page of repositories">&#9664;</button>
+          <span id="projpage" aria-live="polite"></span>
+          <button id="projnext" type="button" class="ctl-btn"
+                  aria-label="Next page of repositories">&#9654;</button>
+        </div>
+        <div id="projscroll" class="proj-scroll
              text-[clamp(.44rem,.9vmin,.62rem)] num">
           <div id="projgrid" class="proj-grid"></div>
         </div>
@@ -800,6 +836,24 @@
                  style="width:clamp(2.4rem,6vmin,4.2rem);height:clamp(2.4rem,6vmin,4.2rem);
                         border:1px solid var(--panel-accent, var(--color-accent));" />
             <div id="musicBody" class="flex-1 min-w-0 flex flex-col gap-[0.5vmin]"></div>
+          </div>
+          <!-- Transport controls (#65). POST /api/music/command -> playerctl,
+               against whatever MPRIS player now_playing() is already
+               reporting on. Disabled (not hidden) while nothing is
+               playing/paused: the section deliberately "sits idle" rather
+               than disappearing, so its controls should hold their place
+               too instead of making the panel reflow on every track end.
+               The play/pause glyph is swapped by renderMusic() to match
+               the live state -- a toggle that always shows the same icon
+               can't tell you which way it's about to go. -->
+          <div id="musicControls" class="flex items-center justify-center
+               gap-[0.9vmin] text-[clamp(.5rem,1.05vmin,.76rem)]">
+            <button id="musicPrev" type="button" class="ctl-btn"
+                    aria-label="Previous track">&#9198;</button>
+            <button id="musicToggle" type="button" class="ctl-btn"
+                    aria-label="Play or pause">&#9199;</button>
+            <button id="musicNext" type="button" class="ctl-btn"
+                    aria-label="Next track">&#9197;</button>
           </div>
         </div>
       </section>

@@ -58,7 +58,7 @@ sys.path.insert(0, str(ROOT / "lib"))
 import ghstats  # noqa: E402
 import logsrc  # noqa: E402
 import metrics  # noqa: E402
-import sysinfo  # noqa: E402,F401 -- ditto; tests patch dashd.sysinfo.subprocess
+import sysinfo  # noqa: E402 -- used directly (music_command); tests patch its subprocess
 from sysinfo import (  # noqa: E402,F401 -- re-exported for tests/back-compat
     _disk_tree_from_psutil, battery_charging, disk_tree, now_playing, system_stats,
 )
@@ -504,6 +504,28 @@ class Handler(SimpleHTTPRequestHandler):
             return
         super().do_GET()
 
+    def do_POST(self) -> None:  # noqa: N802
+        route = urllib.parse.urlparse(self.path).path
+        if route != "/api/music/command":
+            self._json({"error": "not found"}, 404)
+            return
+        try:
+            length = int(self.headers.get("Content-Length") or 0)
+            body = json.loads(self.rfile.read(length) or b"{}")
+            command = body.get("command")
+        except (ValueError, json.JSONDecodeError):
+            self._json({"error": "bad request body"}, 400)
+            return
+        # Whitelist, not sanitisation: anything not literally one of the three
+        # known verbs is rejected before it can reach a subprocess argv.
+        if command not in sysinfo.MUSIC_COMMANDS:
+            self._json({"error": f"unknown command: {command!r}"}, 400)
+            return
+        try:
+            self._json({"ok": sysinfo.music_command(command)})
+        except Exception as exc:  # noqa: BLE001 - never kill the server
+            self._json({"error": repr(exc)}, 500)
+
     def end_headers(self) -> None:
         if self.path.endswith((".js", ".html", ".css")):
             self.send_header("Cache-Control", "no-cache")
@@ -517,7 +539,10 @@ class Handler(SimpleHTTPRequestHandler):
 def main() -> int:
     cfg = load_config()
     DATA.mkdir(exist_ok=True)
-    host, port = cfg["server"]["host"], cfg["server"]["port"]
+    # DASHD_PORT lets a worktree run its own server alongside the installed
+    # unit on the configured port -- see scripts/smoke.py's false-green note.
+    host = cfg["server"]["host"]
+    port = int(os.environ.get("DASHD_PORT") or cfg["server"]["port"])
     psutil.cpu_percent(interval=None)  # prime the CPU delta
 
     if "--once" in sys.argv:  # smoke test: print one state document and exit

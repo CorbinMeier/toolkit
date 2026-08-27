@@ -20,7 +20,11 @@ Four processes:
 - `bin/dashd-serve` — loopback static + data server on `127.0.0.1:4320`
 - `bin/dashd-collect` — standalone historical-metrics sampler; the only
   writer of `data/metrics.db` (#14)
-- `bin/dashd-host` — GTK3 + gtk-layer-shell + WebKit2 surfaces, one per output
+- `bin/dashd-host` — GTK3 + gtk-layer-shell + WebKit2 surfaces, one per output.
+  Since #36 the surface **accepts pointer input** (`display.interactive`,
+  default true): the empty input region is only applied when that flag is
+  false. Keyboard mode stays `NONE` either way, so clicking the dashboard
+  never steals focus from a real window
 - `bin/dashd-control` — LAN-reachable mobile config/control surface, paired
   by scanning a QR code shown at the desktop (`--print-qr`, or the
   loopback-only `/api/control/qr.svg`); every other route is token-gated
@@ -101,7 +105,10 @@ web/index.html      panel structure (Tailwind utility classes); System
                     retired icon-tone signal. Music (#26) is a fourth
                     System sub-section below Network with its own bespoke
                     layout (cover art + title/artist/progress, not a row
-                    grid), hidden entirely when nothing is playing/paused.
+                    grid) plus transport controls (#65). It does NOT hide
+                    when idle -- user report: "it should not disappear just
+                    because no media is playing, should just sit idle" --
+                    it shows a placeholder and disables its controls.
                     A Log panel (#28) follows System/Forecast -- same
                     notched-panel treatment. Three panels are gone and
                     stay gone: Devices (#27) removed entirely at #56
@@ -376,6 +383,43 @@ any other script can add panels without touching the server.
 
 ## Current state (2026-08-20)
 
+- **#36 / #64 / #65 (2026-08-27): the surface is interactive now.** This is
+  the biggest premise change the project has had -- "the wallpaper has no
+  pointer reach" was load-bearing for several design decisions, and it is
+  no longer true.
+  - **#36:** `bin/dashd-host` applies its empty input region only when
+    `display.interactive` is false (new flag, defaults true). Nothing else
+    was needed -- BOTTOM-layer surfaces always could receive pointer
+    events; blanking the region was the only thing stopping them. Verified
+    with a throwaway GTK probe on BOTTOM before any code changed: motion
+    events and 7 clicks arrived. Per the user, the input region covers the
+    **whole surface** rather than the scoped per-widget rects #36's body
+    originally proposed -- "I don't use my desktop (nothing on my
+    desktop)", so there is nothing underneath worth preserving
+    click-through for, and the JS->Python rect bridge is unnecessary.
+    Keyboard mode stays `NONE`: clicking a control does **not** pull focus
+    off the foreground window.
+  - **#64:** Projects paginates instead of auto-cycling. `.proj-scroll`'s
+    `--proj-page` is the single source of truth -- it computes the box
+    height AND is read back by `projPageSize()` for the slice, preserving
+    #62's "the visible row count is one layout fact, not a magic number in
+    two places" property. This retires #29's only shipped consumer; the
+    auto-cycle mechanism itself stays (Music's title marquee still uses
+    the `-x` variant).
+  - **#65:** Music transport controls. `POST /api/music/command` is the
+    first non-GET route in `bin/dashd-serve`; it validates against
+    `sysinfo.MUSIC_COMMANDS` as a **whitelist**, so a request body can
+    never reach `playerctl`'s argv as anything but one of three literals.
+  - **DESIGN.md was rewritten where it asserted the opposite** -- it flatly
+    said "there are no buttons" and "Don't add an interactive affordance".
+    Replaced with a new Control Button component (`.ctl-btn`) and a
+    Read-Only-By-Default Rule: input is allowed but exceptional, a control
+    must do what a passive display cannot, and status elements stay
+    read-only. Do not treat the old text as still normative.
+  - **Not yet eyeballed live.** Verified via the lint/test/build chain and
+    a static headless render; whether the controls feel right at wallpaper
+    distance is the user's call. `-serve` needs a **restart**, not a
+    reload, for the POST route to exist (see gotchas).
 - #63 (2026-08-27): documentation-only correction, no rendering change.
   This file had gone on describing the Tasks (#25) and Schedule (#23)
   panels as if they shipped; both were actually deleted from `web/` at
