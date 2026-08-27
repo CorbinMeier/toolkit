@@ -55,6 +55,7 @@ DATA = ROOT / "data"
 CONFIG = ROOT / "config.json"
 
 sys.path.insert(0, str(ROOT / "lib"))
+import ghstats  # noqa: E402
 import logsrc  # noqa: E402
 import metrics  # noqa: E402
 import sysinfo  # noqa: E402,F401 -- ditto; tests patch dashd.sysinfo.subprocess
@@ -276,6 +277,76 @@ def _fetch_or_cache_weather(cfg: dict) -> dict:
 # processes can't measure a metric two different ways (see #14).
 
 
+# ------------------------------------------------------------- projects
+#
+# GitHub issue stats per repo (#62). Unlike weather, this one must never be
+# fetched on the request thread: `gh api graphql` shells out and does two
+# round trips, which would stall every /api/state poll behind it. So the
+# request thread only ever reads the cache file, and a miss *schedules* a
+# refresh instead of performing one -- the first poll after startup serves
+# `pending`, and a later poll picks up the result. The TTL is hours, not
+# minutes: this is a standing reminder of outstanding work, not a live
+# metric (the user's ask was explicitly "fetch once, not constantly").
+
+_projects_lock = threading.Lock()
+_projects_refreshing = False
+
+
+def _projects_refresh(cfg: dict) -> None:
+    global _projects_refreshing
+    path = DATA / "projects.json"
+    try:
+        fresh = ghstats.fetch(cfg)
+        payload = fresh
+    except ghstats.GhUnavailableError as exc:
+        # Cache the failure too, with its own timestamp, so a broken `gh`
+        # retries on the TTL instead of respawning a thread every poll.
+        payload = {"available": False, "error": str(exc),
+                   "fetched_at": time.time(), "rows": [], "totals": {}}
+    except Exception as exc:  # noqa: BLE001 -- a background thread that dies
+        # silently would leave the panel stuck on "pending" forever.
+        payload = {"available": False, "error": f"{type(exc).__name__}: {exc}",
+                   "fetched_at": time.time(), "rows": [], "totals": {}}
+    try:
+        DATA.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(payload, indent=1))
+    except OSError:
+        pass
+    with _projects_lock:
+        _projects_refreshing = False
+
+
+def cached_projects(cfg: dict) -> dict:
+    """Last known project stats, refreshing in the background past the TTL.
+
+    Always returns immediately. A stale cache is served with stale=True
+    rather than blocking or erroring -- old issue counts beat an empty panel.
+    """
+    global _projects_refreshing
+    pcfg = cfg.get("projects") or {}
+    if not pcfg.get("enabled", True):
+        return {"available": False, "disabled": True, "rows": [], "totals": {}}
+    ttl = float(pcfg.get("refresh_seconds", 21600))
+    path = DATA / "projects.json"
+    cache = None
+    if path.exists():
+        try:
+            cache = json.loads(path.read_text())
+        except (json.JSONDecodeError, OSError):
+            cache = None
+    age = time.time() - cache["fetched_at"] if cache else None
+
+    if age is None or age >= ttl:
+        with _projects_lock:
+            if not _projects_refreshing:
+                _projects_refreshing = True
+                threading.Thread(target=_projects_refresh, args=(cfg,),
+                                 daemon=True).start()
+    if cache is None:
+        return {"available": False, "pending": True, "rows": [], "totals": {}}
+    return {**cache, "stale": age >= ttl, "age_seconds": round(age)}
+
+
 def load_tasks() -> dict:
     """{"items": [...]} from data/tasks.json, source-agnostic (#25).
 
@@ -366,6 +437,7 @@ def build_state(cfg: dict) -> dict:
         "weather": cached_weather(cfg),
         "sys": sys_stats,
         "music": now_playing(),
+        "projects": cached_projects(cfg),
         "tasks": load_tasks(),
         "logs": logsrc.read_log_lines(cfg),
         "extra": extra,

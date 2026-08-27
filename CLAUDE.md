@@ -65,6 +65,17 @@ lib/metrics.py      SQLite historical-metrics store (cpu/mem/battery_pct);
 lib/logsrc.py       filtered/highlighted log tailing (#28): journalctl unit
                     or arbitrary file, matched against config.logs.patterns
                     (regex -> status/label); returns only matched lines
+lib/ghstats.py      GitHub per-repo issue stats for Projects (#62). ONE
+                    aliased `gh api graphql` document covers the
+                    authenticated user + every org they belong to, with
+                    totalCount-only sub-selections -- measured 1 rate-limit
+                    point of 5000/hr, and no issue node is ever transferred
+                    (stats only, by design). shape() holds every product
+                    decision (sort, staleness filter, actionable = open -
+                    ai_blocked) and is what the tests point at; the fetch
+                    itself is a thin subprocess wrapper. Degrades to
+                    available:False if `gh` is missing/unauthed, same
+                    posture as sysinfo.now_playing() without playerctl
 bin/dashd-control   mobile control server (#30) -- see *Layout*'s process
                     list above and the docstring at the top of the file for
                     the token/loopback trust model
@@ -106,9 +117,11 @@ web/control/        standalone mobile control UI served by bin/dashd-control
                     wallpaper surface)
 config.json         location, units, port, display layer, per-output overrides,
                     metrics sample/retain interval, control host/port,
-                    log source/patterns (#30)
+                    log source/patterns (#30), projects refresh/staleness
+                    window (#62)
 data/               weather.json cache, extra.json, metrics.db,
-                    control_token.txt (all gitignored)
+                    projects.json cache (#62), control_token.txt (all
+                    gitignored)
 scripts/smoke.py    the "build" stage — end-to-end render assertions
 tests/test_dashd.py unittest suite (hermetic, no network)
 tests/test_control.py unit tests for dashd-control's auth/whitelist logic
@@ -352,6 +365,32 @@ any other script can add panels without touching the server.
 
 ## Current state (2026-08-20)
 
+- #62 (2026-08-27): new Projects panel -- per-repo GitHub issue stats, in
+  the left column under System. Three counts per repo, colored by what they
+  ask of the user: RED (`--color-crimson`) = open issues labeled
+  `ai-blocked` (waiting on a human), GREEN (`--color-actionable`) =
+  actionable = `open - ai_blocked`, VIOLET (`--color-done`) = closed. The
+  last two are new palette tokens and no theme overrides them, deliberately
+  -- same "carries meaning, not chrome" reasoning as `--color-crimson`.
+  **The green is not `--color-online`**: that reuse looked obvious and was
+  wrong, because every theme overrides it (retro_orange sets it to
+  `#ff9a2e`), so the "green" column rendered amber under the active theme
+  and collapsed the triad to two colors. Caught by eyeballing the static
+  render, not by any test -- a status color a theme can recolor is not a
+  status color. Reuses System's cyan *panel* accent rather than adding a
+  fourth, same call #25 made.
+  Sort is blocked desc -> actionable desc -> newest push. Plain recency was
+  the initial ask and the real data disproved it before any code was
+  written: it floats 1-issue repos above a 37-issue one, so recency was
+  demoted to a tiebreak. Repos untouched past
+  `config.projects.stale_after_days` (90) are dropped server-side. The card
+  shows 8 rows; `.proj-scroll`'s max-height (not a JS slice) defines that,
+  so the rest is revealed by `refreshAutoCycles()` -- **#29's first shipped
+  consumer**, and exactly the no-pointer-reach case it was built for.
+  Fetch-once semantics per the ask: 6h TTL cached to `data/projects.json`,
+  refreshed on a background thread. Verified functionally (lint/test/build
+  chain, live `/api/state` curl against real GitHub data) and via a static
+  headless render; not yet eyeballed on the live desktop.
 - #59 (2026-08-23, refined 2026-08-24): Network's chart moved off the NET
   metric row onto its own full-width row beneath it
   (`.sys-graph{grid-column:1/-1}`), and split from one dual-line box into

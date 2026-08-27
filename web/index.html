@@ -22,6 +22,11 @@
     --color-amber-border:  #8a6a12;
     --color-crimson-border:#9c3230;
     --color-online:        #2bfea0;
+    /* Projects status triad (#62) -- see the restated :root below for why
+       these two are separate tokens rather than reuses, and why no theme
+       overrides them. */
+    --color-actionable:    #2bfea0;  /* green  -- actionable open issues */
+    --color-done:          #a072f0;  /* violet -- closed issues */
   }
 </style>
 <style>
@@ -77,6 +82,26 @@
        per-theme like --color-crimson-panel is -- same "stays genuinely
        red regardless of theme" intent as --color-crimson itself. */
     --color-alert-bg: #b3121a;
+    /* Projects panel status triad (#62): red = ai-blocked (waiting on a
+       human), green = actionable, violet = closed. Red reuses
+       --color-crimson, which already resists theming for exactly this
+       "carries meaning, not chrome" reason; the other two are declared
+       here as their own tokens.
+
+       The green is NOT --color-online, even though that is the house green
+       and the obvious reuse. --color-online is panel chrome and every theme
+       overrides it -- retro_orange sets it to #ff9a2e -- so borrowing it
+       rendered the "green" column amber under the active theme and
+       collapsed a three-color triad into two. A status color that a theme
+       can recolor is not a status color.
+
+       Both are deliberately left out of the per-theme blocks below, on the
+       same reasoning as --color-crimson and --color-alert-bg above. The CRT
+       themes converge accent/warm onto a single phosphor, which would erase
+       the distinction this card exists to draw. Retune here if they
+       clash. */
+    --color-actionable: #2bfea0;
+    --color-done:       #a072f0;
     /* CPU/MEM/BAT utilization-bar spectrum (#31's angled-bar graphic,
        app.js's spectrumColor()) -- read via getComputedStyle rather than
        hardcoded in JS so a theme can override them like every other
@@ -293,6 +318,35 @@
      under it, not a change to its geometry. */
   .sys-grid > .sys-graph{grid-column:1 / -1;margin-top:0.35vmin}
 
+  /* Projects panel (#62): repo | blocked | actionable | closed. Same
+     "one grid, so the columns line up top to bottom" principle as
+     .sys-grid/.kv-grid, but the three count columns are fixed-width and
+     right-aligned (ch units, not auto) so the numbers form true columns
+     instead of jittering as digit counts change between rows -- a 2-digit
+     count next to a 3-digit one would otherwise shift the whole row.
+     No width:fit-content here, unlike .sys-grid: the repo column is the
+     flexible one and should take the panel's width so long names have
+     room to truncate into. */
+  /* line-height is pinned rather than left to the default so .proj-scroll's
+     max-height below can be exact: an inherited/unspecified line-height
+     makes a row's height a guess, and guessing it low clips the last row
+     mid-glyph, which reads as a rendering bug rather than a fold. */
+  .proj-grid{display:grid;grid-template-columns:1fr 3.2ch 3.2ch 4ch;
+    column-gap:0.9vmin;row-gap:0.28vmin;align-items:baseline;width:100%;
+    line-height:1.5}
+  .proj-grid > .proj-num{text-align:right;font-variant-numeric:tabular-nums}
+  /* A zero count is noise on a status card -- the eye should land on the
+     rows that have something. Dimmed rather than blanked so the columns
+     still read as columns. */
+  .proj-grid > .proj-num.is-zero{color:var(--color-faint);opacity:0.45}
+  /* The box the auto-cycle (#29) scrolls. The height is what defines
+     "top 8": a ninth repo is what starts the passive reveal, rather than
+     an arbitrary JS slice. Eight line boxes plus the SEVEN gaps between
+     them -- not eight gaps; counting one gap per row overshoots by a gap
+     and lets a sliver of row nine show. 1.5em tracks .proj-grid's pinned
+     line-height above; the two must move together. */
+  .proj-scroll{max-height:calc(8 * 1.5em + 7 * 0.28vmin);overflow:hidden}
+
   /* Spreadsheet-style key:value grid (#50) -- key column left, value
      column right, one CSS grid so both columns line up across every row
      instead of each stat picking its own layout mechanism (the old
@@ -452,6 +506,13 @@
          align-items:stretch would force both sides to match each other's
          height instead of each hugging its own content. -->
     <div class="col-span-full flex items-start justify-between gap-[1.8vmin]">
+    <!-- LEFT STACK: System, then Projects. System used to be the lone left
+         item; the wrapper exists so Projects can sit beneath it and reclaim
+         the vertical space items-start already left empty on this side,
+         mirroring how the right stack composes Calendar/Weather/Music/Log.
+         items-stretch so Projects matches System's width instead of each
+         hugging its own content and leaving a ragged left column. -->
+    <div class="flex flex-col items-stretch gap-[1.8vmin] min-h-0">
     <section class="accent-cyan flex flex-col min-h-0">
       <div class="panel px-[2vmin] py-[1.5vmin] flex flex-col gap-[0.6vmin]">
         <h2 class="sec-head text-faint uppercase tracking-[0.3em] text-[clamp(.55rem,1.15vmin,.8rem)]">
@@ -488,6 +549,46 @@
              border-t border-[var(--color-hairline)]">—</div>
       </div>
     </section>
+
+    <!-- PROJECTS (#62): per-repo GitHub issue stats, one row per project.
+         Three counts, colored by what they ask of the user: RED
+         (--color-crimson) = open issues labeled ai-blocked, i.e. waiting on
+         a human decision/credential/sign-off; GREEN (--color-actionable) =
+         actionable = open minus blocked, work that can start right now;
+         VIOLET (--color-done) = closed, progress already banked.
+
+         Sorted blocked desc, then actionable desc, then most-recently
+         pushed -- so what is stuck on the user floats to the top. Repos
+         untouched past config.projects.stale_after_days are filtered out
+         server-side, keeping dormant projects off a live worklist.
+
+         Reuses System's cyan accent rather than introducing a fourth panel
+         accent, same call #25 made for Tasks -- DESIGN.md's palette is a
+         three-accent system and the violet here is a status color inside
+         the card, not panel chrome.
+
+         Data is fetched once every few hours on a background thread (see
+         cached_projects in bin/dashd-serve), not per poll. -->
+    <section class="accent-cyan flex flex-col min-h-0">
+      <div class="panel px-[2vmin] py-[1.5vmin] flex flex-col gap-[0.6vmin]">
+        <div class="flex items-baseline justify-between gap-[1.2vmin]">
+          <h2 class="sec-head text-faint uppercase tracking-[0.3em] text-[clamp(.55rem,1.15vmin,.8rem)]">
+            Projects</h2>
+          <div id="projtotals" class="num text-faint
+               text-[clamp(.42rem,.85vmin,.6rem)]"></div>
+        </div>
+        <!-- The auto-cycle hook (#29). .proj-scroll's max-height is what
+             makes "top 8" concrete: with nine or more repos the box
+             overflows and refreshAutoCycles() passively reveals the rest --
+             the only way to read past the fold on a surface with no pointer
+             reach. Fewer than nine rows and it never starts. -->
+        <div id="projscroll" class="proj-scroll auto-cycle
+             text-[clamp(.44rem,.9vmin,.62rem)] num">
+          <div id="projgrid" class="proj-grid"></div>
+        </div>
+      </div>
+    </section>
+    </div>
 
     <!-- ============ RIGHT STACK: Calendar + Weather, Music, Log ============ -->
     <!-- Moved here from a fixed bottom-right anchor (user request: "keeping

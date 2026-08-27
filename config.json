@@ -44,6 +44,13 @@
       }
     ]
   },
+  "projects": {
+    "_comment": "Projects panel (#62) -- per-repo GitHub issue stats from one `gh api graphql` call covering the authenticated user plus every org they belong to. Owners are always discovered, never listed here (a hand-kept list goes stale the moment an org is joined); exclude_owners only trims. refresh_seconds is deliberately hours -- this is a standing reminder of outstanding work, not a live metric -- and the fetch runs on a background thread so a slow `gh` never stalls /api/state. stale_after_days hides repos untouched that long, keeping dormant projects off the card; 0 disables the cutoff.",
+    "enabled": true,
+    "refresh_seconds": 21600,
+    "stale_after_days": 90,
+    "exclude_owners": []
+  },
   "weather_alerts": {
     "_comment": "Weather panel highlight (#46). temp_high_f/rain_pct compare directly against weather.temp/precip_prob, which are already in units.temperature/units above -- assumes fahrenheit, matching this config's units. condition_patterns are regex over weather.desc, same {regex, label} shape as logs.patterns above; first match wins.",
     "temp_high_f": 90,

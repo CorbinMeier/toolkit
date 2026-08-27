@@ -564,6 +564,96 @@ function renderLog(lines) {
   });
 }
 
+/* -------------------------------------------------------------- projects */
+/* Per-repo GitHub issue stats (#62). The server sends the full sorted,
+ * already-filtered row list -- this renders all of it into a fixed-height
+ * box and lets the auto-cycle (#29) reveal anything past the eighth row,
+ * rather than slicing to a "top N" here. That split matters: a JS slice
+ * would make the visible count a magic number in two places, while the CSS
+ * height makes it a single layout fact that adapts if the font scales.
+ *
+ * Color carries the meaning, so each count keeps its own hue even at zero
+ * (dimmed via .is-zero) -- the columns have to stay readable as columns.
+ */
+// --color-actionable, NOT --color-online: every theme overrides the latter
+// (retro_orange makes it amber), which rendered this column the same color
+// as the panel chrome and flattened the triad. See index.html's :root.
+const PROJ_COLS = [
+  ['blocked', 'var(--color-crimson)', 'ai-blocked -- waiting on you'],
+  ['actionable', 'var(--color-actionable)', 'actionable open issues'],
+  ['closed', 'var(--color-done)', 'closed issues'],
+];
+
+function projNote(p) {
+  if (p.disabled) return 'disabled in config';
+  if (p.pending) return 'fetching…';
+  if (!p.available) return `unavailable — ${p.error || 'gh failed'}`;
+  return null;
+}
+
+function renderProjects(p) {
+  const grid = $('projgrid');
+  const totals = $('projtotals');
+  if (!grid) return;
+  grid.replaceChildren();
+  const info = p || { pending: true };
+
+  const note = projNote(info);
+  if (note) {
+    if (totals) totals.textContent = '';
+    const row = document.createElement('div');
+    // Span every column -- a status line is about the panel, not one repo.
+    row.style.gridColumn = '1 / -1';
+    row.className = 'text-faint truncate';
+    row.textContent = note;
+    grid.appendChild(row);
+    return;
+  }
+
+  const rows = info.rows || [];
+  const t = info.totals || {};
+  if (totals) {
+    // Stale is worth surfacing but not alarming: the whole design serves an
+    // old cache rather than an error, so the user should be able to tell.
+    const age = info.stale && info.age_seconds != null
+      ? ` · ${Math.round(info.age_seconds / 3600)}h old` : '';
+    totals.textContent = rows.length
+      ? `${t.blocked || 0} blocked · ${t.actionable || 0} open · ${rows.length} repos${age}`
+      : '';
+  }
+
+  if (!rows.length) {
+    const row = document.createElement('div');
+    row.style.gridColumn = '1 / -1';
+    row.className = 'text-faint';
+    row.textContent = 'No open issues';
+    grid.appendChild(row);
+    return;
+  }
+
+  rows.forEach((r) => {
+    const name = document.createElement('div');
+    name.className = 'truncate text-ink';
+    // Owner prefix only in the tooltip -- the card shows the repo, which is
+    // what distinguishes rows; the org is mostly redundant noise at this
+    // width. title still gives the full nameWithOwner on inspection.
+    name.textContent = r.short || r.repo;
+    name.title = `${r.repo} · ${r.blocked} blocked, ${r.actionable} actionable, `
+      + `${r.closed} closed`;
+    grid.appendChild(name);
+
+    PROJ_COLS.forEach(([key, color, label]) => {
+      const cell = document.createElement('div');
+      const n = r[key] || 0;
+      cell.className = n ? 'proj-num' : 'proj-num is-zero';
+      if (n) cell.style.color = color;
+      cell.textContent = String(n);
+      cell.title = `${n} ${label}`;
+      grid.appendChild(cell);
+    });
+  });
+}
+
 /* -------------------------------------------------------- weather panels */
 // No icons in this card (user request, #41). Spreadsheet-style key:value
 // grid (#50, .kv-grid in index.html) -- Condition/Temp/Feels/High-Low/Wind/
@@ -982,6 +1072,7 @@ function apply(s) {
   renderNetwork(s.sys);
   renderMusic(s.music);
   renderCalendar(s.extra);
+  renderProjects(s.projects);
   renderLog(s.logs);
   refreshAutoCycles();
 

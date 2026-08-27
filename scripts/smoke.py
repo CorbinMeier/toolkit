@@ -70,8 +70,16 @@ def main() -> int:
 
         state = json.loads(get("/api/state"))
         check("state has all top-level keys",
-              {"ts", "config", "weather", "sys", "tasks", "logs", "extra"}
+              {"ts", "config", "weather", "sys", "projects", "tasks", "logs",
+               "extra"}
               <= state.keys(), str(sorted(state.keys())))
+        # #62: the panel must always get a rows list to iterate, in every
+        # state -- pending, unavailable, disabled, or populated. A missing
+        # key here is exactly the "renamed state key silently blanks a
+        # panel" failure this stage exists to catch.
+        check("projects has a rows list",
+              isinstance(state["projects"].get("rows"), list),
+              state["projects"])
         check("tasks has an items list",
               isinstance(state["tasks"].get("items"), list), state["tasks"])
         check("logs is a list", isinstance(state["logs"], list), state["logs"])
@@ -170,6 +178,23 @@ def main() -> int:
         # source, same as System's own header, so the text never sits flush
         # against the closing '>' the way single-line h3s do elsewhere.
         check("log section rendered", "Log</h2>" in dom, "missing Log header")
+        # #62: same two-line <h2> wrap as System/Log, hence "Projects</h2>".
+        check("projects section rendered", "Projects</h2>" in dom,
+              "missing Projects header")
+        # The panel is fed by a background fetch on a multi-hour TTL, so a
+        # cold run legitimately renders a status line ("fetching…") instead
+        # of rows -- assert against what /api/state actually reported rather
+        # than assuming the cache is warm, same shape as the weather
+        # unavailable branch above. When rows ARE present they must have
+        # rendered, which is the regression that matters.
+        if state["projects"].get("rows"):
+            check("project rows rendered", dom.count("proj-num") >= 3,
+                  "state had project rows but the grid is empty")
+        else:
+            reason = ("pending" if state["projects"].get("pending")
+                      else state["projects"].get("error") or "no open issues")
+            print("  \033[33mwarn\033[0m projects cache cold "
+                  f"({reason}) -- skipping row assertions")
         # #34: trend graphs are deliberately not shown on the
         # wallpaper anymore (collection continues server-side) -- assert
         # they stay gone rather than silently reappearing on a regression.
