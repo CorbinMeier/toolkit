@@ -1196,6 +1196,95 @@ function wireControls() {
   $('musicToggle')?.addEventListener('click', () => musicCommand('play-pause'));
 }
 
+/* ----------------------------------------------------------- context menu
+ * #66, first step of "configure from the interface itself" -- so this is a
+ * data-driven item list, not two hardcoded buttons, even though there are
+ * only two entries today. A future item (toggle a panel, reposition one)
+ * is a new entry in menuItems(), not a new code path.
+ *
+ * Suppresses WebKit's own context-menu (Reload / Inspect Element / Open
+ * Frame in New Window ...), which the surface would otherwise show now
+ * that #36 gave it pointer reach -- see dashd-host's belt-and-braces
+ * `context-menu` handler for the other half of that fix.
+ */
+async function setTheme(theme) {
+  try {
+    await fetch('/api/config', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ display: { theme } }),
+    });
+  } catch { /* next poll re-syncs from whatever config.json actually holds */ }
+  setTimeout(refreshNow, 250);
+}
+
+function menuItems() {
+  const disp = state?.config.display || {};
+  const themes = disp._theme_options || [disp.theme || 'night_ops'];
+  const current = disp.theme || 'night_ops';
+  const items = [
+    { label: 'Reload', action: () => location.reload() },
+  ];
+  for (const t of themes) {
+    items.push({
+      label: `Theme: ${t.replace(/_/g, ' ')}${t === current ? ' ✓' : ''}`,
+      action: () => setTheme(t),
+    });
+  }
+  return items;
+}
+
+function closeContextMenu() {
+  $('ctxMenu')?.remove();
+  removeEventListener('pointerdown', closeContextMenu, true);
+  removeEventListener('keydown', ctxMenuKeydown, true);
+}
+
+function ctxMenuKeydown(e) {
+  if (e.key === 'Escape') closeContextMenu();
+}
+
+function openContextMenu(x, y) {
+  closeContextMenu();
+  const menu = document.createElement('div');
+  menu.id = 'ctxMenu';
+  menu.className = 'panel accent-cyan ctx-menu';
+  for (const item of menuItems()) {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'ctx-menu-item';
+    btn.textContent = item.label;
+    btn.addEventListener('click', () => {
+      closeContextMenu();
+      item.action();
+    });
+    menu.appendChild(btn);
+  }
+  document.body.appendChild(menu);
+
+  // Clamp inside the viewport rather than letting the menu render off-screen
+  // -- a right-click near the output's right/bottom edge is the common case
+  // on a wallpaper that spans the whole screen.
+  const rect = menu.getBoundingClientRect();
+  const left = Math.min(x, innerWidth - rect.width - 4);
+  const top = Math.min(y, innerHeight - rect.height - 4);
+  menu.style.left = `${Math.max(4, left)}px`;
+  menu.style.top = `${Math.max(4, top)}px`;
+
+  // Any click outside, or Escape, dismisses -- capture phase so it fires
+  // before the click that opened it (its own contextmenu listener already
+  // stopped propagation) and before a click lands on page content behind it.
+  setTimeout(() => {
+    addEventListener('pointerdown', closeContextMenu, true);
+    addEventListener('keydown', ctxMenuKeydown, true);
+  }, 0);
+}
+
+addEventListener('contextmenu', (e) => {
+  e.preventDefault();
+  openContextMenu(e.clientX, e.clientY);
+});
+
 // SVG geometry is computed from measured pixel sizes, so a monitor change or
 // layout reflow has to redraw rather than just rescale.
 let resizeTimer;

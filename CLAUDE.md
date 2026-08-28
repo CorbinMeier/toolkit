@@ -383,6 +383,33 @@ any other script can add panels without touching the server.
 
 ## Current state (2026-08-20)
 
+- **#66 (2026-08-27): custom right-click context menu.** Follow-on to #36 --
+  right-click now reaches the page, so it gets our own themed menu instead
+  of WebKit's default (Reload / Inspect Element / Open Frame in New Window
+  ...), suppressed both client-side (`app.js`'s `contextmenu` listener
+  `preventDefault()`s) and host-side (`dashd-host`'s `context-menu` signal
+  handler returns `True`, belt-and-braces). Two items for now: Reload
+  (`location.reload()`) and a Theme row per `display._theme_options`, the
+  active one checked. `menuItems()` is data-driven per the issue's stated
+  direction (a future customizable-panel-layout feature reuses the same
+  list mechanism, not two hardcoded buttons). Theme persists through a new
+  `POST /api/config` on `bin/dashd-serve`, an `EDITABLE`-style
+  whitelist-not-sanitise route mirroring `dashd-control`'s own (only
+  `display.theme` is in it) rather than routing the desktop through the
+  LAN-bound control server -- writing `config.json` means the next poll
+  propagates the theme to every output automatically. The menu itself
+  reuses `.panel` wholesale (same notched clip-path/border/corner-tab) so
+  it re-themes live, which is self-testing since re-theming is one of its
+  own actions. DESIGN.md gained a Context Menu component entry and the
+  Read-Only-By-Default Rule now names the menu as its explicit carve-out
+  (a right-click is an interactive affordance by definition). Verified
+  functionally (unit tests on `merge_patch`/`EDITABLE`, live curl against
+  `/api/config` with both an accepted and a rejected patch, smoke stage);
+  not yet eyeballed live -- `-serve` needs a **restart**, not a reload, for
+  the new POST route to exist (see gotchas), and the WebKit-menu-popping
+  side effect this issue opens with was never confirmed by an actual
+  right-click on the live desktop before this fix, only inferred from the
+  code path.
 - **#36 / #64 / #65 (2026-08-27): the surface is interactive now.** This is
   the biggest premise change the project has had -- "the wallpaper has no
   pointer reach" was load-bearing for several design decisions, and it is

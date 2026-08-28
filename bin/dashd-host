@@ -110,6 +110,12 @@ class Host:
         settings.set_enable_write_console_messages_to_stdout(True)
         settings.set_hardware_acceleration_policy(
             WebKit2.HardwareAccelerationPolicy.ALWAYS)
+        # Belt-and-braces stop (#66): the page's own `contextmenu` handler
+        # already preventDefault()s to show our themed menu instead, but
+        # returning True here means WebKit's default menu (Reload / Inspect
+        # Element / Open Frame in New Window ...) never has a code path to
+        # reach the wallpaper even if JS fails to load or a click races it.
+        view.connect("context-menu", lambda *_a: True)
 
         if transparent:
             win.set_app_paintable(True)

@@ -851,5 +851,46 @@ class TestCachedProjects(unittest.TestCase):
         self.assertFalse(dashd._projects_refreshing)
 
 
+class TestConfigPatch(unittest.TestCase):
+    """POST /api/config (#66 -- the wallpaper's own context menu, theme
+    switch). Whitelist, not sanitisation: same posture as dashd-control's
+    EDITABLE and #65's MUSIC_COMMANDS -- a request body can never touch a
+    field outside EDITABLE, no matter what it contains."""
+
+    def test_editable_field_is_applied(self):
+        cfg = {"display": {"theme": "night_ops"}}
+        rejected = dashd.merge_patch(cfg, {"display": {"theme": "retro_orange"}})
+        self.assertEqual(rejected, [])
+        self.assertEqual(cfg["display"]["theme"], "retro_orange")
+
+    def test_unknown_top_level_section_is_rejected_and_not_applied(self):
+        cfg = {"display": {"theme": "night_ops"}, "server": {"port": 4320}}
+        rejected = dashd.merge_patch(cfg, {"server": {"port": 9999}})
+        self.assertEqual(rejected, ["server"])
+        self.assertEqual(cfg["server"]["port"], 4320)
+
+    def test_unknown_field_within_an_editable_section_is_rejected(self):
+        cfg = {"display": {"theme": "night_ops", "transparent": False}}
+        rejected = dashd.merge_patch(
+            cfg, {"display": {"transparent": True}})
+        self.assertEqual(rejected, ["display.transparent"])
+        self.assertFalse(cfg["display"]["transparent"])
+
+    def test_non_dict_patch_body_is_rejected_wholesale(self):
+        cfg = {"display": {"theme": "night_ops"}}
+        rejected = dashd.merge_patch(cfg, ["not", "a", "dict"])
+        self.assertEqual(rejected, ["<patch body>"])
+        self.assertEqual(cfg["display"]["theme"], "night_ops")
+
+    def test_save_config_round_trips_through_disk(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "config.json"
+            with patch.object(dashd, "CONFIG", path):
+                dashd.save_config({"display": {"theme": "retro_terminal"}})
+                self.assertEqual(
+                    json.loads(path.read_text())["display"]["theme"],
+                    "retro_terminal")
+
+
 if __name__ == "__main__":
     unittest.main()

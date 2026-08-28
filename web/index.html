@@ -375,6 +375,23 @@
   .ctl-btn:active:not(:disabled){color:var(--panel-accent, var(--color-accent))}
   .ctl-btn:disabled{opacity:0.3;cursor:default}
 
+  /* Context Menu (#66) -- the surface's own right-click menu, replacing
+     WebKit's default (Reload / Inspect Element / ...) now that #36 gave the
+     page pointer reach. Reuses .panel wholesale (same notched clip-path,
+     border, corner-tab glow) so it re-themes for free with every other
+     panel -- picking `.accent-cyan` at open time, same as System's own
+     accent, rather than inventing a fourth palette entry. Fixed-positioned
+     at the click point (openContextMenu() in app.js clamps it inside the
+     viewport) and sized to its content, never full-width. */
+  .ctx-menu{position:fixed;z-index:50;display:flex;flex-direction:column;
+    padding:0.3vmin;min-width:11rem}
+  .ctx-menu-item{appearance:none;background:transparent;cursor:pointer;
+    border:none;text-align:left;color:var(--color-faint);font:inherit;
+    padding:0.45em 0.7em;transition:color .12s linear,background-color .12s linear}
+  .ctx-menu-item:hover{color:var(--color-ink);
+    background-color:color-mix(in srgb, var(--panel-accent, var(--color-accent)) 14%, transparent)}
+  .ctx-menu-item:active{color:var(--panel-accent, var(--color-accent))}
+
   /* Spreadsheet-style key:value grid (#50) -- key column left, value
      column right, one CSS grid so both columns line up across every row
      instead of each stat picking its own layout mechanism (the old

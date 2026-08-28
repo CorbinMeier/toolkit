@@ -96,6 +96,42 @@ def load_config() -> dict:
         return json.load(fh)
 
 
+def save_config(cfg: dict) -> None:
+    tmp = CONFIG.with_suffix(".json.tmp")
+    tmp.write_text(json.dumps(cfg, indent=2))
+    tmp.replace(CONFIG)  # atomic on the same filesystem
+
+
+# Dotted config paths the wallpaper's own context menu (#66) may write.
+# Same whitelist-not-sanitise posture as bin/dashd-control's EDITABLE
+# (bin/dashd-control:52) and #65's MUSIC_COMMANDS -- a request body can
+# never touch a field outside this set, no matter what it contains.
+EDITABLE = {
+    "display": {"theme"},
+}
+
+
+def merge_patch(cfg: dict, patch: dict) -> list[str]:
+    """Apply `patch` onto `cfg` in place, restricted to EDITABLE. Returns
+    the dotted keys that were rejected as unknown/out-of-scope, so the
+    caller can report a partial-save instead of silently dropping fields.
+    """
+    rejected = []
+    if not isinstance(patch, dict):
+        return ["<patch body>"]
+    for section, fields in patch.items():
+        if section not in EDITABLE or not isinstance(fields, dict):
+            rejected.append(section)
+            continue
+        cfg.setdefault(section, {})
+        for key, value in fields.items():
+            if key not in EDITABLE[section]:
+                rejected.append(f"{section}.{key}")
+                continue
+            cfg[section][key] = value
+    return rejected
+
+
 # ---------------------------------------------------------------- moon phase
 
 def moon_phase(when: datetime) -> dict:
@@ -506,9 +542,15 @@ class Handler(SimpleHTTPRequestHandler):
 
     def do_POST(self) -> None:  # noqa: N802
         route = urllib.parse.urlparse(self.path).path
-        if route != "/api/music/command":
-            self._json({"error": "not found"}, 404)
+        if route == "/api/music/command":
+            self._music_command()
             return
+        if route == "/api/config":
+            self._config_patch()
+            return
+        self._json({"error": "not found"}, 404)
+
+    def _music_command(self) -> None:
         try:
             length = int(self.headers.get("Content-Length") or 0)
             body = json.loads(self.rfile.read(length) or b"{}")
@@ -525,6 +567,30 @@ class Handler(SimpleHTTPRequestHandler):
             self._json({"ok": sysinfo.music_command(command)})
         except Exception as exc:  # noqa: BLE001 - never kill the server
             self._json({"error": repr(exc)}, 500)
+
+    def _config_patch(self) -> None:
+        """Persist an EDITABLE-scoped config change (#66 -- the wallpaper's
+        own context menu, e.g. theme switch). Writing config.json means the
+        next /api/state poll propagates the change to every output's
+        surface automatically, no cross-surface messaging needed."""
+        try:
+            length = int(self.headers.get("Content-Length") or 0)
+            patch = json.loads(self.rfile.read(length) or b"{}")
+        except (ValueError, json.JSONDecodeError):
+            self._json({"error": "bad request body"}, 400)
+            return
+        with _lock:
+            cfg = load_config()
+            rejected = merge_patch(cfg, patch)
+            if rejected:
+                self._json({"error": "out of scope", "rejected": rejected}, 400)
+                return
+            try:
+                save_config(cfg)
+            except OSError as exc:
+                self._json({"error": repr(exc)}, 500)
+                return
+        self._json({"ok": True})
 
     def end_headers(self) -> None:
         if self.path.endswith((".js", ".html", ".css")):
