@@ -599,28 +599,38 @@
          cached_projects in bin/dashd-serve), not per poll. -->
     <section class="accent-cyan flex flex-col min-h-0">
       <div class="panel px-[2vmin] py-[1.5vmin] flex flex-col gap-[0.6vmin]">
-        <div class="flex items-baseline justify-between gap-[1.2vmin]">
-          <h2 class="sec-head text-faint uppercase tracking-[0.3em] text-[clamp(.55rem,1.15vmin,.8rem)]">
-            Projects</h2>
-          <div id="projtotals" class="num text-faint
-               text-[clamp(.42rem,.85vmin,.6rem)]"></div>
-        </div>
-        <!-- Pager (#64). Replaces the auto-cycle hook (#29) that used to
-             reveal rows past the fold: that existed only because the
-             surface had no pointer reach, which #36 fixed. The whole
-             control strip is hidden by renderProjects() when everything
-             fits on one page -- a pager for a single page is chrome. -->
-        <div id="projpager" class="hidden flex items-center justify-end
-             gap-[0.6vmin] num text-faint text-[clamp(.42rem,.85vmin,.6rem)]">
-          <button id="projprev" type="button" class="ctl-btn"
-                  aria-label="Previous page of repositories">&#9664;</button>
-          <span id="projpage" aria-live="polite"></span>
-          <button id="projnext" type="button" class="ctl-btn"
-                  aria-label="Next page of repositories">&#9654;</button>
-        </div>
+        <!-- No sibling on this row (totals dropped, pager moved below) --
+             h2 is back to being a direct flex item of .panel's column
+             layout, so its own sec-head underline (::after, width:100%)
+             stretches to the panel's full width again via the column's
+             default align-items:stretch, same as every other panel header
+             here. It only needs a wrapping row -- and sec-head moved onto
+             that row instead of the h2 -- when something else shares the
+             line with it (see Music, #65 follow-up). -->
+        <h2 class="sec-head text-faint uppercase tracking-[0.3em] text-[clamp(.55rem,1.15vmin,.8rem)]">
+          Projects</h2>
         <div id="projscroll" class="proj-scroll
              text-[clamp(.44rem,.9vmin,.62rem)] num">
           <div id="projgrid" class="proj-grid"></div>
+        </div>
+        <!-- Pager (#64), moved to the bottom of the card, below the row
+             list rather than above it -- prev/next flush to the panel's
+             left/right edges (justify-between) with the page indicator
+             riding in the middle. Text labels, not glyphs (&#9664;/&#9654;
+             used to stagger vertically against each other the same way
+             Music's transport glyphs did -- see that fix). Replaces the
+             auto-cycle hook (#29) that used to reveal rows past the fold:
+             that existed only because the surface had no pointer reach,
+             which #36 fixed. The whole control strip is hidden by
+             renderProjects() when everything fits on one page -- a pager
+             for a single page is chrome. -->
+        <div id="projpager" class="hidden flex items-center justify-between
+             gap-[0.6vmin] num text-faint text-[clamp(.42rem,.85vmin,.6rem)]">
+          <button id="projprev" type="button" class="ctl-btn"
+                  aria-label="Previous page of repositories">PREV</button>
+          <span id="projpage" aria-live="polite"></span>
+          <button id="projnext" type="button" class="ctl-btn"
+                  aria-label="Next page of repositories">NEXT</button>
         </div>
       </div>
     </section>
@@ -808,8 +818,39 @@
            relies on for height. -->
       <section id="musicSection" class="accent-cyan flex flex-col">
         <div class="panel px-[2vmin] py-[1.5vmin] flex flex-col gap-[0.6vmin]">
-          <h2 class="sec-head text-faint uppercase tracking-[0.3em] text-[clamp(.55rem,1.15vmin,.8rem)]">
-            Music</h2>
+          <!-- sec-head (the glowing underline) lives on this row, not the
+               h2 alone -- the row stretches to the panel's full width (flex
+               item in a flex-col parent, default align-items:stretch), so
+               the separator now runs under the controls too instead of
+               stopping at "MUSIC"'s own text width. -->
+          <div class="sec-head flex items-baseline justify-between gap-[1.2vmin]">
+            <h2 class="text-faint uppercase tracking-[0.3em] text-[clamp(.55rem,1.15vmin,.8rem)]">
+              Music</h2>
+            <!-- Transport controls (#65), moved up beside the heading and
+                 floated right of it -- previously a separate row below the
+                 art/title/progress block. POST /api/music/command ->
+                 playerctl, against whatever MPRIS player now_playing() is
+                 already reporting on. Disabled (not hidden) while nothing is
+                 playing/paused: the section deliberately "sits idle" rather
+                 than disappearing, so its controls should hold their place
+                 too instead of making the panel reflow on every track end.
+                 Text labels, not glyphs -- the transport icons (⏮⏯⏭) render
+                 with inconsistent em-box heights across fonts, which read as
+                 a vertical stagger between the three buttons; fixed-width
+                 4-char labels on the shared monospace body font align
+                 cleanly instead. PREV/NEXT are static; PLAY/PAUS is swapped
+                 by renderMusic() to match the live state -- a fixed label
+                 can't tell you which way the toggle is about to go. -->
+            <div id="musicControls" class="flex items-center
+                 gap-[0.9vmin] text-[clamp(.5rem,1.05vmin,.76rem)]">
+              <button id="musicPrev" type="button" class="ctl-btn"
+                      aria-label="Previous track">PREV</button>
+              <button id="musicToggle" type="button" class="ctl-btn"
+                      aria-label="Play or pause">PLAY</button>
+              <button id="musicNext" type="button" class="ctl-btn"
+                      aria-label="Next track">NEXT</button>
+            </div>
+          </div>
           <!-- No sys-table, no note icon (both dropped on user request) --
                renderMusic() in app.js builds cover art (musicArt, left,
                hidden unless the player's MPRIS metadata has an art_url --
@@ -836,24 +877,6 @@
                  style="width:clamp(2.4rem,6vmin,4.2rem);height:clamp(2.4rem,6vmin,4.2rem);
                         border:1px solid var(--panel-accent, var(--color-accent));" />
             <div id="musicBody" class="flex-1 min-w-0 flex flex-col gap-[0.5vmin]"></div>
-          </div>
-          <!-- Transport controls (#65). POST /api/music/command -> playerctl,
-               against whatever MPRIS player now_playing() is already
-               reporting on. Disabled (not hidden) while nothing is
-               playing/paused: the section deliberately "sits idle" rather
-               than disappearing, so its controls should hold their place
-               too instead of making the panel reflow on every track end.
-               The play/pause glyph is swapped by renderMusic() to match
-               the live state -- a toggle that always shows the same icon
-               can't tell you which way it's about to go. -->
-          <div id="musicControls" class="flex items-center justify-center
-               gap-[0.9vmin] text-[clamp(.5rem,1.05vmin,.76rem)]">
-            <button id="musicPrev" type="button" class="ctl-btn"
-                    aria-label="Previous track">&#9198;</button>
-            <button id="musicToggle" type="button" class="ctl-btn"
-                    aria-label="Play or pause">&#9199;</button>
-            <button id="musicNext" type="button" class="ctl-btn"
-                    aria-label="Next track">&#9197;</button>
           </div>
         </div>
       </section>

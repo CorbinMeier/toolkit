@@ -461,17 +461,17 @@ function renderMusic(music) {
   box.replaceChildren();
 
   // Controls (#65) are disabled rather than hidden with no player -- the
-  // section is meant to sit idle, not reflow. The toggle's glyph tracks the
-  // live state (playing => show pause), since a fixed icon can't say which
-  // way the toggle is about to go; it falls back to the neutral play/pause
-  // glyph when there's nothing to describe.
+  // section is meant to sit idle, not reflow. The toggle's label tracks the
+  // live state (playing => show PAUS), since a fixed label can't say which
+  // way the toggle is about to go; it falls back to PLAY when there's
+  // nothing to describe.
   ['musicPrev', 'musicToggle', 'musicNext'].forEach((id) => {
     const btn = $(id);
     if (btn) btn.disabled = !music;
   });
   const toggle = $('musicToggle');
   if (toggle) {
-    toggle.textContent = music ? (music.playing ? '⏸' : '▶') : '⏯';
+    toggle.textContent = music && music.playing ? 'PAUS' : 'PLAY';
     toggle.setAttribute('aria-label', music && music.playing ? 'Pause' : 'Play');
   }
 
@@ -622,7 +622,6 @@ let projPage = 0;
 
 function renderProjects(p) {
   const grid = $('projgrid');
-  const totals = $('projtotals');
   const pager = $('projpager');
   if (!grid) return;
   grid.replaceChildren();
@@ -630,7 +629,6 @@ function renderProjects(p) {
 
   const note = projNote(info);
   if (note) {
-    if (totals) totals.textContent = '';
     if (pager) pager.classList.add('hidden');
     const row = document.createElement('div');
     // Span every column -- a status line is about the panel, not one repo.
@@ -642,16 +640,6 @@ function renderProjects(p) {
   }
 
   const rows = info.rows || [];
-  const t = info.totals || {};
-  if (totals) {
-    // Stale is worth surfacing but not alarming: the whole design serves an
-    // old cache rather than an error, so the user should be able to tell.
-    const age = info.stale && info.age_seconds != null
-      ? ` · ${Math.round(info.age_seconds / 3600)}h old` : '';
-    totals.textContent = rows.length
-      ? `${t.blocked || 0} blocked · ${t.actionable || 0} open · ${rows.length} repos${age}`
-      : '';
-  }
 
   if (!rows.length) {
     if (pager) pager.classList.add('hidden');

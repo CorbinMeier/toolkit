@@ -66,7 +66,7 @@
     "layer": "BOTTOM",
     "interactive": true,
     "transparent": true,
-    "theme": "retro_orange",
+    "theme": "night_ops",
     "_theme_options": [
       "night_ops",
       "retro_terminal",
