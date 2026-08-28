@@ -97,9 +97,20 @@ def load_config() -> dict:
 
 
 def save_config(cfg: dict) -> None:
-    tmp = CONFIG.with_suffix(".json.tmp")
-    tmp.write_text(json.dumps(cfg, indent=2))
-    tmp.replace(CONFIG)  # atomic on the same filesystem
+    # Not the usual tmp-write-then-rename: desktop-dashboard-serve.service's
+    # ProtectHome=read-only sandbox only lifts for paths literally named in
+    # ReadWritePaths, and that grant is per-file, not per-directory (#69).
+    # config.json is named there, so writing its *content* in place works --
+    # but a sibling config.json.tmp is a NEW directory entry in the project
+    # root, which stays read-only, so the create step 500s. Staging the tmp
+    # file under data/ (which does allow new files) doesn't help either:
+    # data/ and config.json are separate ReadWritePaths bind mounts, so
+    # renaming across them is a cross-device link (EXDEV), not same-
+    # filesystem-atomic. Both failure modes confirmed empirically against
+    # the real unit sandbox before landing this. A crash mid-write can still
+    # leave a truncated config.json under this sandbox; that risk is judged
+    # acceptable given how rarely this path writes (a manual theme pick).
+    CONFIG.write_text(json.dumps(cfg, indent=2))
 
 
 # Dotted config paths the wallpaper's own context menu (#66) may write.
