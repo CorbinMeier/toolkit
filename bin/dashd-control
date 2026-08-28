@@ -62,9 +62,13 @@ def load_config() -> dict:
 
 
 def save_config(cfg: dict) -> None:
-    tmp = CONFIG.with_suffix(".json.tmp")
-    tmp.write_text(json.dumps(cfg, indent=2))
-    tmp.replace(CONFIG)  # atomic on the same filesystem
+    # Write in place, not tmp-then-rename (#70): ProtectHome=read-only's
+    # single-file ReadWritePaths entry for config.json grants content-level
+    # write to that exact inode, not directory-level write to its parent --
+    # creating a sibling config.json.tmp 500s under the sandboxed unit.
+    # Trade-off: no crash-safety if the write dies mid-flight.
+    with CONFIG.open("w") as fh:
+        fh.write(json.dumps(cfg, indent=2))
 
 
 def load_token() -> str:

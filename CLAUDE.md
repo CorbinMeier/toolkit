@@ -260,6 +260,27 @@ render loop.
   `bin/dashd-serve` or `bin/dashd-collect` (not `web/`) needs an explicit
   restart of that unit to actually ship -- `reload`ing `-host` alone is not
   enough and will not error, it just keeps serving stale logic.
+- **A single-file `ReadWritePaths` entry under `ProtectHome=read-only` does
+  not permit a tmp-then-rename write.** `#69` diagnosed `dashd-serve`'s
+  `POST /api/config` 500ing with `OSError(30, 'Read-only file system')`
+  under the sandboxed unit, and was first "fixed" (164f745) by adding
+  `config.json` to `desktop-dashboard-serve.service`'s `ReadWritePaths` --
+  matching `dashd-control`'s unit, which already had it. That fix didn't
+  actually work: a `ReadWritePaths` entry naming one file grants
+  content-level write to that exact inode, not directory-level write to
+  its parent, so creating the sibling `config.json.tmp` still fails (and
+  staging the tmp under `data/`, which does have a directory-level entry,
+  then renaming across also fails with `EXDEV` -- separate
+  `ReadWritePaths` entries are separate bind mounts). A follow-up commit
+  fixed `dashd-serve`'s `save_config()` to write `CONFIG` in place
+  (no tmp+rename), still under `#69`. `dashd-control`'s `save_config()`
+  carried the identical latent bug -- never exercised, since its unit
+  isn't enabled -- and got the same in-place-write fix under `#70`.
+  Trade-off both accept: no crash-safety if the write dies mid-flight.
+  General lesson: a systemd `ReadWritePaths` grant on a file path is not
+  equivalent to write access to its containing directory -- verify with
+  `systemd-run` reproducing the real sandbox flags, not just a
+  plain-process test.
 - **Historical (both resolved by #57's move off `<table>`, kept for the
   general CSS mechanism they document):**
   - A `td`-level `pl-[...]`/`pr-[...]` Tailwind utility class used to
