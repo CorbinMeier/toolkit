@@ -1234,9 +1234,14 @@ function menuItems() {
   return items;
 }
 
+let ctxOutsideHandler = null;
+
 function closeContextMenu() {
   $('ctxMenu')?.remove();
-  removeEventListener('pointerdown', closeContextMenu, true);
+  if (ctxOutsideHandler) {
+    removeEventListener('pointerdown', ctxOutsideHandler, true);
+    ctxOutsideHandler = null;
+  }
   removeEventListener('keydown', ctxMenuKeydown, true);
 }
 
@@ -1274,8 +1279,16 @@ function openContextMenu(x, y) {
   // Any click outside, or Escape, dismisses -- capture phase so it fires
   // before the click that opened it (its own contextmenu listener already
   // stopped propagation) and before a click lands on page content behind it.
+  // Must ignore pointerdowns that land inside the menu itself (#68): a menu
+  // item's own click handler already calls closeContextMenu() before running
+  // its action, and pointerdown fires before click -- an unconditional close
+  // here removed the button from the DOM first, so its click never landed
+  // and the input fell through to whatever was behind the menu instead.
   setTimeout(() => {
-    addEventListener('pointerdown', closeContextMenu, true);
+    ctxOutsideHandler = (e) => {
+      if (!menu.contains(e.target)) closeContextMenu();
+    };
+    addEventListener('pointerdown', ctxOutsideHandler, true);
     addEventListener('keydown', ctxMenuKeydown, true);
   }, 0);
 }
