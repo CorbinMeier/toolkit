@@ -12,7 +12,7 @@ RestartSec=3
 # Binds 127.0.0.1 only and reads /proc; needs no elevated access.
 PrivateDevices=yes
 ProtectHome=read-only
-ReadWritePaths=%h/Code/Dashboards/desktop/data
+ReadWritePaths=%h/Code/Dashboards/desktop/data %h/Code/Dashboards/desktop/config.json
 NoNewPrivileges=yes
 
 [Install]

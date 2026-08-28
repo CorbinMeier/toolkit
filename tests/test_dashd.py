@@ -642,6 +642,21 @@ class TestConfig(unittest.TestCase):
         would silently make the surface interactive."""
         self.assertIsInstance(dashd.load_config()["display"]["interactive"], bool)
 
+    def test_serve_unit_may_write_config_json(self):
+        """#66's POST /api/config writes config.json via dashd-serve's
+        save_config(). The unit's ProtectHome=read-only sandbox only lifts
+        for paths named in ReadWritePaths -- config.json lives outside
+        data/, the one path already listed, so it needs its own entry or
+        that write 500s under the real systemd unit (#69). Mirrors the
+        entry desktop-dashboard-control.service already carries for the
+        identical write."""
+        unit = BIN.parent.parent / "systemd" / "desktop-dashboard-serve.service"
+        rw_line = next(
+            line for line in unit.read_text().splitlines()
+            if line.startswith("ReadWritePaths=")
+        )
+        self.assertIn("config.json", rw_line)
+
 
 def _repo(name, open_n, blocked, closed, pushed):
     return {"nameWithOwner": name, "pushedAt": pushed, "isArchived": False,
