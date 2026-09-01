@@ -87,6 +87,16 @@ lib/logsrc.py       filtered/highlighted log tailing (#28): journal or
                     config.logs.journalctl_unit still WINS when set: it's
                     the Control Backend's phone-editable narrowing, and a
                     control that silently did nothing would be a defect
+lib/sessions.py     who logged in since the last boot (#71), read from
+                    systemd-logind's journal -- NOT utmp/wtmp, which carries
+                    no user record on this machine (see gotchas). Pairs the
+                    SESSION_START/_STOP catalog messages by SESSION_ID and
+                    enriches still-open rows from `loginctl`. `journalctl -b`
+                    is the whole reset-at-boot mechanism: no stored history,
+                    nothing to prune, unlike metrics.db. shape() holds the
+                    product decisions (uid filter, sort, ended_unknown) and
+                    is what the tests point at. Degrades to available:False,
+                    same posture as ghstats/now_playing
 lib/ghstats.py      GitHub per-repo issue stats for Projects (#62). ONE
                     aliased `gh api graphql` document covers the
                     authenticated user + every org they belong to, with
@@ -256,6 +266,20 @@ render loop.
 
 ## Non-obvious gotchas
 
+- **utmp/wtmp records no user login on this machine, so `last`/`who` are a
+  dead end.** Measured 2026-09-01: `who -a` and `utmpdump /run/utmp` list
+  only `reboot`/`runlevel`, and `last -s "$(uptime -s)"` returns the boot
+  record alone -- while a GUI session was active. The COSMIC greeter path
+  never writes a user utmp record. `w` *does* show the session, which makes
+  this easy to misdiagnose: procps-ng 4.x falls back to logind, so `w`
+  disagreeing with `who`/`last` is expected here, not a broken utmp. The
+  usable source is systemd-logind's journal, matched on the catalog
+  MESSAGE_IDs `8d45620c1a4348dbb17410da57c60c66` (start) /
+  `3354939424b4456d9802ca8333ed424a` (stop), which carry `SESSION_ID`,
+  `USER_ID` and `LEADER` as real fields -- no message-string regex needed.
+  Readable unprivileged, and it works under `desktop-dashboard-serve`'s
+  sandbox (verified with `systemd-run --user` reproducing the unit's real
+  flags, per the `ReadWritePaths` lesson below).
 - **`journalctl --grep` is a full text scan and must never run on the
   request thread.** There is no index for `-g`, so when matches are sparse
   `-n 200` keeps walking backwards hunting a 200th hit that does not exist
@@ -427,18 +451,37 @@ any other script can add panels without touching the server.
 
 ## Current state (2026-08-20)
 
-- **#72 (2026-09-01): the Log panel can finally see a failed login.**
-  Its `Failed login` pattern had never once fired: the source was
-  `journalctl -u ssh` and sshd isn't running on this machine, while local
-  auth failures come from cosmic-greeter/greetd/sudo spread across several
-  units -- including per-session `session-N.scope` names that cannot be
-  hardcoded. The patterns were always correct; only the source was wrong,
-  so the fix is at the source layer (`config.logs.journalctl_matches`,
-  OR'd indexed field matches) rather than by loosening a regex. The
-  tempting alternative -- a system-wide `--grep` -- is 30x-500x too slow
-  for a per-poll read; see gotchas for the measurements. Verified against
-  real data: the 2026-09-01T15:31 greeter failure now reaches the feed,
-  in 86ms. `-serve` needs a **restart**, not a reload, for this to ship.
+- **#71 / #72 (2026-09-01): new Sessions panel, and the Log panel can
+  finally see a failed login.**
+  - **#71:** `lib/sessions.py` + a Sessions panel in the left column under
+    Projects -- who logged in since the last boot, when, from where, and
+    for how long, with ended sessions kept so a login that ran a script and
+    logged out is still visible. The premise that made this cheap: scoping
+    the read with `journalctl -b` *is* the reset-at-boot behaviour, so
+    there is no store, no schema, and nothing to prune. The source finding
+    is the important part and is written up in gotchas -- utmp/wtmp is
+    empty here, so the obvious `last`/`who` implementation would have
+    silently shown nothing. Human-sessions-only is a **uid** filter, not a
+    `Class=user` filter: a closed session has no logind object left to
+    test, but its uid separates the same set and drops the uid-988
+    cosmic-greeter row that opens at every boot. "Still logged in" is
+    decided by logind's roster, never by a missing stop record -- a
+    session logind no longer knows about is over at an unknown time, and
+    is reported with a null duration (`?`) rather than one that grows
+    forever.
+  - **#72:** the Log panel's `Failed login` pattern had never once fired:
+    its source was `journalctl -u ssh` and sshd isn't running here, while
+    local auth failures come from cosmic-greeter/greetd/sudo across several
+    units. The patterns were always right; only the source was wrong.
+    Fixed with OR'd indexed field matches. The tempting fix -- a
+    system-wide `--grep` -- is 30x-500x too slow for a per-poll read; see
+    gotchas.
+  - Verified functionally: lint/test/build chain, a `systemd-run --user`
+    probe under the real unit sandbox flags, and a live check that the
+    2026-09-01T15:31 greeter failure now reaches the Log feed. **Not yet
+    eyeballed on the live desktop**, and note `-serve` needs a
+    **restart**, not a reload, for either change to ship (see gotchas).
+
 - **#66 (2026-08-27): custom right-click context menu.** Follow-on to #36 --
   right-click now reaches the page, so it gets our own themed menu instead
   of WebKit's default (Reload / Inspect Element / Open Frame in New Window

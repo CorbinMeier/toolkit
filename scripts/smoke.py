@@ -78,8 +78,8 @@ def main() -> int:
 
         state = json.loads(get("/api/state"))
         check("state has all top-level keys",
-              {"ts", "config", "weather", "sys", "projects", "tasks", "logs",
-               "extra"}
+              {"ts", "config", "weather", "sys", "projects", "sessions",
+               "tasks", "logs", "extra"}
               <= state.keys(), str(sorted(state.keys())))
         # #62: the panel must always get a rows list to iterate, in every
         # state -- pending, unavailable, disabled, or populated. A missing
@@ -88,6 +88,22 @@ def main() -> int:
         check("projects has a rows list",
               isinstance(state["projects"].get("rows"), list),
               state["projects"])
+        # #71: same contract as projects -- a rows list in every state so the
+        # panel always has something to iterate. This one additionally must
+        # not be empty on a machine someone is logged into: the run itself is
+        # happening inside a session, so zero rows means the journal read
+        # broke (permissions, a sandbox flag, a renamed message id) rather
+        # than "nobody has logged in".
+        check("sessions has a rows list",
+              isinstance(state["sessions"].get("rows"), list),
+              state["sessions"])
+        if state["sessions"].get("available"):
+            check("sessions saw the session running this check",
+                  len(state["sessions"]["rows"]) >= 1,
+                  "journal read returned no logins while logged in")
+        else:
+            print("  \033[33mwarn\033[0m sessions unavailable "
+                  f"({state['sessions'].get('error')}) -- skipping row checks")
         check("tasks has an items list",
               isinstance(state["tasks"].get("items"), list), state["tasks"])
         check("logs is a list", isinstance(state["logs"], list), state["logs"])
@@ -217,6 +233,15 @@ def main() -> int:
         # rows than a page holds -- assert existence, not visibility.
         check("projects pager present", 'id="projpager"' in dom,
               "missing Projects pagination controls")
+        # #71: header plus real rows. Unlike Projects there is no cold-cache
+        # branch to tolerate -- the read is synchronous and the machine
+        # running this has a live session -- so an empty grid here is always
+        # a regression.
+        check("sessions section rendered", "Sessions</h2>" in dom,
+              "missing Sessions header")
+        if state["sessions"].get("rows"):
+            check("session rows rendered", "sess-num" in dom,
+                  "state had sessions but the grid is empty")
         # #34: trend graphs are deliberately not shown on the
         # wallpaper anymore (collection continues server-side) -- assert
         # they stay gone rather than silently reappearing on a regression.

@@ -360,6 +360,23 @@
     height:calc(var(--proj-page) * 1.5em + (var(--proj-page) - 1) * 0.28vmin);
     overflow:hidden}
 
+  /* Sessions panel (#71): user | where | login | duration. Same "one grid,
+     so the columns line up top to bottom" principle as .proj-grid/.sys-grid/
+     .kv-grid. The trailing three columns are auto-width and right-aligned
+     with tabular figures, so the times form true columns instead of
+     jittering as "5m" grows into "1h 20m". width:100% rather than
+     fit-content (matching .proj-grid, unlike .sys-grid): the user column is
+     the flexible one, and it is what long names should truncate into. */
+  .sess-grid{display:grid;grid-template-columns:1fr auto auto auto;
+    column-gap:0.9vmin;row-gap:0.28vmin;align-items:baseline;width:100%;
+    line-height:1.5}
+  .sess-grid > .sess-num{text-align:right;font-variant-numeric:tabular-nums}
+  /* A session that is still open is a genuine live status condition, so it
+     takes the region's own accent rather than introducing a hue for this
+     panel -- DESIGN.md's One Accent Per Region Rule. Ended sessions stay
+     neutral ink: they are history, not a signal. */
+  .sess-grid > .sess-live{color:var(--color-accent)}
+
   /* Control Button (#36) -- the system's first interactive affordance.
      DESIGN.md's shape language has no rounded-rectangle vocabulary, so
      these are sharp-cornered; and since glow is reserved for a real status
@@ -649,6 +666,40 @@
           <button id="projnext" type="button" class="ctl-btn"
                   aria-label="Next page of repositories">NEXT</button>
         </div>
+      </div>
+    </section>
+
+    <!-- SESSIONS (#71): who has logged into this machine since it booted --
+         one row per session, ended sessions included. The list is scoped to
+         the current boot (journalctl -b in lib/sessions.py), so a login that
+         opened, ran something, and logged out is still here until the next
+         reboot; that persistence is the panel's whole reason to exist.
+
+         Read from systemd-logind's journal, NOT utmp/wtmp: the COSMIC
+         greeter writes no user utmp record, so `last`/`who` show nothing on
+         this machine and the classic tools are a dead end rather than a
+         fallback (see lib/sessions.py's module docstring for the
+         measurements).
+
+         Still-open sessions render in the region's teal accent; ended ones
+         stay neutral ink. That is the one visual distinction the panel
+         makes, and it reuses System's accent instead of adding a fourth --
+         same call Projects (#62) and Tasks (#25) made, per DESIGN.md's One
+         Accent Per Region Rule.
+
+         Failed login attempts are deliberately NOT here: they belong to the
+         Log panel's highlight feed (#28/#72), which already carries a
+         "Failed login" pattern. -->
+    <section class="accent-cyan flex flex-col min-h-0">
+      <div class="panel px-[2vmin] py-[1.5vmin] flex flex-col gap-[0.6vmin]">
+        <h2 class="sec-head text-faint uppercase tracking-[0.3em] text-[clamp(.55rem,1.15vmin,.8rem)]">
+          Sessions</h2>
+        <!-- No fixed-height fold and no pager here, unlike Projects: the row
+             count is bounded server-side by config.sessions.max_rows, and a
+             machine with a dozen logins in one boot is already the unusual
+             case worth seeing in full. Anything past the cap is reported as
+             a count rather than silently dropped. -->
+        <div id="sessgrid" class="sess-grid text-[clamp(.44rem,.9vmin,.62rem)] num"></div>
       </div>
     </section>
     </div>

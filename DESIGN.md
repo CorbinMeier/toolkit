@@ -135,6 +135,12 @@ The Weather/Forecast panel is the first and, so far, only user: Condition, Temp,
 
 System now expresses the same key-left/value-right idea through its own `.sys-grid` (#57, see Components below) rather than moving to `.kv-grid` itself — a two-column grid (label | value + status bar/chart) carrying a status visualization `.kv-grid`'s plain two-column model has no slot for, plus an optional sub line pinned directly under the value column (`grid-column:2`, #58) for what used to be CPU/MEM/BAT's stacked second line. It shares every other convention `.kv-grid` established: no icons, one font size for every cell. Music still uses its own bespoke layout (cover art + title/artist/progress), not a row grid at all. Calendar stays a literal month grid; it isn't a list of named readings and reorganizing it into key:value rows wouldn't make sense. (Devices used to share System's old icon-led row shape too, but the panel was removed entirely — #56.)
 
+### Session Row Grid (`.sess-grid`, #71)
+
+The Sessions panel's four-column variant of the same idea: `user | where | login | duration`, one grid so the three trailing columns line up top to bottom. Those three are auto-width, right-aligned, and tabular-figured, so a duration growing from `5m` into `1h 20m` doesn't shift its neighbours. Like `.proj-grid` and unlike `.sys-grid`, it takes `width: 100%` rather than `fit-content` — the user column is the flexible one and is what a long name should truncate into.
+
+One state is encoded visually: a session that is **still open** takes the region's own accent (Signal Teal), while ended sessions stay neutral ink. That reuses System's accent rather than introducing a fourth — the One Accent Per Region Rule — and is the panel's only color signal. A session whose end was never recorded renders `?` for its duration rather than `0m`, because the row is real but its span genuinely isn't knowable; inventing a number there would assert something the data can't support.
+
 ## Themes
 
 The system ships two selectable visual themes, toggled via `config.json`'s

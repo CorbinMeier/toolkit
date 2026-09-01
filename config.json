@@ -59,6 +59,12 @@
     "stale_after_days": 90,
     "exclude_owners": []
   },
+  "sessions": {
+    "_comment": "Sessions panel (#71) -- who logged in since the last boot, read from systemd-logind's journal. NOT utmp/wtmp: the COSMIC greeter writes no user utmp record, so `last`/`who` see nothing on this machine. The list resets at every boot because the read is scoped with `journalctl -b`; there is no stored history to prune, unlike metrics.db. min_uid is the retroactive human-sessions-only filter -- a closed session has no logind object left to test Class=user against, but its uid separates the same set, and it drops the uid-988 cosmic-greeter session that opens and closes at every single boot. max_rows caps the panel; 0 disables the cap.",
+    "enabled": true,
+    "min_uid": 1000,
+    "max_rows": 12
+  },
   "weather_alerts": {
     "_comment": "Weather panel highlight (#46). temp_high_f/rain_pct compare directly against weather.temp/precip_prob, which are already in units.temperature/units above -- assumes fahrenheit, matching this config's units. condition_patterns are regex over weather.desc, same {regex, label} shape as logs.patterns above; first match wins.",
     "temp_high_f": 90,

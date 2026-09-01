@@ -688,6 +688,103 @@ function renderProjects(p) {
   });
 }
 
+/* -------------------------------------------------------------- sessions */
+/* Who logged in since the last boot (#71). The server sends the full sorted,
+ * already-filtered row list (active first, then most recent login) and this
+ * renders all of it -- the cap lives in config.sessions.max_rows, so there is
+ * no second, invisible limit here.
+ */
+
+/* Local HH:MM from an epoch seconds value. The date is prefixed only when the
+ * login did not happen today: a boot can span days (four-day uptimes are
+ * normal on this machine), and a bare "20:37" on a row three days old reads as
+ * this evening. Same 24-hour shape hhmm() produces for the weather times. */
+function sessClock(epoch) {
+  if (!epoch) return '—';
+  const d = new Date(epoch * 1000);
+  const hm = `${String(d.getHours()).padStart(2, '0')}:`
+    + `${String(d.getMinutes()).padStart(2, '0')}`;
+  const today = new Date();
+  const sameDay = d.getFullYear() === today.getFullYear()
+    && d.getMonth() === today.getMonth() && d.getDate() === today.getDate();
+  return sameDay ? hm : `${d.getMonth() + 1}/${d.getDate()} ${hm}`;
+}
+
+/* Where the login came from, in the narrowest honest form. Only live sessions
+ * have any of this: logind drops the session object on logout, so an ended row
+ * genuinely has no tty/type to show and gets an em dash rather than a guess. */
+function sessWhere(r) {
+  if (r.remote && r.remote_host) return r.remote_host;
+  return r.tty || r.type || (r.active ? 'session' : '—');
+}
+
+function sessNote(s) {
+  if (s.disabled) return 'disabled in config';
+  if (!s.available) return `unavailable — ${s.error || 'journal unreadable'}`;
+  return null;
+}
+
+function renderSessions(s) {
+  const grid = $('sessgrid');
+  if (!grid) return;
+  grid.replaceChildren();
+  const info = s || { available: false };
+
+  const span = (cls, text) => {
+    const cell = document.createElement('div');
+    // Span every column -- a status line is about the panel, not one session.
+    cell.style.gridColumn = '1 / -1';
+    cell.className = cls;
+    cell.textContent = text;
+    grid.appendChild(cell);
+  };
+
+  const note = sessNote(info);
+  if (note) return span('text-faint truncate', note);
+
+  const rows = info.rows || [];
+  if (!rows.length) return span('text-faint', 'No logins this boot');
+
+  rows.forEach((r) => {
+    const who = document.createElement('div');
+    who.className = r.active ? 'truncate sess-live' : 'truncate text-ink';
+    who.textContent = r.user;
+    const when = r.login_at
+      ? new Date(r.login_at * 1000).toLocaleString()
+      : 'login time unknown';
+    who.title = `${r.user} · session ${r.session_id} · ${when}`
+      + (r.active ? ' · still logged in' : '');
+    grid.appendChild(who);
+
+    const where = document.createElement('div');
+    where.className = 'truncate text-faint';
+    where.textContent = sessWhere(r);
+    grid.appendChild(where);
+
+    const login = document.createElement('div');
+    login.className = 'sess-num text-faint';
+    login.textContent = sessClock(r.login_at);
+    grid.appendChild(login);
+
+    const held = document.createElement('div');
+    held.className = r.active ? 'sess-num sess-live' : 'sess-num text-faint';
+    // A null duration is not zero: the session ended at a moment the journal
+    // never recorded (see lib/sessions.py's ended_unknown). Rendering "0m"
+    // there would assert something the data cannot support.
+    held.textContent = r.duration_s === null || r.duration_s === undefined
+      ? '?' : dur(r.duration_s);
+    held.title = r.ended_unknown
+      ? 'session ended, but no logout was recorded'
+      : `${r.active ? 'logged in for' : 'lasted'} ${dur(r.duration_s || 0)}`;
+    grid.appendChild(held);
+  });
+
+  if (info.truncated) {
+    span('text-faint', `+${info.truncated} more this boot`);
+  }
+  return undefined;
+}
+
 /* -------------------------------------------------------- weather panels */
 // No icons in this card (user request, #41). Spreadsheet-style key:value
 // grid (#50, .kv-grid in index.html) -- Condition/Temp/Feels/High-Low/Wind/
@@ -1107,6 +1204,7 @@ function apply(s) {
   renderMusic(s.music);
   renderCalendar(s.extra);
   renderProjects(s.projects);
+  renderSessions(s.sessions);
   renderLog(s.logs);
   refreshAutoCycles();
 

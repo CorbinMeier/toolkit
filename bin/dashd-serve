@@ -58,6 +58,7 @@ sys.path.insert(0, str(ROOT / "lib"))
 import ghstats  # noqa: E402
 import logsrc  # noqa: E402
 import metrics  # noqa: E402
+import sessions  # noqa: E402
 import sysinfo  # noqa: E402 -- used directly (music_command); tests patch its subprocess
 from sysinfo import (  # noqa: E402,F401 -- re-exported for tests/back-compat
     _disk_tree_from_psutil, battery_charging, disk_tree, now_playing, system_stats,
@@ -485,6 +486,12 @@ def build_state(cfg: dict) -> dict:
         "sys": sys_stats,
         "music": now_playing(),
         "projects": cached_projects(cfg),
+        # Read on the request thread, unlike projects: this one is two local
+        # subprocesses against the journal and logind (~17ms combined), not a
+        # network round trip, so a cache file and a refresh thread would be
+        # more moving parts than the cost they save. Same call logsrc and
+        # now_playing() already make.
+        "sessions": sessions.collect(cfg),
         "tasks": load_tasks(),
         "logs": logsrc.read_log_lines(cfg),
         "extra": extra,

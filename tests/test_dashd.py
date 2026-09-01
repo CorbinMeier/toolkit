@@ -29,6 +29,7 @@ _loader.exec_module(dashd)
 
 # Importable only after dashd-serve has run: it is what puts lib/ on sys.path.
 import logsrc  # noqa: E402
+import sessions  # noqa: E402
 
 
 class TestMoonPhase(unittest.TestCase):
@@ -908,6 +909,175 @@ class TestConfigPatch(unittest.TestCase):
                 self.assertEqual(
                     json.loads(path.read_text())["display"]["theme"],
                     "retro_terminal")
+
+
+class TestSessionPairing(unittest.TestCase):
+    """lib/sessions.pair() -- folding the start/stop journal stream into one
+    record per session."""
+
+    @staticmethod
+    def ev(sid, user, ts, start):
+        return {"session_id": sid, "user": user, "leader": "1",
+                "ts": ts, "start": start}
+
+    def test_start_and_stop_become_one_record(self):
+        recs = sessions.pair([self.ev("3", "corbin", 100.0, True),
+                              self.ev("3", "corbin", 400.0, False)])
+        self.assertEqual(len(recs), 1)
+        self.assertEqual(recs[0]["login_at"], 100.0)
+        self.assertEqual(recs[0]["logout_at"], 400.0)
+
+    def test_reused_session_id_yields_two_records(self):
+        # logind numbers are per-boot and can repeat after a logind restart.
+        # Overwriting by id would silently erase the first login.
+        recs = sessions.pair([self.ev("3", "corbin", 100.0, True),
+                              self.ev("3", "corbin", 200.0, False),
+                              self.ev("3", "guest", 300.0, True),
+                              self.ev("3", "guest", 400.0, False)])
+        self.assertEqual(len(recs), 2)
+        self.assertEqual([r["user"] for r in recs], ["corbin", "guest"])
+        self.assertEqual(recs[0]["logout_at"], 200.0)
+        self.assertEqual(recs[1]["login_at"], 300.0)
+
+    def test_stop_without_start_is_still_reported(self):
+        # Dropping it would under-report a login that demonstrably happened.
+        recs = sessions.pair([self.ev("9", "corbin", 500.0, False)])
+        self.assertEqual(len(recs), 1)
+        self.assertIsNone(recs[0]["login_at"])
+        self.assertEqual(recs[0]["logout_at"], 500.0)
+
+    def test_open_session_has_no_logout(self):
+        recs = sessions.pair([self.ev("3", "corbin", 100.0, True)])
+        self.assertIsNone(recs[0]["logout_at"])
+
+
+class TestSessionShape(unittest.TestCase):
+    NOW = 1_000.0
+
+    def shape(self, events, active, **kw):
+        # Patched so the filter is tested against known uids rather than
+        # whatever accounts happen to exist on the machine running the suite.
+        uids = {"corbin": 1000, "cosmic-greeter": 988, "root": 0}
+        with patch.object(sessions, "_uid_of", lambda u: uids.get(u)):
+            return sessions.shape(events, active, now=self.NOW, **kw)
+
+    @staticmethod
+    def ev(sid, user, ts, start):
+        return {"session_id": sid, "user": user, "leader": "1",
+                "ts": ts, "start": start}
+
+    def test_system_uid_sessions_are_filtered_out(self):
+        out = self.shape([self.ev("1", "cosmic-greeter", 10.0, True),
+                          self.ev("1", "cosmic-greeter", 20.0, False),
+                          self.ev("3", "corbin", 30.0, True)],
+                         {"3": {"tty": "tty1"}})
+        self.assertEqual([r["user"] for r in out["rows"]], ["corbin"])
+
+    def test_unknown_user_is_kept_not_filtered(self):
+        # A session for an account that no longer exists is exactly what this
+        # panel is worth having for, so it must survive the "human" filter.
+        out = self.shape([self.ev("4", "deleted-acct", 30.0, True),
+                          self.ev("4", "deleted-acct", 40.0, False)], {})
+        self.assertEqual([r["user"] for r in out["rows"]], ["deleted-acct"])
+        self.assertIsNone(out["rows"][0]["uid"])
+
+    def test_active_session_duration_runs_to_now(self):
+        out = self.shape([self.ev("3", "corbin", 400.0, True)],
+                         {"3": {"tty": "tty1", "type": "wayland"}})
+        row = out["rows"][0]
+        self.assertTrue(row["active"])
+        self.assertEqual(row["duration_s"], 600)
+        self.assertEqual(row["tty"], "tty1")
+
+    def test_open_record_absent_from_roster_is_ended_with_unknown_duration(self):
+        # The session is over and the journal cannot say when. Reporting it as
+        # active would render a duration that grows forever for a dead session.
+        out = self.shape([self.ev("7", "corbin", 400.0, True)], {})
+        row = out["rows"][0]
+        self.assertFalse(row["active"])
+        self.assertTrue(row["ended_unknown"])
+        self.assertIsNone(row["duration_s"])
+
+    def test_closed_session_duration_is_the_recorded_span(self):
+        out = self.shape([self.ev("3", "corbin", 100.0, True),
+                          self.ev("3", "corbin", 250.0, False)], {})
+        self.assertEqual(out["rows"][0]["duration_s"], 150)
+        self.assertFalse(out["rows"][0]["ended_unknown"])
+
+    def test_active_sorts_above_a_more_recent_ended_session(self):
+        out = self.shape([self.ev("3", "corbin", 100.0, True),
+                          self.ev("5", "corbin", 800.0, True),
+                          self.ev("5", "corbin", 900.0, False)],
+                         {"3": {"tty": "tty1"}})
+        self.assertEqual([r["session_id"] for r in out["rows"]], ["3", "5"])
+        self.assertEqual(out["totals"]["active"], 1)
+
+    def test_ended_sessions_sort_newest_first(self):
+        out = self.shape([self.ev("1", "corbin", 100.0, True),
+                          self.ev("1", "corbin", 150.0, False),
+                          self.ev("2", "corbin", 300.0, True),
+                          self.ev("2", "corbin", 350.0, False)], {})
+        self.assertEqual([r["session_id"] for r in out["rows"]], ["2", "1"])
+
+    def test_max_rows_caps_and_reports_the_remainder(self):
+        events = []
+        for i in range(5):
+            events.append(self.ev(str(i), "corbin", 100.0 + i, True))
+            events.append(self.ev(str(i), "corbin", 200.0 + i, False))
+        out = self.shape(events, {}, max_rows=2)
+        self.assertEqual(len(out["rows"]), 2)
+        self.assertEqual(out["truncated"], 3)
+        # The total still counts what was dropped -- a silent cap would read
+        # as "only two logins this boot".
+        self.assertEqual(out["totals"]["sessions"], 5)
+
+    def test_zero_max_rows_disables_the_cap(self):
+        events = []
+        for i in range(4):
+            events.append(self.ev(str(i), "corbin", 100.0 + i, True))
+            events.append(self.ev(str(i), "corbin", 200.0 + i, False))
+        out = self.shape(events, {}, max_rows=0)
+        self.assertEqual(len(out["rows"]), 4)
+        self.assertEqual(out["truncated"], 0)
+
+
+class TestSessionCollect(unittest.TestCase):
+    def test_disabled_in_config_short_circuits(self):
+        out = sessions.collect({"sessions": {"enabled": False}})
+        self.assertFalse(out["available"])
+        self.assertTrue(out["disabled"])
+        self.assertEqual(out["rows"], [])
+
+    def test_unavailable_journal_degrades_instead_of_raising(self):
+        with patch.object(sessions, "journal_events",
+                          side_effect=sessions.SessionsUnavailableError("nope")):
+            out = sessions.collect({})
+        self.assertFalse(out["available"])
+        self.assertEqual(out["error"], "nope")
+        self.assertEqual(out["rows"], [])
+
+    def test_show_session_blocks_are_keyed_by_their_own_id(self):
+        # loginctl does not emit properties in the -p order requested, so the
+        # parse must key off each block's Id rather than argument position.
+        parsed = sessions._parse_show_blocks(
+            "Id=3\nRemote=no\nType=wayland\n\nId=7\nType=tty\nRemote=yes\n")
+        self.assertEqual(set(parsed), {"3", "7"})
+        self.assertEqual(parsed["3"]["Type"], "wayland")
+        self.assertEqual(parsed["7"]["Remote"], "yes")
+
+    def test_malformed_journal_lines_are_skipped(self):
+        payload = "\n".join([
+            "not json",
+            json.dumps({"SESSION_ID": "3", "USER_ID": "corbin",
+                        "MESSAGE_ID": sessions.START_ID,
+                        "__REALTIME_TIMESTAMP": "1500000000000000"}),
+            json.dumps({"USER_ID": "nobody"}),  # no SESSION_ID
+        ])
+        with patch.object(sessions, "_run", return_value=payload):
+            events = sessions.journal_events()
+        self.assertEqual(len(events), 1)
+        self.assertEqual(events[0]["ts"], 1_500_000_000.0)
+        self.assertTrue(events[0]["start"])
 
 
 class TestLogJournalSource(unittest.TestCase):
