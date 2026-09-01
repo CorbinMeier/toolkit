@@ -46,6 +46,9 @@ DATA = ROOT / "data"
 CONFIG = ROOT / "config.json"
 TOKEN_PATH = DATA / "control_token.txt"
 
+sys.path.insert(0, str(ROOT / "lib"))
+import userconf  # noqa: E402
+
 # Dotted config paths the mobile UI may read/write. Everything else
 # (location, server/control's own host/port, credentials) is unreachable
 # through this API no matter what the request body contains.
@@ -57,18 +60,9 @@ EDITABLE = {
 
 
 def load_config() -> dict:
-    with CONFIG.open() as fh:
-        return json.load(fh)
-
-
-def save_config(cfg: dict) -> None:
-    # Write in place, not tmp-then-rename (#70): ProtectHome=read-only's
-    # single-file ReadWritePaths entry for config.json grants content-level
-    # write to that exact inode, not directory-level write to its parent --
-    # creating a sibling config.json.tmp 500s under the sandboxed unit.
-    # Trade-off: no crash-safety if the write dies mid-flight.
-    with CONFIG.open("w") as fh:
-        fh.write(json.dumps(cfg, indent=2))
+    # Tracked definitions plus this machine's selections -- see
+    # lib/userconf.py. Saves go to data/config.local.json, never config.json.
+    return userconf.load(ROOT)
 
 
 def load_token() -> str:
@@ -108,25 +102,30 @@ def check_token(token: str, supplied: str) -> bool:
     return bool(supplied) and hmac.compare_digest(supplied, token)
 
 
-def merge_patch(cfg: dict, patch: dict) -> list[str]:
-    """Apply `patch` onto `cfg` in place, restricted to EDITABLE. Returns
-    the dotted keys that were rejected as unknown/out-of-scope, so the
-    caller can report a partial-save instead of silently dropping fields.
+def filter_patch(patch: dict) -> tuple[dict, list[str]]:
+    """Split `patch` into the part EDITABLE permits and the dotted keys it
+    doesn't, so the caller can report a rejection instead of silently
+    dropping fields.
+
+    Returns the accepted patch rather than mutating a config dict (#74): the
+    patch itself is what gets persisted, into data/config.local.json, so the
+    stored file stays a set of overrides and never becomes a full snapshot
+    that would freeze the tracked defaults.
     """
-    rejected = []
+    accepted: dict = {}
+    rejected: list[str] = []
     if not isinstance(patch, dict):
-        return ["<patch body>"]
+        return accepted, ["<patch body>"]
     for section, fields in patch.items():
         if section not in EDITABLE or not isinstance(fields, dict):
             rejected.append(section)
             continue
-        cfg.setdefault(section, {})
         for key, value in fields.items():
             if key not in EDITABLE[section]:
                 rejected.append(f"{section}.{key}")
                 continue
-            cfg[section][key] = value
-    return rejected
+            accepted.setdefault(section, {})[key] = value
+    return accepted, rejected
 
 
 class Handler(SimpleHTTPRequestHandler):
@@ -207,9 +206,12 @@ class Handler(SimpleHTTPRequestHandler):
             except json.JSONDecodeError:
                 self._json({"error": "invalid json"}, 400)
                 return
-            cfg = load_config()
-            rejected = merge_patch(cfg, patch)
-            save_config(cfg)
+            accepted, rejected = filter_patch(patch)
+            try:
+                userconf.apply_patch(ROOT, accepted)
+            except OSError as exc:
+                self._json({"error": repr(exc)}, 500)
+                return
             self._json({"ok": True, "rejected": rejected})
             return
 

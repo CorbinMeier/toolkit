@@ -152,14 +152,27 @@ web/control/        standalone mobile control UI served by bin/dashd-control
                     (plain HTML/JS, deliberately not styled to DESIGN.md's
                     Night Ops HUD -- it's a phone-viewed form, not the
                     wallpaper surface)
+lib/userconf.py     two-file config (#74): config.json holds tracked
+                    DEFINITIONS and is never written at runtime; this
+                    machine's SELECTIONS (theme, units, log source) live in
+                    untracked data/config.local.json. load() deep-merges,
+                    local winning; every write path stores ONLY the
+                    overrides, never a full snapshot -- a snapshot would
+                    freeze the defaults so a later config.json edit would
+                    silently stop taking effect. Both units' ReadWritePaths
+                    now grant data/ ONLY, so systemd enforces the
+                    never-written property rather than convention alone
 config.json         location, units, port, display layer, per-output overrides,
                     metrics sample/retain interval, control host/port,
                     log source/patterns (#30), projects refresh/staleness
                     window (#62)
 data/               weather.json cache, extra.json, tasks.json (read but
                     unrendered, #63), metrics.db, projects.json cache
-                    (#62), control_token.txt (all
-                    gitignored)
+                    (#62), control_token.txt, config.local.json (this
+                    machine's selections, #74). All gitignored -- but note
+                    .gitignore lists these files INDIVIDUALLY, it does not
+                    ignore the directory, so a new file here needs its own
+                    entry or it shows up as untracked
 scripts/smoke.py    the "build" stage — end-to-end render assertions
 tests/test_dashd.py unittest suite (hermetic, no network)
 tests/test_control.py unit tests for dashd-control's auth/whitelist logic
@@ -328,6 +341,14 @@ render loop.
   equivalent to write access to its containing directory -- verify with
   `systemd-run` reproducing the real sandbox flags, not just a
   plain-process test.
+  **Resolved at the root by #74**, which stopped writing `config.json`
+  altogether: selections now go to `data/config.local.json`, and `data/`
+  has always had a directory-level grant, so tmp-then-rename works there
+  and the crash-safety #69/#70 gave up is back. `config.json` was dropped
+  from both units' `ReadWritePaths` in the same change -- the sandbox now
+  enforces "never written at runtime" instead of leaving it to convention.
+  The mechanism above is still the thing to know when granting any single
+  file; it just no longer has a live consumer here.
 - **Historical (both resolved by #57's move off `<table>`, kept for the
   general CSS mechanism they document):**
   - A `td`-level `pl-[...]`/`pr-[...]` Tailwind utility class used to
@@ -450,6 +471,27 @@ any other script can add panels without touching the server.
   a screenshot cannot see past their windows.
 
 ## Current state (2026-08-20)
+
+- **#74 (2026-09-01): config.json is definitions; selections moved out.**
+  User ask, raised while merging #71/#72: "This file should contain
+  definitions, but selections (because I change things like the theme
+  often) should be in some sort of user config that is not tracked."
+  `config.json` stays tracked and is now **never written at runtime**;
+  `data/config.local.json` (untracked) holds this machine's selections.
+  `lib/userconf.py` deep-merges the two, local winning, and both write
+  paths -- `dashd-serve`'s `POST /api/config` (#66) and `dashd-control`'s
+  `POST /api/control/config` (#30) -- store only the accepted patch.
+  **Only the overrides, never a full snapshot**: a snapshot would freeze
+  the defaults at write time, so a later `config.json` edit would appear
+  to do nothing, which is a worse failure than the one being fixed.
+  `merge_patch()` became `filter_patch()` in both servers accordingly (it
+  no longer mutates a config dict -- the patch itself is what persists).
+  Dissolves #73 by construction, and the sandbox was tightened to match:
+  `config.json` is gone from both units' `ReadWritePaths`, so systemd now
+  enforces the never-written property. That also restores the crash-safe
+  tmp-then-rename #69/#70 had to abandon, since `data/` is granted at
+  directory level. **Both units need `daemon-reload` + a restart** for
+  the tightened sandbox to take effect.
 
 - **#71 / #72 (2026-09-01): new Sessions panel, and the Log panel can
   finally see a failed login.**

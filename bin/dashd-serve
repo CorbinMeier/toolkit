@@ -59,6 +59,7 @@ import ghstats  # noqa: E402
 import logsrc  # noqa: E402
 import metrics  # noqa: E402
 import sessions  # noqa: E402
+import userconf  # noqa: E402
 import sysinfo  # noqa: E402 -- used directly (music_command); tests patch its subprocess
 from sysinfo import (  # noqa: E402,F401 -- re-exported for tests/back-compat
     _disk_tree_from_psutil, battery_charging, disk_tree, now_playing, system_stats,
@@ -93,25 +94,10 @@ _lock = threading.Lock()
 
 
 def load_config() -> dict:
-    with CONFIG.open() as fh:
-        return json.load(fh)
-
-
-def save_config(cfg: dict) -> None:
-    # Not the usual tmp-write-then-rename: desktop-dashboard-serve.service's
-    # ProtectHome=read-only sandbox only lifts for paths literally named in
-    # ReadWritePaths, and that grant is per-file, not per-directory (#69).
-    # config.json is named there, so writing its *content* in place works --
-    # but a sibling config.json.tmp is a NEW directory entry in the project
-    # root, which stays read-only, so the create step 500s. Staging the tmp
-    # file under data/ (which does allow new files) doesn't help either:
-    # data/ and config.json are separate ReadWritePaths bind mounts, so
-    # renaming across them is a cross-device link (EXDEV), not same-
-    # filesystem-atomic. Both failure modes confirmed empirically against
-    # the real unit sandbox before landing this. A crash mid-write can still
-    # leave a truncated config.json under this sandbox; that risk is judged
-    # acceptable given how rarely this path writes (a manual theme pick).
-    CONFIG.write_text(json.dumps(cfg, indent=2))
+    # Tracked definitions from config.json, with this machine's selections
+    # (theme, units, log source) layered on top from the untracked
+    # data/config.local.json -- see lib/userconf.py for why the split exists.
+    return userconf.load(ROOT)
 
 
 # Dotted config paths the wallpaper's own context menu (#66) may write.
@@ -123,25 +109,30 @@ EDITABLE = {
 }
 
 
-def merge_patch(cfg: dict, patch: dict) -> list[str]:
-    """Apply `patch` onto `cfg` in place, restricted to EDITABLE. Returns
-    the dotted keys that were rejected as unknown/out-of-scope, so the
-    caller can report a partial-save instead of silently dropping fields.
+def filter_patch(patch: dict) -> tuple[dict, list[str]]:
+    """Split `patch` into the part EDITABLE permits and the dotted keys it
+    doesn't, so the caller can report a rejection instead of silently
+    dropping fields.
+
+    Returns the accepted patch rather than mutating a config dict (#74): the
+    patch itself is what gets persisted, into data/config.local.json, so the
+    stored file stays a set of overrides and never becomes a full snapshot
+    that would freeze the tracked defaults.
     """
-    rejected = []
+    accepted: dict = {}
+    rejected: list[str] = []
     if not isinstance(patch, dict):
-        return ["<patch body>"]
+        return accepted, ["<patch body>"]
     for section, fields in patch.items():
         if section not in EDITABLE or not isinstance(fields, dict):
             rejected.append(section)
             continue
-        cfg.setdefault(section, {})
         for key, value in fields.items():
             if key not in EDITABLE[section]:
                 rejected.append(f"{section}.{key}")
                 continue
-            cfg[section][key] = value
-    return rejected
+            accepted.setdefault(section, {})[key] = value
+    return accepted, rejected
 
 
 # ---------------------------------------------------------------- moon phase
@@ -598,13 +589,14 @@ class Handler(SimpleHTTPRequestHandler):
             self._json({"error": "bad request body"}, 400)
             return
         with _lock:
-            cfg = load_config()
-            rejected = merge_patch(cfg, patch)
+            accepted, rejected = filter_patch(patch)
             if rejected:
                 self._json({"error": "out of scope", "rejected": rejected}, 400)
                 return
             try:
-                save_config(cfg)
+                # Writes data/config.local.json only -- config.json is a
+                # tracked definitions file and is never written at runtime.
+                userconf.apply_patch(ROOT, accepted)
             except OSError as exc:
                 self._json({"error": repr(exc)}, 500)
                 return

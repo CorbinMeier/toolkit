@@ -5,6 +5,12 @@ data/metrics.db
 data/metrics.db-wal
 data/metrics.db-shm
 data/control_token.txt
+# This machine's own selections -- theme, units, log source (#74). Untracked
+# by design: config.json holds the tracked definitions and is never written
+# at runtime, so changing the theme can no longer leave a modified tracked
+# file behind (which used to block --ff-only merges, see #73).
+data/config.local.json
+data/config.local.json.tmp
 # Projects panel cache (#62). Unlike the rest of data/, this is not just
 # machine-local state -- it holds repo names and issue counts for every
 # private org the gh token can see, so it must never be committed.

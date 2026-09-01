@@ -30,6 +30,7 @@ _loader.exec_module(dashd)
 # Importable only after dashd-serve has run: it is what puts lib/ on sys.path.
 import logsrc  # noqa: E402
 import sessions  # noqa: E402
+import userconf  # noqa: E402
 
 
 class TestMoonPhase(unittest.TestCase):
@@ -646,20 +647,25 @@ class TestConfig(unittest.TestCase):
         would silently make the surface interactive."""
         self.assertIsInstance(dashd.load_config()["display"]["interactive"], bool)
 
-    def test_serve_unit_may_write_config_json(self):
-        """#66's POST /api/config writes config.json via dashd-serve's
-        save_config(). The unit's ProtectHome=read-only sandbox only lifts
-        for paths named in ReadWritePaths -- config.json lives outside
-        data/, the one path already listed, so it needs its own entry or
-        that write 500s under the real systemd unit (#69). Mirrors the
-        entry desktop-dashboard-control.service already carries for the
-        identical write."""
-        unit = BIN.parent.parent / "systemd" / "desktop-dashboard-serve.service"
-        rw_line = next(
-            line for line in unit.read_text().splitlines()
-            if line.startswith("ReadWritePaths=")
-        )
-        self.assertIn("config.json", rw_line)
+    def test_units_may_write_data_but_never_config_json(self):
+        """#74 inverted the #69 grant. config.json now holds tracked
+        definitions only and is never written at runtime -- selections go to
+        data/config.local.json -- so the sandbox should no longer permit
+        writing it. Keeping the old entry would leave the "never written"
+        property enforced by convention alone; dropping it makes systemd
+        enforce it. data/ stays writable, and at DIRECTORY level, which is
+        what allows the tmp-then-rename the single-file grant could not
+        (#69/#70)."""
+        root = BIN.parent.parent
+        for name in ("desktop-dashboard-serve.service",
+                     "desktop-dashboard-control.service"):
+            unit = root / "systemd" / name
+            rw_line = next(
+                line for line in unit.read_text().splitlines()
+                if line.startswith("ReadWritePaths=")
+            )
+            self.assertIn("desktop/data", rw_line, name)
+            self.assertNotIn("config.json", rw_line, name)
 
 
 def _repo(name, open_n, blocked, closed, pushed):
@@ -876,39 +882,135 @@ class TestConfigPatch(unittest.TestCase):
     EDITABLE and #65's MUSIC_COMMANDS -- a request body can never touch a
     field outside EDITABLE, no matter what it contains."""
 
-    def test_editable_field_is_applied(self):
-        cfg = {"display": {"theme": "night_ops"}}
-        rejected = dashd.merge_patch(cfg, {"display": {"theme": "retro_orange"}})
+    def test_editable_field_is_accepted(self):
+        accepted, rejected = dashd.filter_patch(
+            {"display": {"theme": "retro_orange"}})
         self.assertEqual(rejected, [])
-        self.assertEqual(cfg["display"]["theme"], "retro_orange")
+        self.assertEqual(accepted, {"display": {"theme": "retro_orange"}})
 
-    def test_unknown_top_level_section_is_rejected_and_not_applied(self):
-        cfg = {"display": {"theme": "night_ops"}, "server": {"port": 4320}}
-        rejected = dashd.merge_patch(cfg, {"server": {"port": 9999}})
+    def test_unknown_top_level_section_is_rejected_and_not_accepted(self):
+        accepted, rejected = dashd.filter_patch({"server": {"port": 9999}})
         self.assertEqual(rejected, ["server"])
-        self.assertEqual(cfg["server"]["port"], 4320)
+        self.assertEqual(accepted, {})
 
     def test_unknown_field_within_an_editable_section_is_rejected(self):
-        cfg = {"display": {"theme": "night_ops", "transparent": False}}
-        rejected = dashd.merge_patch(
-            cfg, {"display": {"transparent": True}})
+        accepted, rejected = dashd.filter_patch({"display": {"transparent": True}})
         self.assertEqual(rejected, ["display.transparent"])
-        self.assertFalse(cfg["display"]["transparent"])
+        self.assertEqual(accepted, {})
 
     def test_non_dict_patch_body_is_rejected_wholesale(self):
-        cfg = {"display": {"theme": "night_ops"}}
-        rejected = dashd.merge_patch(cfg, ["not", "a", "dict"])
+        accepted, rejected = dashd.filter_patch(["not", "a", "dict"])
         self.assertEqual(rejected, ["<patch body>"])
-        self.assertEqual(cfg["display"]["theme"], "night_ops")
+        self.assertEqual(accepted, {})
 
-    def test_save_config_round_trips_through_disk(self):
+
+class TestUserConfig(unittest.TestCase):
+    """lib/userconf -- tracked definitions vs. untracked selections (#74)."""
+
+    def root(self, tmp, base, local=None):
+        root = Path(tmp)
+        (root / "config.json").write_text(json.dumps(base))
+        if local is not None:
+            (root / "data").mkdir(exist_ok=True)
+            (root / "data" / "config.local.json").write_text(json.dumps(local))
+        return root
+
+    def test_local_selections_win_over_tracked_defaults(self):
         with tempfile.TemporaryDirectory() as tmp:
-            path = Path(tmp) / "config.json"
-            with patch.object(dashd, "CONFIG", path):
-                dashd.save_config({"display": {"theme": "retro_terminal"}})
-                self.assertEqual(
-                    json.loads(path.read_text())["display"]["theme"],
-                    "retro_terminal")
+            root = self.root(tmp, {"display": {"theme": "night_ops"}},
+                             {"display": {"theme": "retro_orange"}})
+            self.assertEqual(userconf.load(root)["display"]["theme"],
+                             "retro_orange")
+
+    def test_merge_is_deep_so_siblings_survive(self):
+        # A shallow merge would drop `layer` when only `theme` is overridden,
+        # silently reverting an unrelated setting.
+        with tempfile.TemporaryDirectory() as tmp:
+            root = self.root(tmp,
+                             {"display": {"theme": "night_ops",
+                                          "layer": "BOTTOM"}},
+                             {"display": {"theme": "retro_terminal"}})
+            display = userconf.load(root)["display"]
+            self.assertEqual(display["theme"], "retro_terminal")
+            self.assertEqual(display["layer"], "BOTTOM")
+
+    def test_lists_replace_wholesale_rather_than_merging(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = self.root(tmp, {"logs": {"patterns": [1, 2, 3]}},
+                             {"logs": {"patterns": [9]}})
+            self.assertEqual(userconf.load(root)["logs"]["patterns"], [9])
+
+    def test_stored_file_holds_only_overrides_not_a_snapshot(self):
+        # The property that keeps config.json's defaults live: a full copy
+        # would freeze them, so a later edit there would stop taking effect.
+        with tempfile.TemporaryDirectory() as tmp:
+            root = self.root(tmp, {"display": {"theme": "night_ops"},
+                                   "server": {"port": 4320}})
+            userconf.apply_patch(root, {"display": {"theme": "retro_orange"}})
+            stored = json.loads(userconf.local_path(root).read_text())
+            self.assertEqual(stored, {"display": {"theme": "retro_orange"}})
+            self.assertNotIn("server", stored)
+
+    def test_a_later_default_change_still_reaches_the_running_app(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = self.root(tmp, {"display": {"theme": "night_ops"},
+                                   "server": {"port": 4320}})
+            userconf.apply_patch(root, {"display": {"theme": "retro_orange"}})
+            # Someone edits the tracked defaults afterwards.
+            (root / "config.json").write_text(json.dumps(
+                {"display": {"theme": "night_ops"}, "server": {"port": 9999}}))
+            cfg = userconf.load(root)
+            self.assertEqual(cfg["server"]["port"], 9999)      # default moved
+            self.assertEqual(cfg["display"]["theme"], "retro_orange")  # kept
+
+    def test_config_json_is_never_written(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = self.root(tmp, {"display": {"theme": "night_ops"}})
+            before = (root / "config.json").read_bytes()
+            userconf.apply_patch(root, {"display": {"theme": "retro_terminal"}})
+            self.assertEqual((root / "config.json").read_bytes(), before)
+
+    def test_written_file_ends_with_a_newline(self):
+        # #73: json.dumps omits it, and its absence is what left a tracked
+        # file permanently modified. Asserted on bytes -- a parsed round trip
+        # cannot see a missing final byte.
+        with tempfile.TemporaryDirectory() as tmp:
+            root = self.root(tmp, {"display": {}})
+            userconf.apply_patch(root, {"display": {"theme": "retro_orange"}})
+            self.assertTrue(
+                userconf.local_path(root).read_bytes().endswith(b"\n"))
+
+    def test_no_temp_file_is_left_behind(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = self.root(tmp, {"display": {}})
+            userconf.apply_patch(root, {"display": {"theme": "retro_orange"}})
+            leftovers = list((root / "data").glob("*.tmp"))
+            self.assertEqual(leftovers, [])
+
+    def test_missing_local_file_is_not_an_error(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = self.root(tmp, {"display": {"theme": "night_ops"}})
+            self.assertEqual(userconf.load(root)["display"]["theme"],
+                             "night_ops")
+
+    def test_corrupt_local_file_degrades_to_the_defaults(self):
+        # A broken selections file must not take the whole dashboard down:
+        # the tracked defaults alone are a complete, working configuration.
+        with tempfile.TemporaryDirectory() as tmp:
+            root = self.root(tmp, {"display": {"theme": "night_ops"}})
+            (root / "data").mkdir(exist_ok=True)
+            userconf.local_path(root).write_text("{ not json")
+            self.assertEqual(userconf.load(root)["display"]["theme"],
+                             "night_ops")
+
+    def test_successive_patches_accumulate(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = self.root(tmp, {"display": {}, "units": {}})
+            userconf.apply_patch(root, {"display": {"theme": "retro_orange"}})
+            userconf.apply_patch(root, {"units": {"clock24": False}})
+            stored = json.loads(userconf.local_path(root).read_text())
+            self.assertEqual(stored["display"]["theme"], "retro_orange")
+            self.assertIs(stored["units"]["clock24"], False)
 
 
 class TestSessionPairing(unittest.TestCase):

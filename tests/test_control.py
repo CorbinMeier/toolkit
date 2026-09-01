@@ -2,7 +2,7 @@
 
 Same hermetic philosophy as test_dashd.py: no network, no real HTTP
 server -- the auth/whitelist logic is pulled into plain functions
-(check_token, merge_patch) precisely so it's testable without one.
+(check_token, filter_patch) precisely so it's testable without one.
 """
 from __future__ import annotations
 
@@ -30,38 +30,43 @@ class TestCheckToken(unittest.TestCase):
         self.assertFalse(ctrl.check_token("secret", ""))
 
 
-class TestMergePatch(unittest.TestCase):
-    def test_editable_field_is_applied(self):
-        cfg = {"units": {"temperature": "fahrenheit"}}
-        rejected = ctrl.merge_patch(cfg, {"units": {"temperature": "celsius"}})
-        self.assertEqual(cfg["units"]["temperature"], "celsius")
+class TestFilterPatch(unittest.TestCase):
+    """#74: the patch is filtered, then persisted as overrides to
+    data/config.local.json -- so what matters is which fields survive the
+    whitelist, not what a config dict looks like afterwards."""
+
+    def test_editable_field_is_accepted(self):
+        accepted, rejected = ctrl.filter_patch(
+            {"units": {"temperature": "celsius"}})
+        self.assertEqual(accepted, {"units": {"temperature": "celsius"}})
         self.assertEqual(rejected, [])
 
-    def test_unknown_section_is_rejected_and_untouched(self):
-        cfg = {"server": {"host": "127.0.0.1"}}
-        rejected = ctrl.merge_patch(cfg, {"server": {"host": "0.0.0.0"}})
-        self.assertEqual(cfg["server"]["host"], "127.0.0.1")
+    def test_unknown_section_is_rejected_and_not_accepted(self):
+        accepted, rejected = ctrl.filter_patch({"server": {"host": "0.0.0.0"}})
+        self.assertEqual(accepted, {})
         self.assertEqual(rejected, ["server"])
 
     def test_unknown_key_within_editable_section_is_rejected(self):
-        cfg = {"units": {}}
-        rejected = ctrl.merge_patch(cfg, {"units": {"bogus": "x"}})
-        self.assertNotIn("bogus", cfg["units"])
+        accepted, rejected = ctrl.filter_patch({"units": {"bogus": "x"}})
+        self.assertEqual(accepted, {})
         self.assertEqual(rejected, ["units.bogus"])
 
     def test_logs_section_is_editable(self):
-        cfg = {}
-        rejected = ctrl.merge_patch(cfg, {
-            "logs": {"journalctl_unit": "sshd"},
-        })
+        accepted, rejected = ctrl.filter_patch(
+            {"logs": {"journalctl_unit": "sshd"}})
         self.assertEqual(rejected, [])
-        self.assertEqual(cfg["logs"]["journalctl_unit"], "sshd")
+        self.assertEqual(accepted["logs"]["journalctl_unit"], "sshd")
 
     def test_non_dict_patch_is_wholly_rejected(self):
-        cfg = {}
-        rejected = ctrl.merge_patch(cfg, "not a dict")
+        accepted, rejected = ctrl.filter_patch("not a dict")
         self.assertEqual(rejected, ["<patch body>"])
-        self.assertEqual(cfg, {})
+        self.assertEqual(accepted, {})
+
+    def test_a_partly_valid_patch_keeps_only_the_valid_half(self):
+        accepted, rejected = ctrl.filter_patch(
+            {"units": {"clock24": False, "bogus": 1}, "server": {"port": 1}})
+        self.assertEqual(accepted, {"units": {"clock24": False}})
+        self.assertEqual(sorted(rejected), ["server", "units.bogus"])
 
 
 class TestPairingUrl(unittest.TestCase):

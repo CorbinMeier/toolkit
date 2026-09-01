@@ -12,7 +12,12 @@ RestartSec=3
 # Binds 127.0.0.1 only and reads /proc; needs no elevated access.
 PrivateDevices=yes
 ProtectHome=read-only
-ReadWritePaths=%h/Code/Dashboards/desktop/data %h/Code/Dashboards/desktop/config.json
+# config.json is deliberately NOT writable: it holds tracked definitions
+# and is never written at runtime (#74). Selections go to
+# data/config.local.json, and data/ is granted at DIRECTORY level, which
+# is what lets that write use tmp-then-rename -- the single-file grant
+# this line used to carry could not create a sibling temp file (#69/#70).
+ReadWritePaths=%h/Code/Dashboards/desktop/data
 NoNewPrivileges=yes
 
 [Install]
