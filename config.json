@@ -21,9 +21,17 @@
     "port": 4321
   },
   "logs": {
-    "_comment": "Log-highlighter panel (#28), source editable from the Control Backend. source_type is 'journalctl' or 'file'.",
+    "_comment": "Log-highlighter panel (#28), source editable from the Control Backend. source_type is 'journalctl' or 'file'. journalctl_matches are raw journal field matches, OR'd together -- they match on the PROCESS rather than the unit because local auth failures come from cosmic-greeter/greetd/sudo spread across several units, including per-session session-N.scope names that cannot be hardcoded, so no single unit catches a failed login (#72). Indexed field matches, never --grep: a system-wide grep is a full text scan and measured 4.3s even bounded to 24h, versus 126ms here. journalctl_unit is the Control Backend's phone-editable override and WINS when set -- clear it (null) to return to the broad matches below.",
     "source_type": "journalctl",
-    "journalctl_unit": "ssh",
+    "journalctl_unit": null,
+    "journalctl_matches": [
+      "_COMM=sshd",
+      "_COMM=sudo",
+      "_COMM=su",
+      "_COMM=login",
+      "_COMM=cosmic-greeter",
+      "_COMM=greetd"
+    ],
     "file_path": null,
     "max_lines": 200,
     "patterns": [

@@ -74,9 +74,19 @@ lib/sysinfo.py      shared psutil sampling (system_stats() for dashd-serve's
                     playing/paused or playerctl isn't installed
 lib/metrics.py      SQLite historical-metrics store (cpu/mem/battery_pct);
                     self-migrates ALTER TABLE ADD COLUMN for an older DB
-lib/logsrc.py       filtered/highlighted log tailing (#28): journalctl unit
-                    or arbitrary file, matched against config.logs.patterns
-                    (regex -> status/label); returns only matched lines
+lib/logsrc.py       filtered/highlighted log tailing (#28): journal or
+                    arbitrary file, matched against config.logs.patterns
+                    (regex -> status/label); returns only matched lines.
+                    The journal source ORs INDEXED FIELD matches
+                    (config.logs.journalctl_matches, e.g. `_COMM=sudo`)
+                    instead of naming one unit, because local auth failures
+                    come from cosmic-greeter/greetd/sudo spread across
+                    several units incl. per-session session-N.scope names,
+                    so no single `-u` sees a failed graphical login (#72).
+                    Never `--grep` -- see gotchas for why, with timings.
+                    config.logs.journalctl_unit still WINS when set: it's
+                    the Control Backend's phone-editable narrowing, and a
+                    control that silently did nothing would be a defect
 lib/ghstats.py      GitHub per-repo issue stats for Projects (#62). ONE
                     aliased `gh api graphql` document covers the
                     authenticated user + every org they belong to, with
@@ -246,6 +256,19 @@ render loop.
 
 ## Non-obvious gotchas
 
+- **`journalctl --grep` is a full text scan and must never run on the
+  request thread.** There is no index for `-g`, so when matches are sparse
+  `-n 200` keeps walking backwards hunting a 200th hit that does not exist
+  and effectively scans the whole journal. Measured on this box: **60s+**
+  unbounded, still **4.3s** bounded to `--since -24h`, versus **126ms** for
+  the equivalent OR'd indexed field matches
+  (`_COMM=sudo + _COMM=sshd + ...`), which return the same auth lines. At a
+  5-second poll the first two are not options -- hence
+  `config.logs.journalctl_matches` (#72). Related ordering trap: plain `-n`
+  returns oldest-first but `-n` **with** `--grep` returns newest-first, so
+  `lib/logsrc.py` passes `-r` unconditionally and reverses once in Python
+  rather than depending on which form is in play.
+
 - **A `bin/dashd-serve`/`bin/dashd-collect` code change does not take effect
   until that unit is *restarted*, not just reloaded.** `scripts/update-
   desktop.sh` (`pnpm run deploy`) only `systemctl --user reload desktop-
@@ -404,6 +427,18 @@ any other script can add panels without touching the server.
 
 ## Current state (2026-08-20)
 
+- **#72 (2026-09-01): the Log panel can finally see a failed login.**
+  Its `Failed login` pattern had never once fired: the source was
+  `journalctl -u ssh` and sshd isn't running on this machine, while local
+  auth failures come from cosmic-greeter/greetd/sudo spread across several
+  units -- including per-session `session-N.scope` names that cannot be
+  hardcoded. The patterns were always correct; only the source was wrong,
+  so the fix is at the source layer (`config.logs.journalctl_matches`,
+  OR'd indexed field matches) rather than by loosening a regex. The
+  tempting alternative -- a system-wide `--grep` -- is 30x-500x too slow
+  for a per-poll read; see gotchas for the measurements. Verified against
+  real data: the 2026-09-01T15:31 greeter failure now reaches the feed,
+  in 86ms. `-serve` needs a **restart**, not a reload, for this to ship.
 - **#66 (2026-08-27): custom right-click context menu.** Follow-on to #36 --
   right-click now reaches the page, so it gets our own themed menu instead
   of WebKit's default (Reload / Inspect Element / Open Frame in New Window

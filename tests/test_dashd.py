@@ -27,6 +27,9 @@ _spec = importlib.util.spec_from_loader("dashd_serve", _loader)
 dashd = importlib.util.module_from_spec(_spec)
 _loader.exec_module(dashd)
 
+# Importable only after dashd-serve has run: it is what puts lib/ on sys.path.
+import logsrc  # noqa: E402
+
 
 class TestMoonPhase(unittest.TestCase):
     def test_known_new_moon_is_new(self):
@@ -905,6 +908,84 @@ class TestConfigPatch(unittest.TestCase):
                 self.assertEqual(
                     json.loads(path.read_text())["display"]["theme"],
                     "retro_terminal")
+
+
+class TestLogJournalSource(unittest.TestCase):
+    """lib/logsrc journal source *selection* (#72) -- distinct from
+    TestLogSource above, which covers read_log_lines' filtering."""
+
+    MATCHES = ["_COMM=sudo", "_COMM=sshd"]
+
+    def test_explicit_unit_wins_over_the_broad_matches(self):
+        # The Control Backend's phone-editable unit field must still narrow
+        # the feed, otherwise it is a control that silently does nothing.
+        argv = logsrc._journalctl_argv(
+            {"journalctl_unit": "ssh", "journalctl_matches": self.MATCHES}, 50)
+        self.assertIn("-u", argv)
+        self.assertIn("ssh", argv)
+        self.assertNotIn("_COMM=sudo", argv)
+
+    def test_matches_are_ord_together_when_no_unit_is_set(self):
+        argv = logsrc._journalctl_argv(
+            {"journalctl_unit": None, "journalctl_matches": self.MATCHES}, 50)
+        self.assertEqual(argv[-3:], ["_COMM=sudo", "+", "_COMM=sshd"])
+        self.assertNotIn("-u", argv)
+
+    def test_ordering_is_forced_rather_than_inherited(self):
+        # -n alone is oldest-first, but -n with --grep is newest-first;
+        # depending on which would invert the panel on a source change.
+        argv = logsrc._journalctl_argv({"journalctl_matches": ["_COMM=sudo"]}, 50)
+        self.assertIn("-r", argv)
+
+    def test_never_uses_grep(self):
+        # A system-wide --grep is a full text scan: measured 4.3s bounded to
+        # 24h versus 126ms for indexed matches, and this runs per poll.
+        argv = logsrc._journalctl_argv({"journalctl_matches": ["_COMM=sudo"]}, 50)
+        self.assertNotIn("-g", argv)
+        self.assertNotIn("--grep", argv)
+
+    def test_match_that_could_become_a_flag_is_rejected(self):
+        # "-f" would start a follow that never returns, hanging the request
+        # thread. Validated as FIELD=value rather than trusted.
+        kept = logsrc.journal_matches(
+            {"journalctl_matches": ["-f", "--output=cat", "_COMM=sudo",
+                                    "lowercase=x", 7, None]})
+        self.assertEqual(kept, ["_COMM=sudo"])
+
+    def test_no_source_configured_returns_none(self):
+        self.assertIsNone(logsrc._journalctl_argv({"journalctl_unit": None}, 50))
+        self.assertIsNone(logsrc._journalctl_argv({}, 50))
+
+    def test_lines_are_reversed_back_to_most_recent_last(self):
+        proc = type("P", (), {"stdout": "newest\nmiddle\noldest\n"})()
+        with patch.object(logsrc.subprocess, "run", return_value=proc):
+            lines = logsrc._journalctl_lines(["journalctl"])
+        self.assertEqual(lines, ["oldest", "middle", "newest"])
+
+    def test_shipped_config_matches_cover_the_local_login_path(self):
+        # #72's actual defect: the shipped source could not see a failed
+        # graphical login because cosmic-greeter/greetd log outside `ssh`.
+        cfg = json.loads(
+            (Path(__file__).resolve().parent.parent / "config.json").read_text())
+        kept = logsrc.journal_matches(cfg["logs"])
+        self.assertIn("_COMM=cosmic-greeter", kept)
+        self.assertIn("_COMM=greetd", kept)
+        self.assertIsNone(cfg["logs"]["journalctl_unit"],
+                          "a set unit would override the broad matches")
+
+    def test_failed_login_pattern_matches_a_real_pam_line(self):
+        # Verbatim from this machine's journal, 2026-09-01T15:31:04.
+        line = ("2026-09-01T15:31:04-07:00 cosmic-greeter[3190]: "
+                "pam_unix(cosmic-greeter:auth): authentication failure; "
+                "logname=corbin uid=1000 euid=1000 tty= ruser= rhost=  "
+                "user=corbin")
+        cfg = json.loads(
+            (Path(__file__).resolve().parent.parent / "config.json").read_text())
+        with patch.object(logsrc, "_journalctl_lines", return_value=[line]):
+            matched = logsrc.read_log_lines(cfg)
+        self.assertEqual(len(matched), 1)
+        self.assertEqual(matched[0]["status"], "critical")
+        self.assertEqual(matched[0]["label"], "Failed login")
 
 
 if __name__ == "__main__":
