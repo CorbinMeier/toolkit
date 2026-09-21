@@ -1,19 +1,16 @@
-# Desktop Dashboard
+# Desktop Dashboard - live HTML rendered as the COSMIC/Wayland desktop wallpaper
 
-Live HTML rendered as the desktop wallpaper on COSMIC/Wayland — weather,
-forecast, sun/moon, system stats (with SQLite-backed history for cpu/mem
-trends, CPU and Memory each rendering a compact three-tier step-line graph
-row; battery has no graphs, #12, #17), and an MPRIS now-playing music panel
-(#26). Not a
-wallpaper image on a timer: a real WebKit view with CSS animation and JS,
-one surface per monitor, sitting below the windows. No digital clock,
-date, or location readout -- the user's own system already shows all
-three (#5, #9). Two halves: System (left) | Forecast — current
-conditions, hourly, week, sun/moon, all one panel (right, #10) — with a
-Log panel (#28) below. The Tasks (#25) and Schedule (#23) panels that
-used to stack under those two are **gone from the frontend** (removed at
-583229d, 2026-08-21); their server-side data sources are still live and
-unrendered — see *Layout* and *Current state*.
+- Stack: system `/usr/bin/python3` + `python3-psutil` at runtime (never `.venv`, which
+  is ruff-only), GTK3 + `GtkLayerShell-0.1` + `WebKit2-4.1`, and plain HTML/CSS/JS with
+  a vendored Tailwind v4 browser build. **No build step.**
+- Visual system: `DESIGN.md` ("The Night Ops HUD") and its `.impeccable/design.json`
+  sidecar. Normative for any visual change, ahead of this file (#13).
+- Topic rules load with the code they describe, in `.claude/rules/`: `host-surface.md`,
+  `services.md`, `lib-sources.md`, `lib-storage-config.md`, `web-panels.md`,
+  `web-styling.md`, `verification.md`.
+- Issue-by-issue history, removed panels and superseded decisions: `.corbin/history.md`.
+
+@scripts/README.md
 
 Four processes:
 
@@ -42,420 +39,99 @@ notched-panel corners, flat-plus-glow elevation, and table-aligned metric
 rows. Read it before any visual change; it's the normative reference, not
 this file (#13).
 
-## Layout
+## Scope
 
-```
-bin/dashd-serve     HTTP server; /api/state merges weather+sys+extra (and
-                    exposes config.metrics_retain_hours so the frontend's
-                    history fetch window tracks it), /api/history reads
-                    lib/metrics.py's stored samples -- read-only against
-                    data/metrics.db, it never writes to it (#14). sys.disks
-                    comes from lsblk (sysinfo.disk_tree()), not just
-                    psutil's mounted-partition view; battery gets a real
-                    charging flag from /sys/class/power_supply (see gotchas).
-                    load_tasks() still merges data/tasks.json in as `tasks`
-                    and extra.json's `schedule` array still rides along in
-                    `extra`, but NOTHING RENDERS EITHER -- both panels were
-                    deleted from web/ (#63). Deliberately kept: the reads
-                    are harmless (missing file is not an error), source-
-                    agnostic, and smoke.py asserts on `tasks`, so dropping
-                    them is a code change with test fallout, not cleanup
-bin/dashd-collect   standalone timer loop (config.metrics_sample_seconds);
-                    the sole writer of data/metrics.db, independent of
-                    whether any view or dashd-serve poll is happening (#14)
-bin/dashd-host      layer-shell surfaces; --list prints monitor names
-lib/sysinfo.py      shared psutil sampling (system_stats() for dashd-serve's
-                    full live snapshot, sample_stats() for dashd-collect's
-                    smaller persisted row) so the two processes can't
-                    measure a metric two different ways. now_playing() (#26)
-                    shells out to `playerctl` for MPRIS now-playing state --
-                    source-agnostic (local player or browser tab, whatever
-                    registers over MPRIS), returns None if nothing is
-                    playing/paused or playerctl isn't installed
-lib/metrics.py      SQLite historical-metrics store (cpu/mem/battery_pct);
-                    self-migrates ALTER TABLE ADD COLUMN for an older DB
-lib/logsrc.py       filtered/highlighted log tailing (#28): journal or
-                    arbitrary file, matched against config.logs.patterns
-                    (regex -> status/label); returns only matched lines.
-                    The journal source ORs INDEXED FIELD matches
-                    (config.logs.journalctl_matches, e.g. `_COMM=sudo`)
-                    instead of naming one unit, because local auth failures
-                    come from cosmic-greeter/greetd/sudo spread across
-                    several units incl. per-session session-N.scope names,
-                    so no single `-u` sees a failed graphical login (#72).
-                    Never `--grep` -- see gotchas for why, with timings.
-                    config.logs.journalctl_unit still WINS when set: it's
-                    the Control Backend's phone-editable narrowing, and a
-                    control that silently did nothing would be a defect
-lib/sessions.py     who logged in since the last boot (#71), read from
-                    systemd-logind's journal -- NOT utmp/wtmp, which carries
-                    no user record on this machine (see gotchas). Pairs the
-                    SESSION_START/_STOP catalog messages by SESSION_ID and
-                    enriches still-open rows from `loginctl`. `journalctl -b`
-                    is the whole reset-at-boot mechanism: no stored history,
-                    nothing to prune, unlike metrics.db. shape() holds the
-                    product decisions (uid filter, sort, ended_unknown) and
-                    is what the tests point at. Degrades to available:False,
-                    same posture as ghstats/now_playing
-lib/ghstats.py      GitHub per-repo issue stats for Projects (#62). ONE
-                    aliased `gh api graphql` document covers the
-                    authenticated user + every org they belong to, with
-                    totalCount-only sub-selections -- measured 1 rate-limit
-                    point of 5000/hr, and no issue node is ever transferred
-                    (stats only, by design). shape() holds every product
-                    decision (sort, staleness filter, actionable = open -
-                    ai_blocked) and is what the tests point at; the fetch
-                    itself is a thin subprocess wrapper. Degrades to
-                    available:False if `gh` is missing/unauthed, same
-                    posture as sysinfo.now_playing() without playerctl
-bin/dashd-control   mobile control server (#30) -- see *Layout*'s process
-                    list above and the docstring at the top of the file for
-                    the token/loopback trust model
-web/index.html      panel structure (Tailwind utility classes); System
-                    renders as three compact .sys-grid CSS grids (not
-                    w-full -- sized to content), one each for CPU/MEM/BAT,
-                    Storage, Network: label | value (+ Utilization Bars/
-                    mini bar/step chart), no icons, one font size (#57).
-                    An optional sub line (CPU temp/freq, MEM used/total,
-                    BAT time-remaining, NET upload rate) sits dash-prefixed
-                    directly under the value, pinned there via
-                    grid-column:2 rather than beside it as a third column
-                    (#58). A row's value takes Weather's alert-badge
-                    treatment (#49) past its hot threshold, replacing the
-                    retired icon-tone signal. Music (#26) is a fourth
-                    System sub-section below Network with its own bespoke
-                    layout (cover art + title/artist/progress, not a row
-                    grid) plus transport controls (#65). It does NOT hide
-                    when idle -- user report: "it should not disappear just
-                    because no media is playing, should just sit idle" --
-                    it shows a placeholder and disables its controls.
-                    A Log panel (#28) follows System/Forecast -- same
-                    notched-panel treatment. Three panels are gone and
-                    stay gone: Devices (#27) removed entirely at #56
-                    ("basically just clutter"), and Tasks (#25) +
-                    Schedule (#23) deleted "for now" at 583229d --
-                    no markup, no renderTasks()/renderSchedule(), even
-                    though the server still serves both feeds (#63)
-web/app.js          all rendering; pure function of last good state.
-                    Two independent trend sources feed the step charts: an
-                    in-memory ring buffer (this session's own /api/state
-                    polls, for the 30s CPU/Memory tier and the Network
-                    chart) and trendHistory (/api/history rows, for every
-                    tier >= 5 minutes). refreshAutoCycles() (called every
-                    apply()) drives any class="auto-cycle" element through a
-                    passive scroll-dwell-reset loop -- the only way to reveal
-                    overflowing panel content on a surface with no pointer
-                    reach (#29); general mechanism only, no shipped panel
-                    opts in yet
-web/vendor/         Tailwind v4 browser build, vendored (no network at runtime)
-web/control/        standalone mobile control UI served by bin/dashd-control
-                    (plain HTML/JS, deliberately not styled to DESIGN.md's
-                    Night Ops HUD -- it's a phone-viewed form, not the
-                    wallpaper surface)
-lib/userconf.py     two-file config (#74): config.json holds tracked
-                    DEFINITIONS and is never written at runtime; this
-                    machine's SELECTIONS (theme, units, log source) live in
-                    untracked data/config.local.json. load() deep-merges,
-                    local winning; every write path stores ONLY the
-                    overrides, never a full snapshot -- a snapshot would
-                    freeze the defaults so a later config.json edit would
-                    silently stop taking effect. Both units' ReadWritePaths
-                    now grant data/ ONLY, so systemd enforces the
-                    never-written property rather than convention alone
-config.json         location, units, port, display layer, per-output overrides,
-                    metrics sample/retain interval, control host/port,
-                    log source/patterns (#30), projects refresh/staleness
-                    window (#62)
-data/               weather.json cache, extra.json, tasks.json (read but
-                    unrendered, #63), metrics.db, projects.json cache
-                    (#62), control_token.txt, config.local.json (this
-                    machine's selections, #74). All gitignored -- but note
-                    .gitignore lists these files INDIVIDUALLY, it does not
-                    ignore the directory, so a new file here needs its own
-                    entry or it shows up as untracked
-scripts/smoke.py    the "build" stage — end-to-end render assertions
-tests/test_dashd.py unittest suite (hermetic, no network)
-tests/test_control.py unit tests for dashd-control's auth/whitelist logic
-systemd/            the four user units (dashd-control's not yet enabled)
-```
+Status: DRAFT - not approved
 
-## Running and editing
+### Non-goals
+- No digital clock, date, or location readout: the system's own panel shows all
+  three (#5, #9).
+- No Devices panel (removed at #56), and no Tasks or Schedule panel in the frontend
+  (deleted at 583229d). Their server-side feeds deliberately stay (#63).
+- No network access at runtime from `web/` - Tailwind is vendored for this reason.
+- No sudo and no new system packages: everything used already ships on this machine.
+- Not a wallpaper image on a timer, and not a general desktop widget framework.
 
-```bash
-systemctl --user status desktop-dashboard-serve desktop-dashboard-collect desktop-dashboard-host
-systemctl --user reload desktop-dashboard-host   # SIGHUP → reload all views
-journalctl --user -u desktop-dashboard-host -n 30
-```
+### Surfaces
+#### Wallpaper surface - `bin/dashd-host`, one per output [live]
+- BOTTOM layer-shell: above `cosmic-bg`, below every normal window.
+- Pointer-interactive (`display.interactive`, default true); keyboard mode stays `NONE`,
+  so a click never steals focus (#36).
+- Right-click opens our own themed context menu: Reload, plus a theme row per
+  `display._theme_options` (#66).
+#### System panel, left half [live]
+- CPU / MEM / BAT, Storage, Network as `.sys-grid` rows with three-tier step graphs
+  for CPU and Memory (#12, #17, #57, #58, #59).
+- Music: MPRIS via `playerctl`, with transport controls; idle shows a placeholder
+  rather than hiding (#26, #65).
+- Projects: per-repo GitHub issue stats, paginated (#62, #64).
+- Sessions: who logged in since the last boot (#71).
+#### Forecast panel, right half [live]
+- Current conditions, hourly, week, sun/moon - one panel (#10).
+#### Log panel, below both [live]
+- Matched and highlighted lines only, never a full tail (#28, #72).
+#### Mobile control surface - `bin/dashd-control` [built, unit not enabled]
+- QR-paired, token-gated config for units/display/logs (#30).
 
-`web/` is plain HTML/CSS/JS with Tailwind compiled in the browser — **there is
-no build step and nothing to bundle**. Edit, then `reload`.
+### External services
+- Open-Meteo: no API key, no auth. Location pinned to Chico, CA (39.72849, -121.83748);
+  IP geolocation returned nulls and is not used.
+- GitHub through `gh` (`lib/ghstats.py`): the authenticated user plus every org they
+  belong to, `totalCount` sub-selections only.
+- Local only, degrading to `available: False` when absent: `playerctl` (MPRIS),
+  `journalctl`, systemd-logind, `lsblk`, `/sys/class/power_supply`.
+- Tracker: GitHub, `CorbinMeier/desktop`.
 
-`scripts/update-desktop.sh` (`pnpm run deploy`) automates that: runs the §6
-lint→test→build chain and, only if every stage is green, `reload`s
-`desktop-dashboard-host` so the change actually shows up on the wallpaper. A
-red chain exits before touching the live surfaces. It never starts/enables a
-unit — that stays behind the Gatekeeper Protocol.
+## Decisions
 
-Preview without touching the desktop. `?static=1` is required — headless
-Chrome's virtual clock never completes a CSS animation, so without it you
-screenshot an all-transparent page and conclude the CSS is broken:
+Anything under `Over:` is off the table: hit a limit, raise it, don't switch.
+Superseded entries move to `.corbin/history.md`.
 
-```bash
-google-chrome --headless=new --disable-gpu --no-sandbox --hide-scrollbars \
-  --window-size=2560,1080 --virtual-time-budget=9000 --screenshot=out.png \
-  'http://127.0.0.1:4320/index.html?static=1&output=DELL%20U2913WM'
-```
+### Surface
+- **BOTTOM layer** - 2026-08-20
+  - Over: BACKGROUND
+  - Why: `cosmic-bg` owns BACKGROUND and draws over it, so the surface is invisible there
+- **Input region covers the whole surface** - 2026-08-27
+  - Over: scoped per-widget click-through rects, and the JS-to-Python rect bridge they need
+  - Why: user - "I don't use my desktop (nothing on my desktop)" (#36)
+- **`display.transparent` = false** - 2026-08-20
+  - Over: the RGBA + backdrop-blur path, which was verified to work
+  - Why: reads poorly against the current wallpaper. One-key flip if that changes
 
-Real desktop capture (no `grim` on this box):
-`cosmic-screenshot --interactive=false --modal=false --notify=false -s <dir>`.
-It grabs the whole 4000x1390 multi-output framebuffer, which has blank dead
-zones because the outputs are offset — that is not a rendering bug. It also
-cannot show the dashboard while windows cover it, since the surface is
-correctly *below* windows; ask the user to look instead.
+### Panels
+- **Devices removed entirely, not hidden** - 2026-08-23
+  - Over: keeping the panel behind a flag
+  - Why: user - "remove devices. its basically just clutter" (#56)
+- **Music never hides when idle** - 2026-08-27
+  - Over: hiding the panel when nothing is playing
+  - Why: user - "it should not disappear just because no media is playing, should just sit idle"
+- **Projects' green is `--color-actionable`** - 2026-08-27
+  - Over: reusing `--color-online`
+  - Why: every theme overrides `--color-online`, which collapsed the triad to two colors
 
-## Verification chain (lint → test → build)
+### Data
+- **`config.json` is tracked definitions; `data/config.local.json` is this machine's
+  selections** - 2026-09-01
+  - Over: one writable `config.json`, and writing a full snapshot instead of the overrides
+  - Why: user - selections like the theme change often and should not be tracked; a
+    snapshot would freeze the defaults (#74)
+- **OR'd indexed journal field matches** - 2026-09-01
+  - Over: a system-wide `journalctl --grep`
+  - Why: measured 126ms against 4.3s bounded and 60s+ unbounded, at a 5s poll (#72)
+- **systemd-logind's journal for logins** - 2026-09-01
+  - Over: utmp/wtmp through `last`/`who`
+  - Why: utmp carries no user record on this machine, so the obvious path shows nothing (#71)
 
-```bash
-npx eslint web/app.js web/control/control.js eslint.config.js   # or: pnpm run lint:js
-.venv/bin/ruff check .                   # or: pnpm run lint:py
-python3 -m unittest discover -s tests    # or: pnpm run test
-python3 scripts/smoke.py                 # or: pnpm run build
-```
+## Open questions
 
-`scripts/smoke.py` is the build stage: nothing compiles here, so the
-equivalent is proving the page renders — it starts the server if needed,
-asserts `/api/state` is well-formed, then renders in headless Chrome and
-asserts the DOM actually populated. It catches what lint and unit tests
-cannot: a JS exception before first paint, a broken Tailwind bundle, a
-renamed state key silently blanking a panel. `--no-browser` skips the Chrome
-pass.
-
-Fresh clone needs the dev tooling restored (both are gitignored):
-
-```bash
-python3 -m venv .venv && .venv/bin/pip install ruff
-pnpm install
-```
-
-**Do not run the app from `.venv`.** The venv exists only for `ruff`; it has
-no `psutil`, so `.venv/bin/python bin/dashd-serve` dies with
-`ModuleNotFoundError`. Runtime is system `/usr/bin/python3` plus the system
-`python3-psutil` — which is what both unit files invoke.
-
-`ruff.toml` carries `extend-include = ["bin/dashd-*"]`. Without it ruff finds
-"no Python files", prints *All checks passed*, and exits 0 having checked
-nothing — a silently-green lint stage. Keep it.
-
-## Environment (verified 2026-08-20, Pop!_OS 24.04 / COSMIC)
-
-- Wayland, `XDG_CURRENT_DESKTOP=COSMIC`, compositor `cosmic-comp`. No X11
-  wallpaper tool applies (feh/hsetroot/xwinwrap/conky are all dead ends), and
-  `cosmic-bg` itself only accepts image files.
-- Stack is GTK3 + `GtkLayerShell-0.1` + `WebKit2-4.1`. There is **no**
-  `gtk4-layer-shell` in the Ubuntu 24.04 repos, so GTK4 is not an option.
-  All three typelibs plus `psutil` and Chrome already ship on this machine —
-  **no sudo was needed for any of this**, and none should be.
-- Outputs are reported by GDK in **logical** px: the laptop eDP-1 is 1920x1200
-  physical but presents as `1440x900 @0,490` with `scale=1`, and its
-  `get_model()` is `"Unknown"` — hence the `monitor-N` fallback in
-  `monitor_name()`. The Dell is `2560x1080 @1440,0`.
-
-## The layer choice is the whole trick
-
-`cosmic-bg` owns the **BACKGROUND** layer. A layer-shell surface placed there
-maps fine, paints fine, and receives frame callbacks at ~30fps — but
-`cosmic-bg` draws over it, so it is **invisible**. This cost a full diagnostic
-cycle: the "frozen clock" seen on the desktop was `cosmic-bg` still showing a
-static PNG, not our stalled surface.
-
-Use **BOTTOM**: above `cosmic-bg`, below every normal window. A test in
-`tests/test_dashd.py` asserts the config never regresses to `BACKGROUND`.
-
-Frame scheduling was measured with a `requestAnimationFrame` vs `setInterval`
-counter probe — rAF only advances if the compositor is actually scheduling
-frames — at a steady 30fps on both layers. **Rendering was never the problem;**
-if something looks frozen again, suspect z-order or a stale process, not the
-render loop.
-
-## Non-obvious gotchas
-
-- **utmp/wtmp records no user login on this machine, so `last`/`who` are a
-  dead end.** Measured 2026-09-01: `who -a` and `utmpdump /run/utmp` list
-  only `reboot`/`runlevel`, and `last -s "$(uptime -s)"` returns the boot
-  record alone -- while a GUI session was active. The COSMIC greeter path
-  never writes a user utmp record. `w` *does* show the session, which makes
-  this easy to misdiagnose: procps-ng 4.x falls back to logind, so `w`
-  disagreeing with `who`/`last` is expected here, not a broken utmp. The
-  usable source is systemd-logind's journal, matched on the catalog
-  MESSAGE_IDs `8d45620c1a4348dbb17410da57c60c66` (start) /
-  `3354939424b4456d9802ca8333ed424a` (stop), which carry `SESSION_ID`,
-  `USER_ID` and `LEADER` as real fields -- no message-string regex needed.
-  Readable unprivileged, and it works under `desktop-dashboard-serve`'s
-  sandbox (verified with `systemd-run --user` reproducing the unit's real
-  flags, per the `ReadWritePaths` lesson below).
-- **`journalctl --grep` is a full text scan and must never run on the
-  request thread.** There is no index for `-g`, so when matches are sparse
-  `-n 200` keeps walking backwards hunting a 200th hit that does not exist
-  and effectively scans the whole journal. Measured on this box: **60s+**
-  unbounded, still **4.3s** bounded to `--since -24h`, versus **126ms** for
-  the equivalent OR'd indexed field matches
-  (`_COMM=sudo + _COMM=sshd + ...`), which return the same auth lines. At a
-  5-second poll the first two are not options -- hence
-  `config.logs.journalctl_matches` (#72). Related ordering trap: plain `-n`
-  returns oldest-first but `-n` **with** `--grep` returns newest-first, so
-  `lib/logsrc.py` passes `-r` unconditionally and reverses once in Python
-  rather than depending on which form is in play.
-
-- **A `bin/dashd-serve`/`bin/dashd-collect` code change does not take effect
-  until that unit is *restarted*, not just reloaded.** `scripts/update-
-  desktop.sh` (`pnpm run deploy`) only `systemctl --user reload desktop-
-  dashboard-host` on a green chain -- by design, `reload` is the one always-
-  safe verb (SIGHUP re-render of an already-running surface), while
-  restarting `-serve`/`-collect` is deliberately left out of the automated
-  deploy path. This bit #46/#47: `weather_alert()` was merged and deployed,
-  but the long-running `desktop-dashboard-serve` process kept executing the
-  pre-merge code in memory (a Python `systemctl reload` doesn't re-exec the
-  interpreter), so `/api/state`'s `weather.alert` was silently absent until
-  a manual `systemctl --user restart desktop-dashboard-serve`. Any change to
-  `bin/dashd-serve` or `bin/dashd-collect` (not `web/`) needs an explicit
-  restart of that unit to actually ship -- `reload`ing `-host` alone is not
-  enough and will not error, it just keeps serving stale logic.
-- **A single-file `ReadWritePaths` entry under `ProtectHome=read-only` does
-  not permit a tmp-then-rename write.** `#69` diagnosed `dashd-serve`'s
-  `POST /api/config` 500ing with `OSError(30, 'Read-only file system')`
-  under the sandboxed unit, and was first "fixed" (164f745) by adding
-  `config.json` to `desktop-dashboard-serve.service`'s `ReadWritePaths` --
-  matching `dashd-control`'s unit, which already had it. That fix didn't
-  actually work: a `ReadWritePaths` entry naming one file grants
-  content-level write to that exact inode, not directory-level write to
-  its parent, so creating the sibling `config.json.tmp` still fails (and
-  staging the tmp under `data/`, which does have a directory-level entry,
-  then renaming across also fails with `EXDEV` -- separate
-  `ReadWritePaths` entries are separate bind mounts). A follow-up commit
-  fixed `dashd-serve`'s `save_config()` to write `CONFIG` in place
-  (no tmp+rename), still under `#69`. `dashd-control`'s `save_config()`
-  carried the identical latent bug -- never exercised, since its unit
-  isn't enabled -- and got the same in-place-write fix under `#70`.
-  Trade-off both accept: no crash-safety if the write dies mid-flight.
-  General lesson: a systemd `ReadWritePaths` grant on a file path is not
-  equivalent to write access to its containing directory -- verify with
-  `systemd-run` reproducing the real sandbox flags, not just a
-  plain-process test.
-  **Resolved at the root by #74**, which stopped writing `config.json`
-  altogether: selections now go to `data/config.local.json`, and `data/`
-  has always had a directory-level grant, so tmp-then-rename works there
-  and the crash-safety #69/#70 gave up is back. `config.json` was dropped
-  from both units' `ReadWritePaths` in the same change -- the sandbox now
-  enforces "never written at runtime" instead of leaving it to convention.
-  The mechanism above is still the thing to know when granting any single
-  file; it just no longer has a live consumer here.
-- **Historical (both resolved by #57's move off `<table>`, kept for the
-  general CSS mechanism they document):**
-  - A `td`-level `pl-[...]`/`pr-[...]` Tailwind utility class used to
-    silently do nothing in the System tables: `.sys-table td{padding:0.32vmin
-    0}` (a class+element selector) has *higher* specificity than a
-    single-class Tailwind utility like `.pl-\[0\.9em\]{padding-left:0.9em}`,
-    so the shorthand's `0` left/right padding always won regardless of
-    source order. General lesson: a compound class+element selector beats a
-    single-class utility on specificity regardless of source order — set
-    `element.style.paddingLeft` directly when that matters, don't fight it
-    with another class.
-  - A `<table>` that is a *direct* child of a `flex flex-col` container
-    inherits `align-items: stretch` and gets forced to the container's full
-    cross-axis width even with no `w-full` class anywhere — this used to
-    undo #17's "compact, sized to its own content" sizing for CPU/MEM/BAT's
-    `<table class="sys-table">` specifically (Storage/Network's tables sat
-    one level deeper inside a plain wrapper `<div>`, so the div stretched
-    instead of the table). `.sys-grid{width:fit-content}` (#57) carries the
-    same fix forward for the CSS Grid that replaced the table — the
-    principle applies to any block-level container that's a flex item.
-- **PyGObject version pinning**: `gi.require_version("Gdk", "3.0")` must come
-  before the `from gi.repository import ...` line and before anything pulls in
-  Gtk 4, or the import dies with `Requiring namespace 'Gdk' version '3.0', but
-  '4.0' is already loaded`.
-- **`animation-fill-mode: both` + a stagger delay is a blank-wallpaper
-  hazard.** It parks each panel at `opacity:0` until the animation runs, so
-  anything throttling or disabling animation leaves the desktop empty forever.
-  `apply()` always strips the class back off after 1.6s. Visibility must never
-  depend on an animation completing.
-- **`preserveAspectRatio="none"` distorts SVG text and markers**, not just
-  the path — labels stretch and dots become ellipses. The weather hourly
-  sparkline that used to warrant this note is gone (see #8, `renderHourly`
-  replaced it with a plain list), but `app.js`'s `miniSpark()` deliberately
-  uses `preserveAspectRatio="none"` anyway: it draws a bare path with no
-  text/marker children, so there's nothing for the distortion to hit, and
-  stretching it to exactly fill a fixed small box is the point for a
-  compact inline trend line. Any *new* SVG with text or markers should
-  default to measuring its real pixel box and setting `viewBox` from that
-  instead (1 unit == 1 px), same as the removed sparkline did, re-triggered
-  from the `resize` listener in `apply()`.
-- **The vendored Tailwind v4 browser build only emits an `@theme` token onto
-  `:root` when its scanner sees the token's name inside an HTML class
-  attribute** — a plain utility class (`text-warm`), or the bare `var(...)`
-  name spelled out inside `[...]` arbitrary-value syntax (`border-[var(--x)]`
-  counts; a `var()` reference buried in a separate `<style>` tag or in
-  `app.js` does not, since the scanner never parses those). `--color-warm`
-  was for a long time emitted only as a side effect of the offline banner
-  carrying `text-warm`; recoloring that banner (2026-08-20, cyberpunk
-  restyle) silently broke every *other* `var(--color-warm)` consumer
-  app-wide (sun icon, hot-threshold bars, sparkline gradient, sun arc) until
-  caught by a live `getComputedStyle` check. Fix/pattern: any color token
-  consumed only via plain `var()` — in this stylesheet or in `app.js` — must
-  also be restated in the plain (non-`text/tailwindcss`) `<style>` block's
-  own `:root{}` rule, which the browser parses unconditionally; `@theme`
-  keeps its own copy purely so the Tailwind utility classes that do exist in
-  the markup keep compiling. Both blocks in `web/index.html` now carry the
-  full palette for exactly this reason — don't de-duplicate them.
-- `psutil.sensors_battery()` returns `power_plugged`, not `plugged_in`, and
-  it's AC-present, not charge state — a full battery still left plugged in
-  reports `power_plugged: True` with no current flowing. The battery
-  utilization ring's charging state needs the real thing, so
-  `battery_charging()` reads
-  `/sys/class/power_supply/BAT*/status` (`"Charging"` vs `"Full"` /
-  `"Discharging"` / `"Not charging"`) and only falls back to
-  `power_plugged` when no `BAT*` node exists at all.
-- **`lsblk -J` keys are lowercased column names, including the `%`**:
-  `FSUSE%` becomes JSON key `"fsuse%"`, not `"FSUSE%"` or `"fsuse_pct"`.
-  Whole-disk rows (`type: "disk"`) and swap's `type: "crypt"` child carry no
-  usable `FSUSE%`; `disk_tree()` only emits `type: "part"` rows that have a
-  mountpoint or an `FSUSE%`, which is what keeps a bare, dataless swap slot
-  (`nvme0n1p4` on this machine — the actual swap usage lives on its `crypt`
-  child, not the partition itself) from showing up as a noise row.
-- `pkill -f dashd-serve` **kills the shell running it**, because the pattern
-  matches that shell's own command line. Resolve PIDs with `pgrep` and skip
-  `$$`, or use `systemctl --user stop`.
-- **`CREATE TABLE IF NOT EXISTS` does not add a column to an existing
-  table.** `data/metrics.db` is gitignored and had already been running in
-  production (cpu/mem/net only) by the time `battery_pct` was added to
-  `metrics.COLUMNS` (#12) — the old on-disk table would otherwise 500 on
-  first `INSERT`/`SELECT` referencing it. `metrics._connect()` now diffs
-  `PRAGMA table_info(samples)` against `COLUMNS` and `ALTER TABLE ADD
-  COLUMN`s whatever's missing, every connection. Any *future* `COLUMNS`
-  addition needs nothing more than adding the name to the tuple — the
-  migration is generic — but removing/renaming a column would need real
-  thought (this only ever adds).
-- **A 30-second step-line chart cannot be built from `/api/history`** —
-  samples land there roughly every `metrics_sample_seconds` (30s default),
-  so a 30-second window is 0-1 points. `web/app.js` keeps a separate
-  client-side ring buffer (`ring`, fed from every `/api/state` poll, ~5s)
-  for exactly that tier, plus the Network chart (throughput bursts are
-  brief enough that even 30s DB resolution would flatten them). Anything
-  5 minutes or longer reads from `trendHistory` (`/api/history`) instead,
-  since by then the DB's resolution is fine *and* it survives a page
-  reload, which the in-memory ring buffer does not.
-
-## Data
-
-Open-Meteo, no API key, no auth. Location pinned to Chico, CA
-(39.72849, -121.83748); IP geolocation was tried and returned nulls, so it is
-not used. Weather caches to `data/weather.json` and refetches past its TTL; a
-failed fetch serves the stale cache with `stale: true` rather than raising,
-because old weather beats an error on a wallpaper. The forecast `zip()`s use
-`strict=True` on purpose — misaligned arrays would pair one day's temperature
-with another day's icon, and serving the cache is better than showing that.
-
-`data/extra.json` is merged into `/api/state` verbatim as `extra`, so cron or
-any other script can add panels without touching the server.
+- TBD: #3 - `outputs.<name>.layout` reaches `data-layout` but no CSS keys off it, so
+  both monitors render the same two-column grid.
+- TBD: `display.safe_area_top`/`safe_area_bottom` default to 48px, a guess at COSMIC's
+  panel height, never confirmed against this machine.
+- TBD: #36/#64/#65, #66 and #71/#72 are merged but not yet eyeballed on the live
+  desktop; the human is the final visual check.
+- TBD: `data/devices.json` is a dead file left by #56 and has no `.gitignore` entry -
+  delete it, or ignore it?
 
 ## Conventions
 
@@ -469,348 +145,3 @@ any other script can add panels without touching the server.
 - The human is the final verification step for anything visual. Verify
   functionally first (smoke stage, curl, journal), then ask them to look —
   a screenshot cannot see past their windows.
-
-## Current state (2026-08-20)
-
-- **#74 (2026-09-01): config.json is definitions; selections moved out.**
-  User ask, raised while merging #71/#72: "This file should contain
-  definitions, but selections (because I change things like the theme
-  often) should be in some sort of user config that is not tracked."
-  `config.json` stays tracked and is now **never written at runtime**;
-  `data/config.local.json` (untracked) holds this machine's selections.
-  `lib/userconf.py` deep-merges the two, local winning, and both write
-  paths -- `dashd-serve`'s `POST /api/config` (#66) and `dashd-control`'s
-  `POST /api/control/config` (#30) -- store only the accepted patch.
-  **Only the overrides, never a full snapshot**: a snapshot would freeze
-  the defaults at write time, so a later `config.json` edit would appear
-  to do nothing, which is a worse failure than the one being fixed.
-  `merge_patch()` became `filter_patch()` in both servers accordingly (it
-  no longer mutates a config dict -- the patch itself is what persists).
-  Dissolves #73 by construction, and the sandbox was tightened to match:
-  `config.json` is gone from both units' `ReadWritePaths`, so systemd now
-  enforces the never-written property. That also restores the crash-safe
-  tmp-then-rename #69/#70 had to abandon, since `data/` is granted at
-  directory level. **Both units need `daemon-reload` + a restart** for
-  the tightened sandbox to take effect.
-
-- **#71 / #72 (2026-09-01): new Sessions panel, and the Log panel can
-  finally see a failed login.**
-  - **#71:** `lib/sessions.py` + a Sessions panel in the left column under
-    Projects -- who logged in since the last boot, when, from where, and
-    for how long, with ended sessions kept so a login that ran a script and
-    logged out is still visible. The premise that made this cheap: scoping
-    the read with `journalctl -b` *is* the reset-at-boot behaviour, so
-    there is no store, no schema, and nothing to prune. The source finding
-    is the important part and is written up in gotchas -- utmp/wtmp is
-    empty here, so the obvious `last`/`who` implementation would have
-    silently shown nothing. Human-sessions-only is a **uid** filter, not a
-    `Class=user` filter: a closed session has no logind object left to
-    test, but its uid separates the same set and drops the uid-988
-    cosmic-greeter row that opens at every boot. "Still logged in" is
-    decided by logind's roster, never by a missing stop record -- a
-    session logind no longer knows about is over at an unknown time, and
-    is reported with a null duration (`?`) rather than one that grows
-    forever.
-  - **#72:** the Log panel's `Failed login` pattern had never once fired:
-    its source was `journalctl -u ssh` and sshd isn't running here, while
-    local auth failures come from cosmic-greeter/greetd/sudo across several
-    units. The patterns were always right; only the source was wrong.
-    Fixed with OR'd indexed field matches. The tempting fix -- a
-    system-wide `--grep` -- is 30x-500x too slow for a per-poll read; see
-    gotchas.
-  - Verified functionally: lint/test/build chain, a `systemd-run --user`
-    probe under the real unit sandbox flags, and a live check that the
-    2026-09-01T15:31 greeter failure now reaches the Log feed. **Not yet
-    eyeballed on the live desktop**, and note `-serve` needs a
-    **restart**, not a reload, for either change to ship (see gotchas).
-
-- **#66 (2026-08-27): custom right-click context menu.** Follow-on to #36 --
-  right-click now reaches the page, so it gets our own themed menu instead
-  of WebKit's default (Reload / Inspect Element / Open Frame in New Window
-  ...), suppressed both client-side (`app.js`'s `contextmenu` listener
-  `preventDefault()`s) and host-side (`dashd-host`'s `context-menu` signal
-  handler returns `True`, belt-and-braces). Two items for now: Reload
-  (`location.reload()`) and a Theme row per `display._theme_options`, the
-  active one checked. `menuItems()` is data-driven per the issue's stated
-  direction (a future customizable-panel-layout feature reuses the same
-  list mechanism, not two hardcoded buttons). Theme persists through a new
-  `POST /api/config` on `bin/dashd-serve`, an `EDITABLE`-style
-  whitelist-not-sanitise route mirroring `dashd-control`'s own (only
-  `display.theme` is in it) rather than routing the desktop through the
-  LAN-bound control server -- writing `config.json` means the next poll
-  propagates the theme to every output automatically. The menu itself
-  reuses `.panel` wholesale (same notched clip-path/border/corner-tab) so
-  it re-themes live, which is self-testing since re-theming is one of its
-  own actions. DESIGN.md gained a Context Menu component entry and the
-  Read-Only-By-Default Rule now names the menu as its explicit carve-out
-  (a right-click is an interactive affordance by definition). Verified
-  functionally (unit tests on `merge_patch`/`EDITABLE`, live curl against
-  `/api/config` with both an accepted and a rejected patch, smoke stage);
-  not yet eyeballed live -- `-serve` needs a **restart**, not a reload, for
-  the new POST route to exist (see gotchas), and the WebKit-menu-popping
-  side effect this issue opens with was never confirmed by an actual
-  right-click on the live desktop before this fix, only inferred from the
-  code path.
-- **#36 / #64 / #65 (2026-08-27): the surface is interactive now.** This is
-  the biggest premise change the project has had -- "the wallpaper has no
-  pointer reach" was load-bearing for several design decisions, and it is
-  no longer true.
-  - **#36:** `bin/dashd-host` applies its empty input region only when
-    `display.interactive` is false (new flag, defaults true). Nothing else
-    was needed -- BOTTOM-layer surfaces always could receive pointer
-    events; blanking the region was the only thing stopping them. Verified
-    with a throwaway GTK probe on BOTTOM before any code changed: motion
-    events and 7 clicks arrived. Per the user, the input region covers the
-    **whole surface** rather than the scoped per-widget rects #36's body
-    originally proposed -- "I don't use my desktop (nothing on my
-    desktop)", so there is nothing underneath worth preserving
-    click-through for, and the JS->Python rect bridge is unnecessary.
-    Keyboard mode stays `NONE`: clicking a control does **not** pull focus
-    off the foreground window.
-  - **#64:** Projects paginates instead of auto-cycling. `.proj-scroll`'s
-    `--proj-page` is the single source of truth -- it computes the box
-    height AND is read back by `projPageSize()` for the slice, preserving
-    #62's "the visible row count is one layout fact, not a magic number in
-    two places" property. This retires #29's only shipped consumer; the
-    auto-cycle mechanism itself stays (Music's title marquee still uses
-    the `-x` variant).
-  - **#65:** Music transport controls. `POST /api/music/command` is the
-    first non-GET route in `bin/dashd-serve`; it validates against
-    `sysinfo.MUSIC_COMMANDS` as a **whitelist**, so a request body can
-    never reach `playerctl`'s argv as anything but one of three literals.
-  - **DESIGN.md was rewritten where it asserted the opposite** -- it flatly
-    said "there are no buttons" and "Don't add an interactive affordance".
-    Replaced with a new Control Button component (`.ctl-btn`) and a
-    Read-Only-By-Default Rule: input is allowed but exceptional, a control
-    must do what a passive display cannot, and status elements stay
-    read-only. Do not treat the old text as still normative.
-  - **Not yet eyeballed live.** Verified via the lint/test/build chain and
-    a static headless render; whether the controls feel right at wallpaper
-    distance is the user's call. `-serve` needs a **restart**, not a
-    reload, for the POST route to exist (see gotchas).
-- #63 (2026-08-27): documentation-only correction, no rendering change.
-  This file had gone on describing the Tasks (#25) and Schedule (#23)
-  panels as if they shipped; both were actually deleted from `web/` at
-  583229d (2026-08-21) and never returned -- `scripts/smoke.py` had the
-  truth in a comment the whole time, this file didn't. Intro paragraph,
-  the `web/index.html` Layout entry, and the #25/#23 *Current state*
-  entries now say so. The split that made this confusing is worth
-  remembering: **the frontend went away, the backend did not.**
-  `load_tasks()` still serves `tasks` and `extra.schedule` still passes
-  through, both unrendered. Decided to KEEP them rather than finish the
-  removal -- harmless (a missing file isn't an error), source-agnostic,
-  already asserted by the smoke stage, and they're exactly what a future
-  Tasks panel would need. Ripping them out is a code change with test
-  fallout, so it wants its own issue and its own sign-off, not a
-  drive-by during a doc fix.
-- #62 (2026-08-27): new Projects panel -- per-repo GitHub issue stats, in
-  the left column under System. Three counts per repo, colored by what they
-  ask of the user: RED (`--color-crimson`) = open issues labeled
-  `ai-blocked` (waiting on a human), GREEN (`--color-actionable`) =
-  actionable = `open - ai_blocked`, VIOLET (`--color-done`) = closed. The
-  last two are new palette tokens and no theme overrides them, deliberately
-  -- same "carries meaning, not chrome" reasoning as `--color-crimson`.
-  **The green is not `--color-online`**: that reuse looked obvious and was
-  wrong, because every theme overrides it (retro_orange sets it to
-  `#ff9a2e`), so the "green" column rendered amber under the active theme
-  and collapsed the triad to two colors. Caught by eyeballing the static
-  render, not by any test -- a status color a theme can recolor is not a
-  status color. Reuses System's cyan *panel* accent rather than adding a
-  fourth, same call #25 made.
-  Sort is blocked desc -> actionable desc -> newest push. Plain recency was
-  the initial ask and the real data disproved it before any code was
-  written: it floats 1-issue repos above a 37-issue one, so recency was
-  demoted to a tiebreak. Repos untouched past
-  `config.projects.stale_after_days` (90) are dropped server-side. The card
-  shows 8 rows; `.proj-scroll`'s max-height (not a JS slice) defines that,
-  so the rest is revealed by `refreshAutoCycles()` -- **#29's first shipped
-  consumer**, and exactly the no-pointer-reach case it was built for.
-  Fetch-once semantics per the ask: 6h TTL cached to `data/projects.json`,
-  refreshed on a background thread. Verified functionally (lint/test/build
-  chain, live `/api/state` curl against real GitHub data) and via a static
-  headless render; not yet eyeballed on the live desktop.
-- #59 (2026-08-23, refined 2026-08-24): Network's chart moved off the NET
-  metric row onto its own full-width row beneath it
-  (`.sys-graph{grid-column:1/-1}`), and split from one dual-line box into
-  separate DOWN and UP boxes side by side, each captioned. The NET label
-  row keeps the standard `.sys-grid` shape (#57) so System's columns still
-  line up. `stepChart()` gained an optional `domain` argument: two
-  side-by-side SVGs cannot share a scale implicitly the way two series in
-  one box did, so both boxes are drawn on one domain spanning both series
-  -- without it a 40K/s upload would draw the same shape as a 40M/s
-  download. The charts carry explicit width clamps rather than `w-full`,
-  since `.sys-grid` is `width:fit-content` and a percentage would resolve
-  against whatever the text rows measure. Refined the same day: each box
-  originally captioned itself DOWN/UP with no number, leaving the actual
-  rate stranded in the NET row above with no chart next to it -- the rate
-  now renders directly under its own chart instead (caption, chart,
-  value), and the NET row drops its value/sub once the chart row is
-  showing, so the same two numbers don't render twice. Falls back to a
-  plain label/value/sub row (down as value, up as sub, no charts) under
-  two ring-buffer samples, so the rate stays visible before there's enough
-  history to draw a line.
-- #58 (2026-08-23): follow-up to #57 -- the dash-prefixed sub line (CPU
-  temp/freq, MEM used/total, BAT time-remaining, NET upload rate) moved
-  from a third `.sys-grid` column beside the value onto its own line
-  directly under it (`.sys-sub{grid-column:2}`), matching how this data
-  read before #57. `sysRow()` now omits the sub row entirely (not an
-  empty one) when there's nothing to show, e.g. Storage.
-- #57 (2026-08-23): System (CPU/MEM/BAT, Storage, Network) standardized
-  onto the same conventions Weather's `.kv-grid` settled on (#50-#52):
-  a new `.sys-grid` (label | value+status-bar, sub on its own line
-  under the value -- #58) replaces the old `<table class="sys-table">`
-  icon|label|value|tail row shape. No icons (the cpu/mem/disk/battery/net
-  glyphs and the network up/down arrow glyphs are gone -- `sysIcon()`
-  shrank to just its one remaining live case, sunrise/sunset); one font
-  size for every cell. A row's value gets Weather's `.alert-badge`
-  treatment past its existing hot threshold (CPU/MEM/Storage > 88%,
-  Battery <= 35% unplugged), replacing the retired icon-tone signal.
-  Explicitly kept as-is: the Utilization Bars/mini bar/step chart status
-  visualization itself, now attached to the value cell instead of a
-  separate tail column.
-- #56 (2026-08-23): the Devices panel (#27 and its follow-ups -- remembered-
-  per-network registry, ipv6-first identification, self-pinning) was
-  removed entirely (user: "remove devices. its basically just clutter"),
-  not just hidden. `lib/devices.py`, `scripts/nmap.py` (a standalone
-  on-demand scan script that also depended on it, `pnpm run nmap`),
-  `bin/dashd-serve`'s background nmap-sweep thread and `devices`/
-  `devices_gateway`/`devices_scanning` state keys, `config.json`'s
-  `devices` block, and `bin/dashd-control`/`web/control/control.js`'s
-  devices fields are all gone -- not just the frontend panel. `statusDot()`
-  and the `.spinner`/`--color-offline-dot` CSS were also removed since
-  Devices was their only consumer. `data/devices.json` is no longer
-  written; existing copies on disk are harmless leftovers (gitignored,
-  nothing reads them anymore).
-- #26 (2026-08-20): new Music component -- MPRIS now-playing state via
-  `playerctl` (`lib/sysinfo.now_playing()`), source-agnostic (picks up any
-  local player or browser tab registered over MPRIS, no per-service
-  integration). Merged into `/api/state` as `music` (null when nothing is
-  playing/paused). Renders as a fourth System sub-section below Network,
-  same icon|label|value|tail row shape as CPU/MEM/Storage/Network, and
-  stays hidden entirely rather than showing an empty row when idle.
-  `playerctl` is a system package (`libplayerctl2`/`playerctl`, already
-  installed on this machine) -- if it's ever missing, `now_playing()`
-  degrades to always returning None rather than erroring. Functionally
-  verified (unit tests against a mocked `playerctl` subprocess, smoke
-  stage, live curl against `/api/state` with nothing playing); not
-  visually verified with an actual track playing -- no player had an
-  active track during this session, so eyeball the populated state on the
-  live desktop next time something is playing.
-- #23 (2026-08-20, **REMOVED 2026-08-21 at 583229d** -- deleted "for
-  now", along with Tasks/#25; the `extra.schedule` passthrough it read
-  survives untouched, since `extra` is merged verbatim and isn't
-  schedule-specific. History kept for the design rationale only -- there
-  is no Schedule panel, see #63): new Schedule panel, section below
-  System/Forecast
-  (`accent-crimson`, completing the teal/gold/red triad). Distinct from a
-  full calendar grid -- a compact today's-agenda list (`renderSchedule()` in
-  `web/app.js`), reading `state.extra.schedule` (an array of `{time,
-  title}` rows) through the existing `data/extra.json` passthrough -- no
-  server change needed. Source-agnostic per the issue ("data source TBD
-  during implementation"); renders an empty-state row until something
-  populates `extra.json`. Verified functionally (smoke stage) and visually
-  via a static headless-Chrome render; not checked against the live desktop.
-- #27: added `lib/devices.py` (nmap -sn ping sweep) and a Devices row in the
-  new Monitor panel. Scanning runs off the request thread -- a `/24` sweep
-  can take real seconds, especially if scan_target isn't actually reachable
-  from this host, so dashd-serve kicks it off in a background thread and
-  serves the last-known cache (`data/devices.json`, TTL
-  devices.scan_interval_seconds) rather than blocking /api/state on it.
-- #28: added `lib/logsrc.py` (journalctl unit or file tail, filtered
-  against config.logs.patterns) and a Log row in the Monitor panel --
-  matched/highlighted lines only, not a full tail. Verified end-to-end
-  against a real running unit (NetworkManager) and a temp file source in
-  this session; the shipped default (`journalctl_unit: "ssh"`) is empty on
-  this dev machine since sshd isn't running here, which is correct
-  behavior, not a bug.
-- #30: added `bin/dashd-control`, a LAN-reachable mobile config surface
-  (units/display/logs, whitelisted -- devices was whitelisted too until
-  it was removed at #56) paired via a QR code
-  (`qrencode`, already packaged -- no new dependency). Token-gated past
-  `/api/health`; QR rendering and token rotation are further loopback-only.
-  Its systemd unit exists but is **not enabled** (Gatekeeper Protocol).
-  Verified end-to-end with curl (health/auth/config GET+POST/qr.svg); QR
-  scannability itself relies on `qrencode`'s own correctness rather than an
-  in-session phone scan -- flagging that as unverified-by-a-human, not
-  unverified-at-all.
-- All three original units (`serve`/`collect`/`host`) **enabled and active** against
-  `graphical-session.target`; the dashboard survives logout.
-  `desktop-dashboard-collect` (#14) was linked, approved, and
-  `enable --now`'d in-session — Gatekeeper Protocol satisfied, same as the
-  original two units (#1).
-- `display.transparent` is **false**. The transparent path was verified to
-  work — cosmic-comp does composite an RGBA layer-shell surface over
-  `cosmic-bg`'s wallpaper, backdrop blur included — but it reads poorly
-  against the current black-hole wallpaper, so it was reverted. One-key flip
-  in `config.json` plus a host restart if revisited against calmer imagery.
-- #25 (2026-08-20, **FRONTEND REMOVED 2026-08-21 at 583229d** -- deleted
-  "for now", along with Schedule/#23. The backend half is deliberately
-  still live: `load_tasks()` keeps merging `tasks` into `/api/state` and
-  `scripts/smoke.py` keeps asserting it, with nothing on the page
-  consuming it. History kept for the design rationale only -- there is no
-  Tasks panel, see #63): new Tasks component, a third stacked panel below
-  System/Forecast. Source-agnostic per the issue -- `bin/dashd-serve` reads
-  `data/tasks.json` (`{"items": [{"text","done","due"}]}`) verbatim and
-  merges it into `/api/state` as `tasks`, same read-only passthrough
-  pattern as `extra.json`; no task source/API was wired up, so the panel
-  shows "No tasks" until something (a script, cron, a future integration)
-  writes that file. Reuses System's teal accent rather than adding a
-  fourth color, per DESIGN.md's three-accent palette. Functionally
-  verified (smoke stage against an isolated worktree-local server, port
-  temporarily reassigned) but not visually — same "yours to eyeball"
-  convention as recent System/Forecast work.
-- #17 (2026-08-20): System panel polish. Battery's tier graphs (30M/4H/24H)
-  removed entirely -- not needed, its LED already signals charge state.
-  CPU/MEM's LED is now traffic-light banded off percentage (green below
-  70%, gold 70-89%, red from 90%, flashing from 95%) instead of a fixed
-  hue -- Standby Green's first wired use in the system. Storage icons
-  became a floppy-disk glyph. The LED moved to lead the row, before the
-  icon (was: trailing the label, #16) -- the most immediate signal reads
-  first. CPU/Memory's three time-tier charts (30S/5M/30M) collapsed from
-  three stacked full-width rows into one row of three small side-by-side
-  graphs, each with its own corner labels (tier name left, value range
-  right). All three System tables dropped `w-full` -- compact, sized to
-  their own content instead of stretched to fill the panel (this also
-  surfaced a real `pl-*`/`pr-*`-on-`<td>` specificity bug, see gotchas).
-  See DESIGN.md's Utilization LED and Compact Tier Graph components.
-- #16 (2026-08-20): shrank the CPU/MEM/BAT utilization indicator from a
-  large background ring to a small `0.85em` LED sitting after the row's
-  label text, close to that text's own cap-height. Fill mechanic switched
-  from scale (grows) to opacity (brightens) -- a real LED doesn't grow --
-  and glow blur/spread were capped small so the halo stays proportionate
-  instead of blooming into a blob. See DESIGN.md's Utilization LED
-  component (supersedes #15's ring version).
-- #15 (2026-08-20): CPU/MEM/BAT icons briefly sat inside a two-layer
-  utilization ring (deep-red base + a glowing fill that scaled with
-  percentage; battery used a discrete charging/dim/low-flash state) --
-  replaced the CHRG text badge, which is removed. Ring reworked into a
-  small LED by #16 after user feedback that it read as too heavy.
-- #14 (2026-08-20): split historical-metrics collection out of dashd-serve
-  into a standalone `bin/dashd-collect`, the sole writer of
-  `data/metrics.db` now. Shared cpu/mem/battery/net sampling moved into
-  `lib/sysinfo.py` so dashd-serve's live `/api/state` numbers and
-  dashd-collect's persisted rows can't measure a metric two different
-  ways. dashd-serve's "current value" numbers are unaffected — still the
-  same fast live psutil poll as before, unrelated to this split.
-- Open: #3 — `outputs.<name>.layout` reaches
-  `document.documentElement.dataset.layout` but no CSS keys off
-  `[data-layout]`, so both monitors render the same two-column grid (System |
-  Forecast, since #10). Looks right on both; just not differentiated.
-- `display.safe_area_top`/`safe_area_bottom` (added for #6) default to 48px
-  each, a guess at typical COSMIC top/bottom panel height -- not visually
-  confirmed against this machine's actual panels. Tune in `config.json` if
-  it's off; no code change needed.
-- #9-#11 (2026-08-20): removed the date/location readout, consolidated
-  weather/hourly/week/sun-moon into one right-half "Forecast" panel, and
-  rebuilt System as an actual `<table>` (icon | label | value | histograph)
-  with lsblk-sourced per-partition disk rows and a CHRG battery indicator.
-  Verified functionally (smoke stage against an isolated worktree-local
-  server) but not visually — per the user's "no more verifying (I can do
-  that)" instruction, this round is theirs to eyeball on the live desktop.
-- #12 (2026-08-20): CPU/Memory/Battery now render as a step-line-chart
-  stack (30s/5m/30m for CPU+Memory, 30m/4h/24h for Battery), Storage and
-  Network split into their own visually separated areas within System
-  (Network gets a dual-line down/up step chart, no DB storage -- by
-  design, see gotchas). `battery_pct` added to `lib/metrics.py`'s
-  `COLUMNS` with a self-migrating `ALTER TABLE` for the already-running
-  production DB. Same as #9-#11: functionally verified only, not visually.

@@ -2,7 +2,7 @@
 # Build + deploy: run the lint -> test -> build chain, and only if every
 # stage is green, reload the live desktop-dashboard-host unit so the
 # change actually shows up on the wallpaper (SIGHUP re-render, not a
-# restart -- see CLAUDE.md's "Running and editing"). A red chain exits
+# restart -- see .claude/rules/verification.md). A red chain exits
 # before touching the live surfaces, same as the project's git workflow:
 # green is the only thing allowed to ship.
 #
