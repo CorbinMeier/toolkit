@@ -27,8 +27,8 @@ Four processes:
   loopback-only `/api/control/qr.svg`); every other route is token-gated
   (#30)
 
-The first three run as **enabled** systemd user units (see *Current state*
-below); `dashd-control`'s unit exists
+The first three run as **enabled** systemd user units (see
+`.corbin/history.md`); `dashd-control`'s unit exists
 (`systemd/desktop-dashboard-control.service`) but is **not enabled** — new
 units wait for the Gatekeeper Protocol (see *Conventions*), same as the
 other three did before their own approval.

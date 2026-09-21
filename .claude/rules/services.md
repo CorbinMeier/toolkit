@@ -26,8 +26,8 @@ bin/dashd-serve     HTTP server; /api/state merges weather+sys+extra (and
 bin/dashd-collect   standalone timer loop (config.metrics_sample_seconds);
                     the sole writer of data/metrics.db, independent of
                     whether any view or dashd-serve poll is happening (#14)
-bin/dashd-control   mobile control server (#30) -- see *Layout*'s process
-                    list above and the docstring at the top of the file for
+bin/dashd-control   mobile control server (#30) -- see `CLAUDE.md`'s process
+                    list and the docstring at the top of the file for
                     the token/loopback trust model
 ```
 
