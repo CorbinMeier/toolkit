@@ -41,7 +41,7 @@ this file (#13).
 
 ## Scope
 
-Status: DRAFT - not approved
+Status: approved 2026-09-21
 
 ### Non-goals
 - No digital clock, date, or location readout: the system's own panel shows all
