@@ -44,8 +44,8 @@ this file (#13).
 Status: approved 2026-09-21
 
 ### Non-goals
-- No digital clock, date, or location readout: the system's own panel shows all
-  three (#5, #9).
+- No digital clock, date, or standalone location line: the system's own panel shows
+  all three (#5, #9). The Weather header may name the city whose forecast it shows.
 - No Devices panel (removed at #56), and no Tasks or Schedule panel in the frontend
   (deleted at 583229d). Their server-side feeds deliberately stay (#63).
 - No network access at runtime from `web/` - Tailwind is vendored for this reason.
@@ -74,8 +74,9 @@ Status: approved 2026-09-21
 - QR-paired, token-gated config for units/display/logs (#30).
 
 ### External services
-- Open-Meteo: no API key, no auth. Location pinned to Chico, CA (39.72849, -121.83748);
-  IP geolocation returned nulls and is not used.
+- Open-Meteo: no key, no auth. Forecast, plus `geocoding-api.open-meteo.com` to
+  resolve a city to coordinates (#77), proxied server-side - `web/` never calls out.
+  Default Chico, CA (39.72849, -121.83748); IP geolocation returned nulls, unused.
 - GitHub through `gh` (`lib/ghstats.py`): the authenticated user plus every org they
   belong to, `totalCount` sub-selections only.
 - Local only, degrading to `available: False` when absent: `playerctl` (MPRIS),
@@ -94,9 +95,11 @@ Superseded entries move to `.corbin/history.md`.
 - **Input region covers the whole surface** - 2026-08-27
   - Over: scoped per-widget click-through rects, and the JS-to-Python rect bridge they need
   - Why: user - "I don't use my desktop (nothing on my desktop)" (#36)
-- **`display.transparent` = false** - 2026-08-20
-  - Over: the RGBA + backdrop-blur path, which was verified to work
-  - Why: reads poorly against the current wallpaper. One-key flip if that changes
+- **`display.transparent` = true, with a time-of-day slate tint to come** - 2026-09-21
+  - Over: an opaque surface
+  - Why: cosmic-comp composites an RGBA layer-shell surface over `cosmic-bg`,
+    backdrop blur included. The tint is #78
+  - Supersedes: "= false" (2026-08-20), which the tracked config never carried
 
 ### Panels
 - **Devices removed entirely, not hidden** - 2026-08-23

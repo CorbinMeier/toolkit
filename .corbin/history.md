@@ -370,3 +370,19 @@ Log panel (#28) below. The Tasks (#25) and Schedule (#23) panels that
 used to stack under those two are **gone from the frontend** (removed at
 583229d, 2026-08-21); their server-side data sources are still live and
 unrendered — see *Layout* and *Current state*.
+
+## Superseded decisions
+
+### `display.transparent` = false (2026-08-20, superseded 2026-09-21)
+
+- Over: the RGBA + backdrop-blur path, which was verified to work
+- Why: reads poorly against the current wallpaper. One-key flip if that changes
+
+Recorded in the pre-split `CLAUDE.md` as *"`display.transparent` is **false**. The
+transparent path was verified to work ... but it reads poorly against the current
+black-hole wallpaper, so it was reverted."* The tracked `config.json` never carried
+it: `git log -S'"transparent"' -- config.json` matches only the initial commit
+`fdd85e2`, and every sampled commit back to 2026-08-20 has `true`. The revert either
+never happened or happened outside the repo, and the claim was lifted into the
+approved contract on 2026-09-21 before being caught the same day. Replaced by the
+`true` entry plus the time-of-day slate tint (#78).
