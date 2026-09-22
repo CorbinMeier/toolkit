@@ -116,6 +116,18 @@
     --safe-top:    0px;
     --safe-bottom: 0px;
 
+    /* Surface tint (#78): app.js's sunTint() sets these every poll to a
+       continuously-interpolated slate-toned rgba pair (never a bare hex --
+       alpha is the entire "barely present" mechanism). transparent
+       defaults here are the pre-first-paint fallback, same convention as
+       --safe-top/-bottom above. Plain custom properties, not part of the
+       @theme-scanned --color-* set -- nothing here is ever spelled out in
+       an HTML class attribute, so the Tailwind-scanner gotcha (web-
+       styling.md) doesn't apply; this pair only ever needs the plain
+       :root default already given. */
+    --tint-top: transparent;
+    --tint-bottom: transparent;
+
     /* Rendering layers (#32): a fixed z-order stack every component picks
        one slot from, instead of ad-hoc z-index values scattered per
        element. bg sits behind the panels (ambient glow blobs today); fx
@@ -459,6 +471,20 @@
   /* slow drifting light so a static desktop still feels alive --
      crimson/cyan, matching CyberpunkEnvironment's reddish ambient glow.
      Lives on the bg layer (#32) -- behind every panel, never above content. */
+  /* Surface tint (#78): a full-viewport, barely-there slate gradient
+     painted by the surface itself over the wallpaper -- lives on the same
+     bg layer as the ambient glow blobs below (behind every panel, never
+     above content), but as its own element rather than a .glow instance:
+     it is a daylight cue tied to the real sun, not the Night Ops HUD's
+     cyberpunk ambient lighting, so it is NOT hidden by the theme/
+     transparent overrides that hide .glow (see DESIGN.md's Surface Tint
+     entry for the theme-independence decision). app.js's sunTint()
+     recomputes --tint-top/--tint-bottom every poll as a continuous
+     interpolation between the two nearest of the four phases, so there is
+     never a discrete step to transition away from. */
+  #suntint{position:fixed;inset:0;pointer-events:none;z-index:var(--z-bg);
+    background:linear-gradient(180deg,var(--tint-top),var(--tint-bottom))}
+
   .glow{position:fixed;border-radius:50%;filter:blur(110px);pointer-events:none;z-index:var(--z-bg)}
   .g1{width:44vw;height:44vw;top:-16vw;left:-8vw;
       background:oklch(0.55 0.17 25/.30);animation:d1 42s ease-in-out infinite alternate}
@@ -528,6 +554,7 @@
 </head>
 
 <body class="h-full">
+  <div id="suntint" aria-hidden="true"></div>
   <div class="glow g1"></div><div class="glow g2"></div>
 
   <!-- fx layer (#32): theme-driven overlay effects (Retro Terminal's

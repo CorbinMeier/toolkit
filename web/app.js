@@ -38,6 +38,75 @@ let failures = 0;
 // actually is.
 const RING_WINDOW_MS = 5 * 60 * 1000;
 let ring = { t: [], down: [], up: [] };
+
+// Surface tint (#78): a barely-there slate-toned gradient the surface
+// paints over the wallpaper (display.transparent stays true -- this rides
+// on top of it, never replaces it). Four phases, each desaturated toward
+// slate so none reads as a color wash: morning sunrise (warm orange-
+// slate), afternoon (blue-slate), evening sunset (warm, deeper), midnight
+// (purple-slate). Alpha is the entire "barely present" mechanism -- err
+// far toward invisible; every alpha below is well under 0.1.
+//
+// Phase centers follow the real sun rather than the clock: sunrise/sunset
+// come straight from weather.sun; afternoon centers on solar noon (their
+// midpoint) and midnight on the midpoint of the night span, so all four
+// drift with the season the same way, not just the two that are given
+// directly. Theme-independent (see DESIGN.md's Surface Tint entry): this
+// is a daylight cue riding the wallpaper layer, not HUD chrome, so it
+// renders identically under night_ops/retro_terminal/retro_orange.
+const TINT_PHASES = {
+  sunrise:   { top: [128, 100, 78], bottom: [72, 60, 54], aTop: 0.07, aBot: 0.03 },
+  afternoon: { top: [70, 88, 108],  bottom: [54, 66, 84], aTop: 0.05, aBot: 0.02 },
+  sunset:    { top: [104, 62, 52],  bottom: [64, 42, 40], aTop: 0.08, aBot: 0.04 },
+  midnight:  { top: [64, 50, 82],   bottom: [40, 34, 54], aTop: 0.05, aBot: 0.02 },
+};
+
+function minutesOf(d) { return d.getHours() * 60 + d.getMinutes() + d.getSeconds() / 60; }
+
+function tintAnchors(sun) {
+  // Graceful fallback (no weather yet, or a stale cache missing sun data)
+  // -- a plausible fixed day so the tint still cycles instead of freezing
+  // on one phase; degrades the same way sysinfo/ghstats degrade elsewhere.
+  const rise = sun && sun.sunrise ? minutesOf(new Date(sun.sunrise)) : 390;
+  const set = sun && sun.sunset ? minutesOf(new Date(sun.sunset)) : 1110;
+  return {
+    sunrise: rise,
+    afternoon: (rise + set) / 2,
+    sunset: set,
+    midnight: ((set + rise + 1440) / 2) % 1440,
+  };
+}
+
+function lerp(a, b, t) { return a + (b - a) * t; }
+function lerpTriple(a, b, t) { return a.map((v, i) => lerp(v, b[i], t)); }
+function rgbaStr(rgb, a) {
+  return `rgba(${Math.round(rgb[0])}, ${Math.round(rgb[1])}, ${Math.round(rgb[2])}, ${a.toFixed(3)})`;
+}
+
+// Returns { top, bottom } rgba() strings for the current continuous blend
+// between the two nearest phase centers. A plain lerp, recomputed fresh
+// every call -- there is no discrete step anywhere in this function, which
+// is what keeps a phase change from ever reading as the sudden cut #78
+// explicitly calls out.
+function sunTint(sun, now) {
+  const anchors = tintAnchors(sun);
+  const order = Object.keys(anchors)
+    .map((key) => ({ key, at: anchors[key] }))
+    .sort((a, b) => a.at - b.at);
+  const nowMin = minutesOf(now);
+  let i = order.findIndex((o) => o.at > nowMin);
+  if (i === -1) i = 0; // past the last anchor of the day -> wrap to the first
+  const b = order[i];
+  const a = order[(i - 1 + order.length) % order.length];
+  const span = ((b.at - a.at + 1440) % 1440) || 1440;
+  const elapsed = (nowMin - a.at + 1440) % 1440;
+  const t = elapsed / span;
+  const pa = TINT_PHASES[a.key], pb = TINT_PHASES[b.key];
+  return {
+    top: rgbaStr(lerpTriple(pa.top, pb.top, t), lerp(pa.aTop, pb.aTop, t)),
+    bottom: rgbaStr(lerpTriple(pa.bottom, pb.bottom, t), lerp(pa.aBot, pb.aBot, t)),
+  };
+}
 function pushRing(s) {
   const now = Date.now();
   ring.t.push(now); ring.down.push(s.net.down); ring.up.push(s.net.up);
@@ -1203,6 +1272,10 @@ function apply(s) {
   const root = document.documentElement.style;
   root.setProperty('--safe-top', `${disp.safe_area_top || 0}px`);
   root.setProperty('--safe-bottom', `${disp.safe_area_bottom || 0}px`);
+
+  const tint = sunTint(s.weather && s.weather.sun, new Date());
+  root.setProperty('--tint-top', tint.top);
+  root.setProperty('--tint-bottom', tint.bottom);
 
   pushRing(s.sys);
   renderWeather(s.weather, s.config.location);
