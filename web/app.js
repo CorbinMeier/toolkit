@@ -35,9 +35,12 @@ let failures = 0;
 // the server-side history DB offers (throughput bursts are brief; 30s-
 // resolution DB samples would flatten them). Capped by wall-clock age, not
 // point count, so it self-adjusts to whatever the configured poll interval
-// actually is.
+// actually is. Disk I/O (#82) rides the same ring for the same reason --
+// it separately persists to metrics.db (lib/metrics.py's COLUMNS) for a
+// possible future longer-tier view, but the live chart reads straight off
+// this session's own polls, same as Network's.
 const RING_WINDOW_MS = 5 * 60 * 1000;
-let ring = { t: [], down: [], up: [] };
+let ring = { t: [], down: [], up: [], diskRead: [], diskWrite: [] };
 
 // Surface tint (#78): a barely-there slate-toned gradient the surface
 // paints over the wallpaper (display.transparent stays true -- this rides
@@ -110,9 +113,11 @@ function sunTint(sun, now) {
 function pushRing(s) {
   const now = Date.now();
   ring.t.push(now); ring.down.push(s.net.down); ring.up.push(s.net.up);
+  ring.diskRead.push(s.disk_io.read); ring.diskWrite.push(s.disk_io.write);
   const cutoff = now - RING_WINDOW_MS;
   while (ring.t.length && ring.t[0] < cutoff) {
     ring.t.shift(); ring.down.shift(); ring.up.shift();
+    ring.diskRead.shift(); ring.diskWrite.shift();
   }
 }
 function ringSince(key, ms) {
@@ -452,17 +457,18 @@ function renderDisks(disks, swap) {
   });
 }
 
-// One captioned chart in Network's graph row: caption above, chart, then
-// the actual rate directly underneath -- #60 moved the down/up values here
-// from the NET metric row above, since a caption with no number next to
-// its chart forced a look back up at a disconnected row to read the rate.
+// One captioned chart in a throughput graph row (Network's DOWN/UP, and
+// since #82 Storage's READ/WRITE): caption above, chart, then the actual
+// rate directly underneath -- #60 moved Network's down/up values here from
+// the NET metric row above, since a caption with no number next to its
+// chart forced a look back up at a disconnected row to read the rate.
 // The caption itself keeps the same faint uppercase treatment as a
 // .sys-key label rather than being tinted to match its line -- position
 // already identifies it, and colored text would spend an accent on a
 // label (DESIGN.md's one-accent-per-region rule) to say what position
 // already says. The rate below is text-ink, same brightness as every
 // other value in the system (#55/#57).
-function netGraph(label, value, values, tone, domain) {
+function throughputGraph(label, value, values, tone, domain) {
   const cell = document.createElement('div');
   cell.className = 'flex flex-col gap-[0.25vmin]';
 
@@ -532,8 +538,42 @@ function renderNetwork(s) {
     // #61: no "down"/"up" word here -- the DOWN/UP caption above each
     // chart already says which is which, so repeating it in the value
     // would just be noise.
-    netGraph('DOWN', `${bytes(s.net.down)}/s`, down, 'var(--color-accent)', domain),
-    netGraph('UP', `${bytes(s.net.up)}/s`, up, 'var(--color-warm)', domain),
+    throughputGraph('DOWN', `${bytes(s.net.down)}/s`, down, 'var(--color-accent)', domain),
+    throughputGraph('UP', `${bytes(s.net.up)}/s`, up, 'var(--color-warm)', domain),
+  );
+  box.appendChild(graphs);
+}
+
+// Disk I/O (#82): Storage's missing sibling to Network's throughput chart --
+// same shape, same reasoning, appended into the same #disks .sys-grid as
+// the capacity rows above it (SWAP, then each partition) so READ/WRITE
+// reads as one more row of that grid rather than a separate area. Unlike
+// Network, disk_read/disk_write DO persist to metrics.db (lib/metrics.py's
+// COLUMNS) for a possible future longer tier -- but the chart itself still
+// reads off this session's own ring buffer, same fine-resolution reasoning
+// as Network's (a brief write burst would flatten at 30s DB resolution).
+function renderDiskIO(s) {
+  const box = $('disks');
+
+  const read = ringSince('diskRead', RING_WINDOW_MS);
+  const write = ringSince('diskWrite', RING_WINDOW_MS);
+  const all = read.concat(write);
+  if (all.length < 2) {
+    box.append(...sysRow({
+      label: 'I/O',
+      value: `read ${bytes(s.disk_io.read)}/s`,
+      sub: `write ${bytes(s.disk_io.write)}/s`,
+    }));
+    return;
+  }
+  box.append(...sysRow({ label: 'I/O' }));
+
+  const domain = [Math.min(...all), Math.max(...all)];
+  const graphs = document.createElement('div');
+  graphs.className = 'sys-graph flex gap-[0.8vmin]';
+  graphs.append(
+    throughputGraph('READ', `${bytes(s.disk_io.read)}/s`, read, 'var(--color-accent)', domain),
+    throughputGraph('WRITE', `${bytes(s.disk_io.write)}/s`, write, 'var(--color-warm)', domain),
   );
   box.appendChild(graphs);
 }
@@ -1315,6 +1355,7 @@ function apply(s) {
   renderWeather(s.weather, s.config.location);
   renderCpuMemBat(s.sys);
   renderDisks(s.sys.disks, s.sys.swap);
+  renderDiskIO(s.sys);
   renderNetwork(s.sys);
   renderMusic(s.music);
   renderCalendar(s.extra);

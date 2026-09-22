@@ -23,6 +23,7 @@ from pathlib import Path
 import psutil
 
 _net_prev: tuple[float, int, int] | None = None
+_disk_io_prev: tuple[float, int, int] | None = None
 
 
 def _disk_tree_from_psutil() -> list[dict]:
@@ -109,6 +110,27 @@ def _net_rates() -> tuple[float, float]:
     return down, up
 
 
+def _disk_io_rates() -> tuple[float, float]:
+    """(read, write) bytes/sec since this process's last call; 0 on the
+    first -- same delta-since-last-call shape as _net_rates(), and for the
+    same reason: psutil.disk_io_counters() is a cumulative counter, not an
+    instantaneous rate, and each process needs its own baseline rather than
+    fighting another caller over a shared one (#82).
+    """
+    global _disk_io_prev
+    now = time.time()
+    io = psutil.disk_io_counters()
+    read = write = 0.0
+    if io is None:
+        return 0.0, 0.0
+    if _disk_io_prev:
+        dt = max(now - _disk_io_prev[0], 1e-6)
+        read = max(io.read_bytes - _disk_io_prev[1], 0) / dt
+        write = max(io.write_bytes - _disk_io_prev[2], 0) / dt
+    _disk_io_prev = (now, io.read_bytes, io.write_bytes)
+    return read, write
+
+
 def _battery() -> dict | None:
     if (b := psutil.sensors_battery()):
         return {"pct": round(b.percent), "plugged": b.power_plugged,
@@ -136,6 +158,7 @@ def _core_sample() -> dict:
     independently-timed psutil readings of the same delta-based counter.
     """
     down, up = _net_rates()
+    disk_read, disk_write = _disk_io_rates()
     return {
         "cpu_pct": psutil.cpu_percent(interval=None),
         "cpu_temp_c": _cpu_temp(),
@@ -143,6 +166,8 @@ def _core_sample() -> dict:
         "battery": _battery(),
         "net_down": down,
         "net_up": up,
+        "disk_read": disk_read,
+        "disk_write": disk_write,
     }
 
 
@@ -160,6 +185,8 @@ def sample_stats() -> dict:
         "battery_pct": core["battery"]["pct"] if core["battery"] else None,
         "net_down": round(core["net_down"]),
         "net_up": round(core["net_up"]),
+        "disk_read": round(core["disk_read"]),
+        "disk_write": round(core["disk_write"]),
     }
 
 
@@ -244,6 +271,8 @@ def music_command(command: str) -> bool:
 def system_stats() -> dict:
     """Full live snapshot for /api/state -- everything sample_stats() covers
     plus disks, per-core detail, load, swap, uptime, process count, host.
+    disk_io (#82) is the read/write throughput sibling of net -- same
+    delta-since-last-call shape as net_down/net_up.
     """
     now = time.time()
     core = _core_sample()
@@ -257,6 +286,8 @@ def system_stats() -> dict:
         "swap": {"pct": sw.percent, "used": sw.used, "total": sw.total},
         "disks": sorted(disk_tree(), key=lambda d: d["name"]),
         "net": {"up": round(core["net_up"]), "down": round(core["net_down"])},
+        "disk_io": {"read": round(core["disk_read"]),
+                    "write": round(core["disk_write"])},
         "battery": core["battery"],
         "temp_c": core["cpu_temp_c"],
         "uptime": round(now - psutil.boot_time()),

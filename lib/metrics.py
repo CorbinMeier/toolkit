@@ -20,7 +20,7 @@ from pathlib import Path
 # machine with no readable thermal sensor, or battery_pct on a desktop with
 # no battery at all (see dashd-serve's system_stats).
 COLUMNS = ("cpu_pct", "cpu_temp_c", "cpu_freq_mhz", "mem_pct", "battery_pct",
-           "net_down", "net_up")
+           "net_down", "net_up", "disk_read", "disk_write")
 
 
 def _connect(db_path: Path) -> sqlite3.Connection:
