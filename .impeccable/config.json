@@ -128,6 +128,15 @@
         "value": "#fff",
         "createdAt": "2026-08-23T19:47:19.783Z",
         "reason": "user explicitly requested white text on the weather alert badge (issue #49) as the contrast color against the badge's deep-red fill"
+      },
+      {
+        "rule": "cramped-padding",
+        "value": "*",
+        "files": [
+          "web/index.html"
+        ],
+        "createdAt": "2026-09-22T02:41:46.913Z",
+        "reason": "The static analyzer can't resolve arbitrary-value Tailwind vmin padding (px-[2vmin] py-[1.5vmin], the panel px-[2.4vmin] py-[1.8vmin]), so it reads every .panel as near-zero padding. Measured via CDP getComputedStyle at a real 2560x1080 render (#87): actual padding is ~15-18px vertical / ~20-24px horizontal on every panel, above the hook's own 12-16px ideal. Intended HUD density (DESIGN.md), not a defect -- verified #87."
       }
     ]
   }

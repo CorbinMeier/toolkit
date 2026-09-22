@@ -228,6 +228,16 @@ The components below are the repeating primitives: the panel container, the metr
 - **Fill:** Deep Console (`oklch(0.19 0.015 260 / 0.88)`), constant across every accent region — only the border and corner tab change color.
 - **Corner tab:** a `1.55rem × 3px` bar in the full-saturation accent, glowing (`box-shadow: 0 0 6px`), rotated into the notch. This is the panel's one constant "alive" signal — present at rest, not tied to a status condition.
 - **Padding:** `1.5–2.2vmin` depending on region density (System's panel is tighter than Forecast's).
+  **#87:** the `impeccable` design hook flags every `.panel` for `cramped-padding`
+  ("children flush against border+bg, no inset") — a false positive, not a
+  defect. Its static analyzer can't resolve arbitrary-value Tailwind vmin
+  classes (`px-[2vmin] py-[1.5vmin]`, Weather's `px-[2.4vmin] py-[1.8vmin]`),
+  so it reads every panel as zero-padding. Measured with `getComputedStyle`
+  over CDP at a real 2560×1080 render: actual padding is ~15–18px vertical /
+  ~20–24px horizontal on every panel — above the hook's own 12–16px "ideal",
+  not below its 8px floor. Persisted as a sanctioned ignore
+  (`cramped-padding=*` scoped to `web/index.html` in `.impeccable/config.json`)
+  rather than re-litigated each session.
 
 ### Metric Row (`.sys-grid` Row, #57)
 - **Shape:** one `.sys-grid` row — uppercase label cell (left), value cell (right, tabular-nums, the row's status bar/chart attached inline), sub cell (right, dash-prefixed, Recessed-Grey). No icon and no separate tail column — both retired at #57 in favor of Weather's `.kv-grid` conventions (one font size for every cell, no stacked second line). CPU/MEM/BAT used to diverge with a leading LED cell (#17), then an icon cell (#31); both are gone now.
