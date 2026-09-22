@@ -818,6 +818,20 @@
               <span>Weather</span>
               <span id="wlocation" class="text-ink normal-case tracking-normal"></span>
             </h2>
+
+            <!-- Official NWS alert banner (#80). Deliberately distinct from
+                 weather.alert (our own threshold-derived signal, #46/#48) --
+                 an active Red Flag Warning and "today's forecast high
+                 crossed a configured number" answer different questions and
+                 can both be true. Hidden entirely when there's no active
+                 alert -- an empty "no alerts" row every day teaches you to
+                 stop looking (per the issue). Reuses .alert-badge's filled
+                 white-on-red treatment rather than swapping the whole
+                 panel's accent-amber, same "highlight the value, not the
+                 card" call #48 already made for weather.alert. -->
+            <div id="nwsalert" class="hidden alert-badge px-[0.6em] py-[0.3em]
+                 text-[clamp(.56rem,1.2vmin,.88rem)] tracking-wide"></div>
+
             <!-- No icons in this card (user request). Spreadsheet-style
                  key:value grid (#50, .kv-grid) -- every stat is one row,
                  key column left (uppercase label, matching the system's

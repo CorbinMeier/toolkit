@@ -270,6 +270,11 @@ The components below are the repeating primitives: the panel container, the metr
 - **Dot:** a `0.55em` solid circle in the banner's accent color, `50%` border-radius, sitting inline before the message text.
 - **Banner:** a small notched panel (same pentagon `clip-path` as every other panel) in the Distress Red accent, fixed to the top-center of the viewport, hidden by default and shown only after two consecutive failed polls — deliberately debounced so a single dropped request never flashes the banner.
 
+### NWS Alert Banner (#80)
+- **Shape:** a plain inline block inside the Weather panel, between the header and `.kv-grid` — not the fixed viewport-top Offline Banner above, since this is a panel-scoped fact, not a connectivity condition. Reuses `.alert-badge` (filled white-on-red) rather than a new treatment or swapping the panel's own `accent-amber`, same "highlight the value, not the card" call #48 made for `weather.alert`.
+- **Content:** the most severe active `api.weather.gov` alert (event name + expiry), or nothing — hidden entirely with zero active alerts, never an empty "no alerts" row (a row that's always the same teaches the eye to stop reading it).
+- **Distinct from `weather.alert`:** the threshold-derived signal (#46) and an official NWS alert answer different questions and can both be true at once; neither overwrites the other.
+
 ### Control Button (`.ctl-btn`, #36)
 - **Shape:** a `1px` solid rectangle in the panel's own dim accent (`--panel-border`), sharp-cornered. No radius — the notch is the system's only corner language, and a rounded button would read as a grafted-on design system (see Don'ts).
 - **States:** Recessed Grey at rest → Bone White text with a full-accent border on hover → full accent text while active. Deliberately **no glow on hover**: glow is reserved for a real status condition (see the Status-Only Glow Rule), and spending it on "your cursor is here" would dilute the one signal that means "this is live".

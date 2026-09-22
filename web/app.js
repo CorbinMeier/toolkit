@@ -1064,6 +1064,28 @@ function renderAirQuality(aq) {
   valEl.classList.toggle('text-ink', !hot);
 }
 
+/* Official NWS alert banner (#80) -- state.nws_alerts, kept entirely
+ * distinct from weather.alert (renderWeather() above): an active Red Flag
+ * Warning and "today's high crossed a configured number" are different
+ * questions. Renders the single most severe active alert (already sorted
+ * server-side, dashd-serve's shape_nws_alerts()) or nothing at all -- a
+ * daily "no alerts" row would train the eye to stop reading it. */
+function renderNwsAlerts(nws) {
+  const el = $('nwsalert');
+  if (!el) return;
+  const alerts = (nws && !nws.unavailable) ? (nws.alerts || []) : [];
+  if (alerts.length === 0) {
+    el.classList.add('hidden');
+    el.textContent = '';
+    return;
+  }
+  const a = alerts[0];
+  el.textContent = a.event
+    + (a.ends ? ` · until ${hhmm(a.ends)}` : '')
+    + (alerts.length > 1 ? ` (+${alerts.length - 1} more)` : '');
+  el.classList.remove('hidden');
+}
+
 /* Compact hourly strip: time + temp, no chart, no icon (#40). Replaces a
  * "Next 24 hours" sparkline that was vague and cost far more vertical
  * space than the info was worth (see #8). */
@@ -1393,6 +1415,7 @@ function apply(s) {
   pushRing(s.sys);
   renderWeather(s.weather, s.config.location);
   renderAirQuality(s.air_quality);
+  renderNwsAlerts(s.nws_alerts);
   renderCpuMemBat(s.sys);
   renderUpdates(s.updates);
   renderDisks(s.sys.disks, s.sys.swap);
