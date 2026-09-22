@@ -1348,7 +1348,16 @@ async function refreshNow() {
   } catch { /* the regular poll is still running; it will catch up */ }
 }
 
+// Fingerprint of the bit of music state a transport click can change --
+// used only to detect that MPRIS has actually propagated the new state,
+// never sent anywhere.
+function musicFingerprint() {
+  const m = state?.music;
+  return m ? `${m.title}|${m.artist}|${m.playing}` : null;
+}
+
 async function musicCommand(command) {
+  const before = musicFingerprint();
   try {
     await fetch('/api/music/command', {
       method: 'POST',
@@ -1357,9 +1366,18 @@ async function musicCommand(command) {
     });
   } catch { /* nothing useful to show on a wallpaper; next poll re-syncs */ }
   // Players report the new state asynchronously over MPRIS, so an immediate
-  // re-read usually still returns the old status. One short delay is enough
-  // to make the button feel like it did something.
-  setTimeout(refreshNow, 250);
+  // re-read often still returns the old status -- a single fixed-delay
+  // re-poll was frequently too early and left the panel showing the old
+  // track until the *next* regular poll caught up. Instead, re-poll a
+  // few times with backoff, stopping the moment the fingerprint actually
+  // changes, so the common case (fast propagation) updates almost
+  // immediately and the slow case still gets several more chances within
+  // about a second, rather than one shot at a fixed 250ms.
+  for (const delay of [150, 200, 250, 400]) {
+    await new Promise((resolve) => setTimeout(resolve, delay));
+    await refreshNow();
+    if (musicFingerprint() !== before) return;
+  }
 }
 
 function wireControls() {
