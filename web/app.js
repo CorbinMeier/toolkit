@@ -385,25 +385,59 @@ function renderCpuMemBat(s) {
     }));
   }
 
-  const load = s.load.map((n) => n.toFixed(2)).join('  ');
+  // LOAD (#81): sys.load/sys.uptime were already in /api/state and never
+  // rendered anywhere but the plain sysfoot text below. Promoted to a real
+  // .sys-grid row so it gets the same hot-threshold/bar treatment as
+  // CPU/MEM/BAT -- "hot" here is 1-minute load past the core count (the
+  // only meaningful threshold for a load average, since 1.0 means
+  // "fully busy" on a single core but is nothing on a 16-core box), not a
+  // fixed percentage. Uptime rides along as this row's sub line per the
+  // issue's own suggestion, rather than spending a row of its own on it.
+  const cores = s.cpu_cores.length;
+  const load1 = s.load[0];
+  box.append(...sysRow({
+    label: 'LOAD', value: s.load.map((n) => n.toFixed(2)).join(' '),
+    hot: load1 > cores,
+    bar: utilBars(Math.min(100, (load1 / cores) * 100)),
+    sub: `up ${dur(s.uptime)}`,
+  }));
+
+  // sys.procs/sys.host are left off the row grid entirely (#81 -- "probably
+  // not worth surface space at wallpaper distance", and neither one is
+  // actionable the way a hot load average or a low battery is): process
+  // count is noise without a baseline, and hostname doesn't change at
+  // runtime, so a static footer line is already exactly right for both.
   $('sysfoot').innerHTML =
     `<div class="flex justify-between gap-[1vmin]">
-       <span>up ${dur(s.uptime)} · ${s.procs} procs</span>
+       <span>${s.procs} procs</span>
        <span>${s.host}</span>
-     </div>
-     <div class="flex justify-between gap-[1vmin] mt-[0.3vmin] opacity-70">
-       <span>load ${load}</span>
      </div>`;
 }
 
 // Storage: its own dedicated area (#12), not mixed into the
 // cpu/mem/bat rows above. Every partition lsblk reports a real utilization
 // for, not just psutil's mounted view -- see dashd-serve's disk_tree().
-function renderDisks(disks) {
+// sys.swap (#81) sits with Storage, not MEM -- it's disk, not RAM -- and
+// renders here rather than via disk_tree()/lsblk: a bare swap partition
+// carries no usable FSUSE%, since its real usage lives on a crypt child
+// disk_tree() deliberately doesn't walk into for a utilization figure (see
+// lib/sysinfo.py). psutil.swap_memory() is the number to show instead.
+// Skipped entirely when there's no swap configured (total 0) rather than
+// rendering a dead 0% row.
+function renderDisks(disks, swap) {
   const box = $('disks');
   box.replaceChildren();
   const isHot = (p) => p > 88;
   const barTone = (p) => isHot(p) ? 'var(--color-warm)' : 'var(--color-accent)';
+
+  if (swap && swap.total > 0) {
+    box.append(...sysRow({
+      label: 'SWAP', value: `${swap.pct.toFixed(0)}%`, hot: isHot(swap.pct),
+      bar: miniBar(swap.pct, barTone(swap.pct), undefined, 'rounded-none'),
+      sub: `${bytes(swap.used)} / ${bytes(swap.total)}`,
+    }));
+  }
+
   disks.forEach((d) => {
     const label = d.mount && d.mount !== '[SWAP]'
       ? (d.mount.split('/').filter(Boolean).pop() || '/') : d.name;
@@ -1280,7 +1314,7 @@ function apply(s) {
   pushRing(s.sys);
   renderWeather(s.weather, s.config.location);
   renderCpuMemBat(s.sys);
-  renderDisks(s.sys.disks);
+  renderDisks(s.sys.disks, s.sys.swap);
   renderNetwork(s.sys);
   renderMusic(s.music);
   renderCalendar(s.extra);
