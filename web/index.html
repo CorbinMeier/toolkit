@@ -117,21 +117,32 @@
     --safe-bottom: 0px;
 
     /* Surface tint (#78; the opaque background itself since #89, strength-
-       adjustable per #88): app.js's sunTint() sets these every poll to a
-       continuously-interpolated slate rgba pair at alpha 1 -- this paints
-       the real background, so the pre-first-paint fallback below must
-       already be an opaque neutral slate (TINT_NEUTRAL in app.js), not
-       `transparent`; leaving it transparent would flash body's Night Ops
-       ambient gradient (reds/purples) before the first poll lands, same
-       failure mode --safe-top/-bottom guard against. display.tint_strength
+       adjustable per #88; moving skybox geometry since #92): app.js's
+       sunTint() sets these every poll to a continuously-interpolated
+       three-stop rgba gradient at alpha 1 -- this paints the real
+       background, so the pre-first-paint fallback below must already be
+       an opaque neutral slate (TINT_NEUTRAL in app.js), not `transparent`;
+       leaving it transparent would flash body's Night Ops ambient
+       gradient (reds/purples) before the first poll lands, same failure
+       mode --safe-top/-bottom guard against. display.tint_strength
        (Off/Subtle/Medium/Strong) now scales how far the color departs from
-       this neutral pair, not alpha -- Off holds exactly this pair. Plain
-       custom properties, not part of the
-       @theme-scanned --color-* set -- nothing here is ever spelled out in
-       an HTML class attribute, so the Tailwind-scanner gotcha (web-
-       styling.md) doesn't apply; this pair only ever needs the plain
-       :root default already given. */
+       this neutral pair, not alpha -- Off holds exactly this pair, no
+       motion at all. --tint-glow/--tint-glow-pos are the #92 addition: a
+       third, moving stop between top and bottom -- their pre-first-paint
+       defaults MUST be real values, not left unset, since an unset custom
+       property referenced inside a gradient() invalidates the whole
+       `background` at computed-value time (the same flash failure mode,
+       triggered a different way) -- computed here as the same neutral
+       pair's own interpolation at the default 82% position, so a first
+       paint before any poll lands reads as a perfectly flat two-stop
+       gradient, indistinguishable from the pre-#92 fallback. Plain custom
+       properties, not part of the @theme-scanned --color-* set -- nothing
+       here is ever spelled out in an HTML class attribute, so the
+       Tailwind-scanner gotcha (web-styling.md) doesn't apply; this set
+       only ever needs the plain :root default already given. */
     --tint-top: rgb(34, 36, 44);
+    --tint-glow: rgb(23, 24, 30);
+    --tint-glow-pos: 82%;
     --tint-bottom: rgb(20, 21, 27);
 
     /* Rendering layers (#32): a fixed z-order stack every component picks
@@ -520,22 +531,28 @@
   /* Surface tint (#78; strength live-adjustable per #88; opaque and IS the
      background since #89 -- display.transparent now defaults false, so
      this replaces cosmic-bg's wallpaper rather than riding on top of it;
-     recolored to real time-of-day hues by #90, see the palette note in
-     app.js): a full-viewport slate gradient painted by the surface itself
-     -- lives on the same bg layer as the ambient glow blobs below (behind
-     every panel, never above content), but as its own element rather than
-     a .glow instance: it is a daylight cue tied to the real sun, not the
-     Night Ops HUD's cyberpunk ambient lighting, so it is NOT hidden by the
+     recolored to real time-of-day hues by #90; moving skybox geometry by
+     #92, see the palette/geometry notes in app.js): a full-viewport,
+     three-stop gradient painted by the surface itself -- lives on the
+     same bg layer as the ambient glow blobs below (behind every panel,
+     never above content), but as its own element rather than a .glow
+     instance: it is a daylight cue tied to the real sun, not the Night
+     Ops HUD's cyberpunk ambient lighting, so it is NOT hidden by the
      theme overrides that hide .glow (see DESIGN.md's Surface Tint entry
      for the theme-independence decision). app.js's sunTint() recomputes
-     --tint-top/--tint-bottom every poll (always alpha 1) as a continuous
-     interpolation between the two nearest of the four phases (so there is
-     never a discrete step to transition away from), the colour departure
-     from a neutral slate base scaled by display.tint_strength -- a live
-     multiplier the context menu's Tint submenu edits, Off meaning the flat
-     neutral base with no time shift, never a transparent surface. */
+     --tint-top/--tint-glow/--tint-glow-pos/--tint-bottom every poll
+     (always alpha 1): top is the sky (darkens toward the base as the sun
+     nears the horizon), glow is a warm middle stop whose POSITION climbs
+     and falls with solar altitude -- the "skybox" #92 asks for, not just
+     a colour cycling in place -- and bottom is the unchanged deep base.
+     Every value is a continuous function of solar altitude (see
+     solarAltitude() in app.js), so there is never a discrete step to
+     transition away from. display.tint_strength is still the colour
+     departure from a neutral slate base -- a live multiplier the context
+     menu's Tint submenu edits, Off meaning the flat neutral base with no
+     time shift OR motion at all, never a transparent surface. */
   #suntint{position:fixed;inset:0;pointer-events:none;z-index:var(--z-bg);
-    background:linear-gradient(180deg,var(--tint-top),var(--tint-bottom))}
+    background:linear-gradient(180deg,var(--tint-top) 0%,var(--tint-glow) var(--tint-glow-pos),var(--tint-bottom) 100%)}
 
   /* Ambient glow blobs (crimson/cyan, matching CyberpunkEnvironment's
      reddish ambient glow) -- Night Ops HUD chrome, not a background

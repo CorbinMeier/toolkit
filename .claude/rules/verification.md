@@ -27,10 +27,9 @@ journalctl --user -u desktop-dashboard-host -n 30
 no build step and nothing to bundle**. Edit, then `reload`.
 
 `scripts/update-desktop.sh` (`pnpm run deploy`) automates that: runs the §6
-lint→test→build chain and, only if every stage is green, `reload`s
-`desktop-dashboard-host` so the change actually shows up on the wallpaper. A
-red chain exits before touching the live surfaces. It never starts/enables a
-unit — that stays behind the Gatekeeper Protocol.
+lint→test→build chain and, only if green, `reload`s `desktop-dashboard-host`
+so the change reaches the wallpaper. A red chain exits before touching the
+live surfaces; it never starts/enables a unit (Gatekeeper Protocol).
 
 Preview without touching the desktop. `?static=1` is required — headless
 Chrome's virtual clock never completes a CSS animation, so without it you
@@ -44,10 +43,27 @@ google-chrome --headless=new --disable-gpu --no-sandbox --hide-scrollbars \
 
 Real desktop capture (no `grim` on this box):
 `cosmic-screenshot --interactive=false --modal=false --notify=false -s <dir>`.
-It grabs the whole 4000x1390 multi-output framebuffer, which has blank dead
-zones because the outputs are offset — that is not a rendering bug. It also
-cannot show the dashboard while windows cover it, since the surface is
-correctly *below* windows; ask the user to look instead.
+It grabs the whole 4000x1390 multi-output framebuffer (blank dead zones are
+the offset outputs, not a bug) and can't show the dashboard under windows,
+since the surface is correctly *below* them; ask the user to look instead.
+
+`?forcetime=HH:MM` (#92) pins the clock `sunTint()` reads, for a
+deterministic time-lapse instead of whatever wall-clock time a render runs
+at. **Gated behind `?static=1`** (`dashd-host` never passes it, so the live
+wallpaper is unaffected regardless); invalid or missing falls back to now:
+
+```bash
+for h in $(seq -w 0 23); do
+  google-chrome --headless=new --disable-gpu --no-sandbox --hide-scrollbars \
+    --window-size=2560,1080 --virtual-time-budget=6000 \
+    --screenshot="/tmp/tint_$h.png" \
+    "http://127.0.0.1:4320/index.html?static=1&forcetime=$h:00"
+done
+```
+
+`--dump-dom` in place of `--screenshot` is the cheap numeric check — grep the
+emitted `--tint-*` properties per hour, confirm the glow position moves
+monotonically with no jump. A single frame can't show motion; render the series.
 
 ## Verification chain (lint → test → build)
 

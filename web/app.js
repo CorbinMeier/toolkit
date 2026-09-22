@@ -26,6 +26,23 @@ const OUTPUT = params.get('output') || 'default';
 // ?static=1 suppresses entrance animation -- used by headless snapshot renders,
 // where virtual time never advances a CSS animation to completion.
 const STATIC = params.get('static') === '1';
+// ?forcetime=HH:MM (#92): a real debug parameter, not the throwaway shim
+// #90's implementer built and reverted -- pins the clock sunTint() reads
+// so a time-lapse can be rendered deterministically instead of whatever
+// wall-clock time check.sh/a manual render happens to run at. Gated
+// behind STATIC so it can never reach the live wallpaper: dashd-host never
+// passes ?static=1, so FORCE_TIME is always null there regardless of what
+// a URL might claim. Documented in .claude/rules/verification.md.
+const FORCE_TIME = STATIC ? params.get('forcetime') : null;
+function tintNow() {
+  if (FORCE_TIME && /^([01]\d|2[0-3]):[0-5]\d$/.test(FORCE_TIME)) {
+    const [hh, mm] = FORCE_TIME.split(':').map(Number);
+    const d = new Date();
+    d.setHours(hh, mm, 0, 0);
+    return d;
+  }
+  return new Date();
+}
 
 let state = null;
 let failures = 0;
@@ -87,6 +104,17 @@ let ring = { t: [], down: [], up: [], diskRead: [], diskWrite: [] };
 // identically under night_ops/retro_terminal/retro_orange (the CRT
 // themes' own opaque body backgrounds sit underneath and are now fully
 // covered -- see DESIGN.md).
+//
+// #92: the gradient's GEOMETRY moves now too, not just its palette --
+// "like a skybox", per the issue. TINT_PHASES stays exactly what #90
+// tuned (this issue moves the four hues, it does not re-pick them); what's
+// new is solarAltitude()/tintIntensity()/tintGlowPos() below, which turn
+// the phase colour into a moving three-stop gradient: sky (darkens toward
+// the base near sunrise/sunset -- "a still-dark sky", the issue's own
+// words), a warm glow stop whose POSITION climbs from near the bottom
+// edge (the horizon) at sunrise/sunset toward the top at solar noon and
+// back down into sunset, and the unchanged deep base. See sunTint()'s own
+// comment for the exact shape.
 const TINT_NEUTRAL = { top: [34, 36, 44], bottom: [20, 21, 27] };
 const TINT_PHASES = {
   sunrise:   { top: [104, 62, 48], bottom: [32, 21, 20] },
@@ -130,17 +158,76 @@ function rgbaStr(rgb, a) {
   return `rgba(${Math.round(rgb[0])}, ${Math.round(rgb[1])}, ${Math.round(rgb[2])}, ${a.toFixed(3)})`;
 }
 
-// Returns { top, bottom } rgba() strings (always alpha 1 -- this paints the
-// opaque background itself, #89) for the current continuous blend between
-// the two nearest phase centers. A plain lerp, recomputed fresh every call
-// -- there is no discrete step anywhere in this function, which is what
-// keeps a phase change from ever reading as the sudden cut #78 explicitly
-// calls out; #89 kept this exactly as #78 built it. `strength` (#88,
-// colour-departure semantics since #89) is applied once, last, as a second
-// lerp from TINT_NEUTRAL toward the phase-blended color -- k=0 collapses to
-// flat neutral (Off), k=1 lands exactly on the tuned phase blend (Medium),
-// k=1.6 (Strong) extrapolates a little past it. Single place strength is
-// applied, same property #88 kept for the old alpha-multiplier version.
+// Continuous solar altitude (#92): 0 at sunrise/sunset, +1 at solar noon,
+// -1 at true midnight (the midpoint of the night span, same anchor
+// tintAnchors() already computes) -- NOT a real solar-elevation formula,
+// the issue says one is welcome but not required, just a smooth two-piece
+// sine built on the same real weather.sun times #78 already anchors the
+// four phases to, so the seasonal drift #78 built keeps working unchanged.
+// The day and night pieces are both exactly 0 at their shared boundary
+// (sunrise/sunset), so the curve is continuous everywhere -- there's a
+// slope change there (day and night spans are rarely equal length), not a
+// jump, which is why a time-lapse never shows a step.
+function solarAltitude(sun, now) {
+  const { sunrise: rise, sunset: set } = tintAnchors(sun);
+  const nowMin = minutesOf(now);
+  if (nowMin >= rise && nowMin < set) {
+    return Math.sin(Math.PI * ((nowMin - rise) / (set - rise)));
+  }
+  const nightSpan = rise + 1440 - set;
+  return -Math.sin(Math.PI * (((nowMin - set + 1440) % 1440) / nightSpan));
+}
+
+// Intensity (#92, part 3 of the issue): strongest near the horizon at dawn
+// and dusk (altitude ~0), receding at noon AND at true night -- "recedes"
+// rather than "vanishes" during the day, per the issue's own "washes the
+// whole field at noon" -- a hard floor at altitude>=0 keeps a faint wash
+// visible at noon instead of the glow stop disappearing into the plain
+// gradient for the middle third of the day; night gets no such floor, so
+// it genuinely reaches 0 approaching true midnight ("gone at night").
+function tintIntensity(altitude) {
+  return altitude >= 0
+    ? Math.max(0.15, 1 - altitude)
+    : Math.max(0, 1 - Math.abs(altitude));
+}
+
+// Glow stop position, 0 (top) - 100 (bottom) (#92): low near the bottom
+// edge at sunrise/sunset (altitude 0 -> 82, close to the horizon but short
+// of the 100 the deep base itself owns), climbing toward the top through
+// the morning (altitude 1 -> 15), and symmetrically back down into sunset.
+// Past sunset the same line keeps going toward the bottom (altitude -1 ->
+// 96) for continuity, though it's moot there since tintIntensity() has
+// already floored the glow's amount to 0 by then.
+function tintGlowPos(altitude) {
+  return altitude >= 0 ? 82 - 67 * altitude : 82 - 14 * altitude;
+}
+
+// Returns { top, glow, glowPos, bottom } -- top/glow/bottom are rgba()
+// strings (always alpha 1 -- this paints the opaque background itself,
+// #89), glowPos a percentage string for the moving middle stop. Phase
+// colour blending (a/b/t below) is the unchanged #78/#89/#90 continuous
+// lerp between the two nearest phase centers -- no discrete step anywhere,
+// which is what keeps a phase change from ever reading as the sudden cut
+// #78 explicitly calls out. `strength` (#88, colour-departure semantics
+// since #89) is applied once to get `top`/`bottom`, same as before k=0
+// collapses to flat neutral (Off), k=1 lands on the tuned phase blend
+// (Medium), k=1.6 (Strong) extrapolates a little past it.
+//
+// #92's new geometry sits on top of that unchanged palette:
+// - `sky` (the 0% stop) darkens from `top` toward `bottom` as altitude
+//   approaches 0 -- "a still-dark sky" under the sunrise/sunset glow, the
+//   issue's own phrase -- and holds exactly `top` at noon/midnight
+//   (altitude +-1), matching #90's accepted hue there untouched. The
+//   darken amount is also gated by min(strength,1), so Off (k=0) collapses
+//   `sky` to exactly `top` at every altitude -- no motion at all, which is
+//   what "Off stays flat neutral" requires.
+// - `glow` (the moving middle stop) lerps from the plain two-stop colour
+//   the gradient would have at that position anyway (`natural`) toward
+//   `top` (the undarkened phase colour), by intensity * min(strength,1).
+//   At Off or at night this collapses to exactly `natural`, so the third
+//   stop is invisible -- indistinguishable from the old two-stop gradient
+//   -- rather than a moving knee in a flat background.
+// - `bottom` (the 100% stop, the deep base) is untouched by any of this.
 function sunTint(sun, now, strength) {
   const anchors = tintAnchors(sun);
   const order = Object.keys(anchors)
@@ -160,7 +247,23 @@ function sunTint(sun, now, strength) {
   const blendBottom = lerpTriple(pa.bottom, pb.bottom, t);
   const top = lerpTriple(TINT_NEUTRAL.top, blendTop, k).map(clamp255);
   const bottom = lerpTriple(TINT_NEUTRAL.bottom, blendBottom, k).map(clamp255);
-  return { top: rgbaStr(top, 1), bottom: rgbaStr(bottom, 1) };
+
+  const altitude = solarAltitude(sun, now);
+  const kAmt = Math.min(k, 1); // clamp even Strong's 1.6 to 1 for the new
+                                // geometry -- see the comment above.
+  const darken = Math.max(0, Math.min(0.85, 0.5 * (1 - Math.abs(altitude)) * kAmt));
+  const sky = lerpTriple(top, bottom, darken).map(clamp255);
+  const pos = tintGlowPos(altitude);
+  const natural = lerpTriple(sky, bottom, pos / 100);
+  const glowAmt = tintIntensity(altitude) * kAmt;
+  const glow = lerpTriple(natural, top, glowAmt).map(clamp255);
+
+  return {
+    top: rgbaStr(sky, 1),
+    glow: rgbaStr(glow, 1),
+    glowPos: `${pos.toFixed(1)}%`,
+    bottom: rgbaStr(bottom, 1),
+  };
 }
 function pushRing(s) {
   const now = Date.now();
@@ -1522,8 +1625,10 @@ function apply(s) {
   root.setProperty('--safe-top', `${disp.safe_area_top || 0}px`);
   root.setProperty('--safe-bottom', `${disp.safe_area_bottom || 0}px`);
 
-  const tint = sunTint(s.weather && s.weather.sun, new Date(), disp.tint_strength);
+  const tint = sunTint(s.weather && s.weather.sun, tintNow(), disp.tint_strength);
   root.setProperty('--tint-top', tint.top);
+  root.setProperty('--tint-glow', tint.glow);
+  root.setProperty('--tint-glow-pos', tint.glowPos);
   root.setProperty('--tint-bottom', tint.bottom);
 
   pushRing(s.sys);
