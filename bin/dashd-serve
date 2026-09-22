@@ -62,6 +62,7 @@ DATA = ROOT / "data"
 CONFIG = ROOT / "config.json"
 
 sys.path.insert(0, str(ROOT / "lib"))
+import aptcheck  # noqa: E402
 import ghstats  # noqa: E402
 import logsrc  # noqa: E402
 import metrics  # noqa: E402
@@ -446,6 +447,68 @@ def cached_projects(cfg: dict) -> dict:
     return {**cache, "stale": age >= ttl, "age_seconds": round(age)}
 
 
+# --------------------------------------------------------------- updates
+#
+# Pending apt-get upgrade counts (#83), same posture as projects above:
+# `apt-get -s upgrade` measured ~4s on this machine and touches no network,
+# but it's still local disk/CPU work the request thread must never wait on.
+# Same fetch-once-and-cache shape -- a miss schedules a background refresh
+# and serves `pending` meanwhile, a later poll picks up the result.
+
+_apt_lock = threading.Lock()
+_apt_refreshing = False
+
+
+def _apt_refresh() -> None:
+    global _apt_refreshing
+    path = DATA / "apt_updates.json"
+    try:
+        payload = aptcheck.fetch()
+    except aptcheck.AptUnavailableError as exc:
+        payload = {"available": False, "error": str(exc),
+                   "fetched_at": time.time(), "total": 0, "security": 0}
+    except Exception as exc:  # noqa: BLE001 -- a background thread that dies
+        # silently would leave the row stuck on "pending" forever.
+        payload = {"available": False, "error": f"{type(exc).__name__}: {exc}",
+                   "fetched_at": time.time(), "total": 0, "security": 0}
+    try:
+        DATA.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(payload, indent=1))
+    except OSError:
+        pass
+    with _apt_lock:
+        _apt_refreshing = False
+
+
+def cached_apt_updates(cfg: dict) -> dict:
+    """Last known pending-update counts, refreshing in the background past
+    the TTL. Always returns immediately -- a stale cache is served with
+    stale=True rather than blocking or erroring.
+    """
+    global _apt_refreshing
+    ucfg = cfg.get("updates") or {}
+    if not ucfg.get("enabled", True):
+        return {"available": False, "disabled": True, "total": 0, "security": 0}
+    ttl = float(ucfg.get("refresh_seconds", 21600))
+    path = DATA / "apt_updates.json"
+    cache = None
+    if path.exists():
+        try:
+            cache = json.loads(path.read_text())
+        except (json.JSONDecodeError, OSError):
+            cache = None
+    age = time.time() - cache["fetched_at"] if cache else None
+
+    if age is None or age >= ttl:
+        with _apt_lock:
+            if not _apt_refreshing:
+                _apt_refreshing = True
+                threading.Thread(target=_apt_refresh, daemon=True).start()
+    if cache is None:
+        return {"available": False, "pending": True, "total": 0, "security": 0}
+    return {**cache, "stale": age >= ttl, "age_seconds": round(age)}
+
+
 def load_tasks() -> dict:
     """{"items": [...]} from data/tasks.json, source-agnostic (#25).
 
@@ -563,6 +626,7 @@ def build_state(cfg: dict) -> dict:
         "sys": sys_stats,
         "music": now_playing(),
         "projects": cached_projects(cfg),
+        "updates": cached_apt_updates(cfg),
         # Read on the request thread, unlike projects: this one is two local
         # subprocesses against the journal and logind (~17ms combined), not a
         # network round trip, so a cache file and a refresh thread would be

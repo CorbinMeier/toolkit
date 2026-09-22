@@ -78,9 +78,14 @@ def main() -> int:
 
         state = json.loads(get("/api/state"))
         check("state has all top-level keys",
-              {"ts", "config", "weather", "sys", "projects", "sessions",
-               "tasks", "logs", "extra", "locations"}
+              {"ts", "config", "weather", "sys", "projects", "updates",
+               "sessions", "tasks", "logs", "extra", "locations"}
               <= state.keys(), str(sorted(state.keys())))
+        # #83: same "renamed key silently blanks a row" contract as
+        # projects -- `available` must always be present, whatever its
+        # value, so the frontend can tell "not ready yet" from "broken".
+        check("updates state has an available flag",
+              "available" in state["updates"], state["updates"])
         # #62: the panel must always get a rows list to iterate, in every
         # state -- pending, unavailable, disabled, or populated. A missing
         # key here is exactly the "renamed state key silently blanks a

@@ -419,6 +419,26 @@ function renderCpuMemBat(s) {
      </div>`;
 }
 
+// Pending apt updates (#83): one row, same .sys-grid shape as everything
+// else here. The total on its own is chrome -- what earns the alert-badge
+// treatment is any pending *security* update, same hot-threshold mechanism
+// CPU/MEM/Storage/LOAD already use, called out in the sub line rather than
+// a second color (this system commits to exactly one alert color, red,
+// see DESIGN.md's Status-Only Glow / One Accent Per Region rules). Omitted
+// entirely -- not a zeroed or error row -- when the cache hasn't populated
+// yet or the tooling isn't available, same degrade-gracefully posture as
+// Projects/Sessions/Music.
+function renderUpdates(updates) {
+  const box = $('sys');
+  if (!updates || !updates.available) return;
+  box.append(...sysRow({
+    label: 'UPDATES',
+    value: `${updates.total}`,
+    hot: updates.security > 0,
+    sub: updates.security > 0 ? `${updates.security} security` : '',
+  }));
+}
+
 // Storage: its own dedicated area (#12), not mixed into the
 // cpu/mem/bat rows above. Every partition lsblk reports a real utilization
 // for, not just psutil's mounted view -- see dashd-serve's disk_tree().
@@ -1354,6 +1374,7 @@ function apply(s) {
   pushRing(s.sys);
   renderWeather(s.weather, s.config.location);
   renderCpuMemBat(s.sys);
+  renderUpdates(s.updates);
   renderDisks(s.sys.disks, s.sys.swap);
   renderDiskIO(s.sys);
   renderNetwork(s.sys);

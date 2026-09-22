@@ -19,6 +19,9 @@ data/config.local.json.tmp
 # machine-local state -- it holds repo names and issue counts for every
 # private org the gh token can see, so it must never be committed.
 data/projects.json
+# Pending apt-get upgrade count cache (#83) -- machine-local state, not part
+# of the tracked config.
+data/apt_updates.json
 __pycache__/
 .venv/
 node_modules/

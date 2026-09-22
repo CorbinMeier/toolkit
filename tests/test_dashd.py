@@ -454,21 +454,26 @@ class TestBuildState(unittest.TestCase):
         cfg = dashd.load_config()
         orig_weather, orig_logs = dashd.cached_weather, dashd.logsrc.read_log_lines
         orig_projects = dashd.cached_projects
+        orig_apt = dashd.cached_apt_updates
         dashd.cached_weather = lambda _c: {"stale": False, "unavailable": True}
         dashd.logsrc.read_log_lines = lambda _c: []
-        # Stubbed, not just tolerated: the real cached_projects() would
-        # spawn a background `gh` fetch on a cache miss, making this
-        # hermetic unit test shell out to the network.
+        # Stubbed, not just tolerated: the real cached_projects()/
+        # cached_apt_updates() would spawn a background `gh`/`apt-get` fetch
+        # on a cache miss, making this hermetic unit test shell out to the
+        # network or take the ~4s a real apt simulation costs.
         dashd.cached_projects = lambda _c: {"available": True, "rows": [],
                                             "totals": {}}
+        dashd.cached_apt_updates = lambda _c: {"available": True, "total": 0,
+                                                "security": 0}
         try:
             st = dashd.build_state(cfg)
         finally:
             dashd.cached_weather = orig_weather
             dashd.logsrc.read_log_lines = orig_logs
             dashd.cached_projects = orig_projects
+            dashd.cached_apt_updates = orig_apt
         for key in ("ts", "config", "weather", "sys", "music", "projects",
-                    "tasks", "logs", "extra", "locations"):
+                    "updates", "tasks", "logs", "extra", "locations"):
             self.assertIn(key, st)
         self.assertEqual(st["logs"], [])
         for key in ("units", "display", "location", "poll", "metrics_retain_hours"):
@@ -874,6 +879,104 @@ class TestCachedProjects(unittest.TestCase):
         with patch.object(dashd.ghstats, "fetch", boom):
             dashd._projects_refresh({"projects": {}})
         self.assertFalse(dashd._projects_refreshing)
+
+
+class TestAptCheckShape(unittest.TestCase):
+    """aptcheck.shape() parses `apt-get -s upgrade`'s simulated output --
+    only `Inst ` lines count, and `-security` in the parenthesized origin
+    list is what earns the security count (#83)."""
+
+    def test_counts_total_and_security(self):
+        sim = (
+            "Inst libc6-i386 [2.39-0ubuntu8.8] "
+            "(2.39-0ubuntu8.9 Ubuntu:24.04/noble-security, "
+            "Ubuntu:24.04/noble-updates [amd64]) []\n"
+            "Inst vim [2:9.1.0-1] (2:9.1.1-1 Ubuntu:24.04/noble-updates "
+            "[amd64])\n"
+            "Conf libc6-i386 (2.39-0ubuntu8.9 Ubuntu:24.04/noble-security "
+            "[amd64])\n"
+        )
+        out = dashd.aptcheck.shape(sim)
+        self.assertEqual(out["total"], 2)
+        self.assertEqual(out["security"], 1)
+        self.assertTrue(out["available"])
+
+    def test_no_pending_upgrades(self):
+        out = dashd.aptcheck.shape("Reading package lists...\n"
+                                    "Building dependency tree...\n")
+        self.assertEqual(out, {"total": 0, "security": 0, "available": True})
+
+
+class TestCachedAptUpdates(unittest.TestCase):
+    """cached_apt_updates() must never block the request thread on
+    apt-get's ~4s simulation (#83) -- same fetch-once-and-cache shape as
+    cached_projects()."""
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self._orig_data = dashd.DATA
+        dashd.DATA = Path(self._tmp.name)
+
+    def tearDown(self):
+        dashd.DATA = self._orig_data
+        dashd._apt_refreshing = False
+        self._tmp.cleanup()
+
+    def _write(self, payload):
+        (Path(self._tmp.name) / "apt_updates.json").write_text(json.dumps(payload))
+
+    def test_disabled_short_circuits_before_any_fetch(self):
+        with patch.object(dashd.threading, "Thread") as thread:
+            out = dashd.cached_apt_updates({"updates": {"enabled": False}})
+        self.assertFalse(out["available"])
+        thread.assert_not_called()
+
+    def test_cache_miss_returns_pending_and_schedules_a_thread(self):
+        with patch.object(dashd.threading, "Thread") as thread:
+            out = dashd.cached_apt_updates({"updates": {}})
+        self.assertTrue(out["pending"])
+        self.assertEqual(out["total"], 0)
+        thread.assert_called_once()
+        self.assertTrue(thread.call_args.kwargs["daemon"])
+
+    def test_fresh_cache_is_served_without_refetching(self):
+        self._write({"available": True, "total": 5, "security": 1,
+                     "fetched_at": time.time()})
+        with patch.object(dashd.threading, "Thread") as thread:
+            out = dashd.cached_apt_updates({"updates": {"refresh_seconds": 3600}})
+        self.assertFalse(out["stale"])
+        self.assertEqual(out["total"], 5)
+        thread.assert_not_called()
+
+    def test_stale_cache_is_served_and_marked_while_refreshing(self):
+        self._write({"available": True, "total": 5, "security": 1,
+                     "fetched_at": time.time() - 99999})
+        with patch.object(dashd.threading, "Thread") as thread:
+            out = dashd.cached_apt_updates({"updates": {"refresh_seconds": 60}})
+        self.assertTrue(out["stale"])
+        self.assertEqual(out["total"], 5)
+        thread.assert_called_once()
+
+    def test_apt_failure_is_cached_so_it_does_not_respawn_every_poll(self):
+        def boom(timeout=None):
+            raise dashd.aptcheck.AptUnavailableError("apt-get is not installed")
+
+        with patch.object(dashd.aptcheck, "fetch", boom):
+            dashd._apt_refresh()
+        written = json.loads(
+            (Path(self._tmp.name) / "apt_updates.json").read_text())
+        self.assertFalse(written["available"])
+        self.assertIn("not installed", written["error"])
+        self.assertIn("fetched_at", written)
+
+    def test_unexpected_exception_still_clears_the_refresh_flag(self):
+        def boom(timeout=None):
+            raise ValueError("something unexpected")
+
+        dashd._apt_refreshing = True
+        with patch.object(dashd.aptcheck, "fetch", boom):
+            dashd._apt_refresh()
+        self.assertFalse(dashd._apt_refreshing)
 
 
 class TestConfigPatch(unittest.TestCase):
