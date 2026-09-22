@@ -373,6 +373,22 @@ unrendered — see *Layout* and *Current state*.
 
 ## Superseded decisions
 
+### `display.transparent` = true, with a time-of-day slate tint to come (2026-09-21, superseded 2026-09-21)
+
+- Over: an opaque surface
+- Why: cosmic-comp composites an RGBA layer-shell surface over `cosmic-bg`,
+  backdrop blur included. The tint is #78
+
+Two rounds (#78, #88) then tuned the tint's alpha against this premise, and
+the user still saw a fully see-through surface — a subtle gray gradient over
+a wallpaper is not what "a subset of slate gray... barely being present"
+described; it described the colour spread of an opaque background, per #89's
+correction (user, 2026-09-21: "The background is still transparent. It
+should not be transparent."). Replaced by `transparent = false` with
+`#suntint` painted at alpha 1 as the real background, `display.tint_strength`
+re-scoped from an alpha multiplier to how far each phase departs from a
+neutral slate base.
+
 ### `display.transparent` = false (2026-08-20, superseded 2026-09-21)
 
 - Over: the RGBA + backdrop-blur path, which was verified to work

@@ -91,11 +91,11 @@ Status: approved 2026-09-21
 - **Input region covers the whole surface** - 2026-08-27
   - Over: scoped per-widget click-through rects, and the JS-to-Python rect bridge they need
   - Why: user - "I don't use my desktop (nothing on my desktop)" (#36)
-- **`display.transparent` = true, with a time-of-day slate tint to come** - 2026-09-21
-  - Over: an opaque surface
-  - Why: cosmic-comp composites an RGBA layer-shell surface over `cosmic-bg`,
-    backdrop blur included. The tint is #78
-  - Supersedes: "= false" (2026-08-20), which the tracked config never carried
+- **`display.transparent` = false; the time-of-day tint IS the opaque background** - 2026-09-21
+  - Over: the RGBA/backdrop-blur path riding a tint over `cosmic-bg`'s wallpaper
+  - Why: user - "The background is still transparent... It should not be." Two
+    rounds (#78, #88) tuned tint alpha; the premise, not the amplitude, was wrong (#89)
+  - Supersedes: "= true, with a time-of-day slate tint to come" (2026-09-21, #78)
 
 ### Panels
 - **Devices removed entirely, not hidden** - 2026-08-23

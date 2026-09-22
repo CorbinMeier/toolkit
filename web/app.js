@@ -42,43 +42,56 @@ let failures = 0;
 const RING_WINDOW_MS = 5 * 60 * 1000;
 let ring = { t: [], down: [], up: [], diskRead: [], diskWrite: [] };
 
-// Surface tint (#78): a slate-toned gradient the surface paints over the
-// wallpaper (display.transparent stays true -- this rides on top of it,
-// never replaces it). Four phases, each desaturated toward slate so none
-// reads as a color wash: morning sunrise (warm orange-slate), afternoon
-// (blue-slate), evening sunset (warm, deeper), midnight (purple-slate).
+// Surface tint (#78; made the opaque background itself, #89): a full-
+// viewport slate gradient painted by the surface -- since #89 this IS the
+// background, at alpha 1, not a translucent layer riding cosmic-bg's real
+// wallpaper (display.transparent is now false; two rounds, #78/#88, tuned
+// the wrong dimension -- the surface was see-through at any alpha). Four
+// phases, each a small departure from a neutral dark slate so none reads
+// as its own coloured background: morning sunrise (warm orange-slate),
+// afternoon (blue-slate), evening sunset (warm, deeper), midnight
+// (purple-slate).
 //
-// #88: #78's baseline alphas were calibrated to genuinely invisible (the
-// user's own wallpaper never showed any color shift) -- these are ~2.7x
-// that baseline, so each phase reads as a colour cast without competing
-// with panel content or the accent triad. This is a *starting point*, not
-// the final calibration: display.tint_strength (a live multiplier, #88)
-// is what the user actually settles on, via the context menu's Tint
-// submenu -- see TINT_STRENGTHS below.
+// TINT_NEUTRAL is the flat, unshifted slate (Off, #89) -- close in tone to
+// the pre-#78 non-transparent body background (dark, low-chroma blue-grey)
+// so panels keep the same lift they always had. TINT_PHASES holds each
+// phase's Medium-strength target color; strength (#88, semantics changed
+// by #89) now blends from TINT_NEUTRAL toward that target rather than
+// scaling alpha -- 0 (Off) is the flat neutral with no time shift at all,
+// 1 (Medium) is the tuned target, 1.6 (Strong) extrapolates a little past
+// it for a more pronounced cast. Every channel stays within ~25 of neutral
+// even at Strong, which is the "subset of slate gray, not distracting" bar
+// applied to hue instead of opacity.
 //
 // Phase centers follow the real sun rather than the clock: sunrise/sunset
 // come straight from weather.sun; afternoon centers on solar noon (their
 // midpoint) and midnight on the midpoint of the night span, so all four
 // drift with the season the same way, not just the two that are given
 // directly. Theme-independent (see DESIGN.md's Surface Tint entry): this
-// is a daylight cue riding the wallpaper layer, not HUD chrome, so it
-// renders identically under night_ops/retro_terminal/retro_orange.
+// is a daylight cue on the background layer, not HUD chrome, so it renders
+// identically under night_ops/retro_terminal/retro_orange (the CRT themes'
+// own opaque body backgrounds sit underneath and are now fully covered --
+// see DESIGN.md).
+const TINT_NEUTRAL = { top: [34, 36, 44], bottom: [20, 21, 27] };
 const TINT_PHASES = {
-  sunrise:   { top: [128, 100, 78], bottom: [72, 60, 54], aTop: 0.19, aBot: 0.08 },
-  afternoon: { top: [70, 88, 108],  bottom: [54, 66, 84], aTop: 0.14, aBot: 0.05 },
-  sunset:    { top: [104, 62, 52],  bottom: [64, 42, 40], aTop: 0.22, aBot: 0.11 },
-  midnight:  { top: [64, 50, 82],   bottom: [40, 34, 54], aTop: 0.14, aBot: 0.05 },
+  sunrise:   { top: [48, 42, 38], bottom: [29, 25, 23] },
+  afternoon: { top: [30, 39, 55], bottom: [18, 23, 34] },
+  sunset:    { top: [50, 34, 36], bottom: [31, 21, 22] },
+  midnight:  { top: [39, 31, 55], bottom: [23, 18, 34] },
 };
 
-// Named strength levels for the context menu's Tint submenu (#88). A plain
-// multiplier over every phase's alpha -- Off is exactly 0 (genuinely no
-// paint, not just a very small alpha), so the feature is fully dismissible
-// without editing config. Medium (1) reproduces TINT_PHASES above as
-// tuned; Subtle/Strong scale it down/up. display.tint_strength stores the
-// raw number (persisted via #74's selection mechanism, same as
+// Named strength levels for the context menu's Tint submenu (#88). Since
+// #89 this is a colour-departure multiplier, not an alpha multiplier --
+// Off is exactly 0 (TINT_NEUTRAL, no time shift, but always an opaque
+// surface -- never transparent). Medium (1) reproduces TINT_PHASES above
+// as tuned; Subtle/Strong scale the departure down/up. display.tint_strength
+// stores the raw number (persisted via #74's selection mechanism, same as
 // display.theme), so an old or hand-edited config with an arbitrary value
-// still works -- the menu just won't show any entry checked.
+// still works -- the menu just won't show any entry checked. The values
+// are unchanged from #88 -- the user's live selection (1.6, Strong) still
+// resolves to Strong under the new meaning.
 const TINT_STRENGTHS = { off: 0, subtle: 0.6, medium: 1, strong: 1.6 };
+const clamp255 = (v) => Math.max(0, Math.min(255, v));
 
 function minutesOf(d) { return d.getHours() * 60 + d.getMinutes() + d.getSeconds() / 60; }
 
@@ -102,15 +115,17 @@ function rgbaStr(rgb, a) {
   return `rgba(${Math.round(rgb[0])}, ${Math.round(rgb[1])}, ${Math.round(rgb[2])}, ${a.toFixed(3)})`;
 }
 
-// Returns { top, bottom } rgba() strings for the current continuous blend
-// between the two nearest phase centers. A plain lerp, recomputed fresh
-// every call -- there is no discrete step anywhere in this function, which
-// is what keeps a phase change from ever reading as the sudden cut #78
-// explicitly calls out. `strength` (#88) is a flat multiplier applied to
-// the blended alpha last -- lerp(k*a, k*b, t) === k*lerp(a, b, t), so
-// scaling at the end is equivalent to scaling every phase up front and
-// keeps this the single place strength is applied. 0 multiplies straight
-// through to alpha 0 -- genuinely no paint, not an epsilon.
+// Returns { top, bottom } rgba() strings (always alpha 1 -- this paints the
+// opaque background itself, #89) for the current continuous blend between
+// the two nearest phase centers. A plain lerp, recomputed fresh every call
+// -- there is no discrete step anywhere in this function, which is what
+// keeps a phase change from ever reading as the sudden cut #78 explicitly
+// calls out; #89 kept this exactly as #78 built it. `strength` (#88,
+// colour-departure semantics since #89) is applied once, last, as a second
+// lerp from TINT_NEUTRAL toward the phase-blended color -- k=0 collapses to
+// flat neutral (Off), k=1 lands exactly on the tuned phase blend (Medium),
+// k=1.6 (Strong) extrapolates a little past it. Single place strength is
+// applied, same property #88 kept for the old alpha-multiplier version.
 function sunTint(sun, now, strength) {
   const anchors = tintAnchors(sun);
   const order = Object.keys(anchors)
@@ -126,10 +141,11 @@ function sunTint(sun, now, strength) {
   const t = elapsed / span;
   const pa = TINT_PHASES[a.key], pb = TINT_PHASES[b.key];
   const k = strength ?? TINT_STRENGTHS.medium;
-  return {
-    top: rgbaStr(lerpTriple(pa.top, pb.top, t), lerp(pa.aTop, pb.aTop, t) * k),
-    bottom: rgbaStr(lerpTriple(pa.bottom, pb.bottom, t), lerp(pa.aBot, pb.aBot, t) * k),
-  };
+  const blendTop = lerpTriple(pa.top, pb.top, t);
+  const blendBottom = lerpTriple(pa.bottom, pb.bottom, t);
+  const top = lerpTriple(TINT_NEUTRAL.top, blendTop, k).map(clamp255);
+  const bottom = lerpTriple(TINT_NEUTRAL.bottom, blendBottom, k).map(clamp255);
+  return { top: rgbaStr(top, 1), bottom: rgbaStr(bottom, 1) };
 }
 function pushRing(s) {
   const now = Date.now();

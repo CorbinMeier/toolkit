@@ -85,7 +85,7 @@
   "display": {
     "layer": "BOTTOM",
     "interactive": true,
-    "transparent": true,
+    "transparent": false,
     "theme": "night_ops",
     "_theme_options": [
       "night_ops",
