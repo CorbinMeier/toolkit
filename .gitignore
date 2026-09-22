@@ -1,4 +1,9 @@
 data/weather.json
+# Open-Meteo Air Quality cache (#79) -- same refetch-past-TTL,
+# serve-stale-on-failure posture as weather.json.
+data/air_quality.json
+# api.weather.gov active-alerts cache (#80) -- same posture as weather.json.
+data/nws_alerts.json
 data/extra.json
 data/tasks.json
 # Selectable locations for the Location submenu (#77) -- source-agnostic

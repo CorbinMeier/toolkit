@@ -1045,6 +1045,25 @@ function renderWeather(w, configLocation) {
   renderSunMoon(w);
 }
 
+/* Air quality (#79) -- its own kv-grid row, own data source (state.air_quality,
+ * not nested in weather: independent fetch/stale lifecycle server-side).
+ * Degrades to hidden -- both the key and value spans -- the same way ghstats/
+ * now_playing degrade, rather than rendering an empty/dashed row every poll. */
+function renderAirQuality(aq) {
+  const keyEl = $('waqi-key');
+  const valEl = $('waqi');
+  if (!keyEl || !valEl) return;
+  const show = Boolean(aq) && !aq.unavailable && aq.aqi != null;
+  keyEl.classList.toggle('hidden', !show);
+  valEl.classList.toggle('hidden', !show);
+  if (!show) return;
+  valEl.textContent = `${aq.aqi} ${aq.category}`
+    + (aq.stale ? ` · ${Math.round(aq.age_seconds / 60)}m old` : '');
+  const hot = Boolean(aq.alert);
+  valEl.classList.toggle('alert-badge', hot);
+  valEl.classList.toggle('text-ink', !hot);
+}
+
 /* Compact hourly strip: time + temp, no chart, no icon (#40). Replaces a
  * "Next 24 hours" sparkline that was vague and cost far more vertical
  * space than the info was worth (see #8). */
@@ -1373,6 +1392,7 @@ function apply(s) {
 
   pushRing(s.sys);
   renderWeather(s.weather, s.config.location);
+  renderAirQuality(s.air_quality);
   renderCpuMemBat(s.sys);
   renderUpdates(s.updates);
   renderDisks(s.sys.disks, s.sys.swap);

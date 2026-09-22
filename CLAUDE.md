@@ -64,10 +64,10 @@ Status: approved 2026-09-21
   for CPU and Memory (#12, #17, #57, #58, #59).
 - Music: MPRIS via `playerctl`, with transport controls; idle shows a placeholder
   rather than hiding (#26, #65).
-- Projects: per-repo GitHub issue stats, paginated (#62, #64).
-- Sessions: who logged in since the last boot (#71).
+- Projects: per-repo GitHub stats, paginated (#62, #64); Sessions: since-boot logins (#71).
 #### Forecast panel, right half [live]
-- Current conditions, hourly, week, sun/moon - one panel (#10).
+- Current conditions, hourly, week, sun/moon - one panel (#10). AQI (US AQI +
+  PM2.5) is its own kv-grid row, hidden entirely when unavailable (#79).
 #### Log panel, below both [live]
 - Matched and highlighted lines only, never a full tail (#28, #72).
 #### Mobile control surface - `bin/dashd-control` [built, unit not enabled]

@@ -25,9 +25,12 @@ config.json         location, units, port, display layer, per-output overrides,
                     metrics sample/retain interval, control host/port,
                     log source/patterns (#30), projects refresh/staleness
                     window (#62)
-data/               weather.json cache, extra.json, tasks.json (read but
-                    unrendered, #63), metrics.db, projects.json cache
-                    (#62), control_token.txt, config.local.json (this
+data/               weather.json cache, air_quality.json (#79) and
+                    nws_alerts.json (#80) caches -- same TTL/stale-fallback
+                    posture as weather.json, own files since each source
+                    has its own fetch lifecycle -- extra.json, tasks.json
+                    (read but unrendered, #63), metrics.db, projects.json
+                    cache (#62), control_token.txt, config.local.json (this
                     machine's selections, #74), locations.json (selectable
                     locations for the context menu's Location submenu,
                     #77 -- nothing in this repo writes it yet, hand-edit

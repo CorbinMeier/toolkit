@@ -436,6 +436,186 @@ class TestWeatherAlert(unittest.TestCase):
         self.assertIsNone(out["condition_label"])
 
 
+class TestAqiCategory(unittest.TestCase):
+    def test_bands_are_inclusive_of_their_ceiling(self):
+        self.assertEqual(dashd.aqi_category(50), "Good")
+        self.assertEqual(dashd.aqi_category(51), "Moderate")
+        self.assertEqual(dashd.aqi_category(101), "Unhealthy for Sensitive Groups")
+        self.assertEqual(dashd.aqi_category(500), "Hazardous")
+
+
+class TestAirQualityCache(unittest.TestCase):
+    """Same cache-with-TTL-and-stale-fallback shape as TestWeatherCache,
+    since #79 explicitly follows that pattern -- exercised through the
+    shared _fetch_or_cache() helper."""
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self._orig = dashd.DATA
+        dashd.DATA = Path(self._tmp.name)
+
+    def tearDown(self):
+        dashd.DATA = self._orig
+        self._tmp.cleanup()
+
+    def _cfg(self, ttl=900, aqi_high=None):
+        cfg = {"refresh": {"air_quality_seconds": ttl},
+               "location": {"name": "T", "latitude": 0, "longitude": 0,
+                            "timezone": "UTC"}}
+        if aqi_high is not None:
+            cfg["weather_alerts"] = {"aqi_high": aqi_high}
+        return cfg
+
+    def test_fresh_cache_is_served_without_refetch(self):
+        import time
+        payload = {"aqi": 42, "pm2_5": 8.1, "category": "Good",
+                   "fetched_at": time.time()}
+        (dashd.DATA / "air_quality.json").write_text(json.dumps(payload))
+
+        def boom(_cfg):
+            raise AssertionError("must not refetch inside TTL")
+
+        orig, dashd.fetch_air_quality = dashd.fetch_air_quality, boom
+        try:
+            out = dashd.cached_air_quality(self._cfg())
+        finally:
+            dashd.fetch_air_quality = orig
+        self.assertEqual(out["aqi"], 42)
+        self.assertFalse(out["stale"])
+
+    def test_expired_cache_survives_a_failed_refetch(self):
+        payload = {"aqi": 30, "fetched_at": 0}
+        (dashd.DATA / "air_quality.json").write_text(json.dumps(payload))
+
+        def boom(_cfg):
+            raise TimeoutError("network down")
+
+        orig, dashd.fetch_air_quality = dashd.fetch_air_quality, boom
+        try:
+            out = dashd.cached_air_quality(self._cfg())
+        finally:
+            dashd.fetch_air_quality = orig
+        self.assertEqual(out["aqi"], 30)
+        self.assertTrue(out["stale"])
+
+    def test_no_cache_and_failed_fetch_reports_unavailable(self):
+        def boom(_cfg):
+            raise TimeoutError("network down")
+
+        orig, dashd.fetch_air_quality = dashd.fetch_air_quality, boom
+        try:
+            out = dashd.cached_air_quality(self._cfg())
+        finally:
+            dashd.fetch_air_quality = orig
+        self.assertTrue(out["unavailable"])
+
+    def test_alert_flag_set_past_configured_threshold(self):
+        import time
+        payload = {"aqi": 150, "fetched_at": time.time()}
+        (dashd.DATA / "air_quality.json").write_text(json.dumps(payload))
+        out = dashd.cached_air_quality(self._cfg(aqi_high=101))
+        self.assertTrue(out["alert"])
+
+    def test_alert_flag_clear_under_configured_threshold(self):
+        import time
+        payload = {"aqi": 40, "fetched_at": time.time()}
+        (dashd.DATA / "air_quality.json").write_text(json.dumps(payload))
+        out = dashd.cached_air_quality(self._cfg(aqi_high=101))
+        self.assertFalse(out["alert"])
+
+
+class TestShapeNwsAlerts(unittest.TestCase):
+    def test_extracts_the_fields_the_panel_needs(self):
+        raw = {"features": [{"properties": {
+            "event": "Red Flag Warning", "severity": "Severe",
+            "headline": "Red Flag Warning issued", "onset": "2026-09-21T00:00:00Z",
+            "ends": "2026-09-22T00:00:00Z", "senderName": "NWS Sacramento",
+            "status": "Actual"}}]}
+        out = dashd.shape_nws_alerts(raw)
+        self.assertEqual(len(out), 1)
+        self.assertEqual(out[0]["event"], "Red Flag Warning")
+        self.assertEqual(out[0]["severity"], "Severe")
+
+    def test_non_actual_status_is_dropped(self):
+        raw = {"features": [{"properties": {
+            "event": "Test Alert", "severity": "Minor", "status": "Test"}}]}
+        self.assertEqual(dashd.shape_nws_alerts(raw), [])
+
+    def test_no_features_is_an_empty_list(self):
+        self.assertEqual(dashd.shape_nws_alerts({"features": []}), [])
+        self.assertEqual(dashd.shape_nws_alerts({}), [])
+
+    def test_sorted_most_severe_first(self):
+        raw = {"features": [
+            {"properties": {"event": "Minor thing", "severity": "Minor"}},
+            {"properties": {"event": "Extreme thing", "severity": "Extreme"}},
+            {"properties": {"event": "Moderate thing", "severity": "Moderate"}},
+        ]}
+        out = dashd.shape_nws_alerts(raw)
+        self.assertEqual([r["severity"] for r in out],
+                         ["Extreme", "Moderate", "Minor"])
+
+
+class TestNwsAlertsCache(unittest.TestCase):
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self._orig = dashd.DATA
+        dashd.DATA = Path(self._tmp.name)
+
+    def tearDown(self):
+        dashd.DATA = self._orig
+        self._tmp.cleanup()
+
+    def _cfg(self, ttl=300):
+        return {"refresh": {"nws_alerts_seconds": ttl},
+                "location": {"name": "T", "latitude": 0, "longitude": 0,
+                             "timezone": "UTC"}}
+
+    def test_fresh_cache_is_served_without_refetch(self):
+        import time
+        payload = {"alerts": [{"event": "Heat Advisory"}], "fetched_at": time.time()}
+        (dashd.DATA / "nws_alerts.json").write_text(json.dumps(payload))
+
+        def boom(_cfg):
+            raise AssertionError("must not refetch inside TTL")
+
+        orig, dashd.fetch_nws_alerts = dashd.fetch_nws_alerts, boom
+        try:
+            out = dashd.cached_nws_alerts(self._cfg())
+        finally:
+            dashd.fetch_nws_alerts = orig
+        self.assertEqual(out["alerts"][0]["event"], "Heat Advisory")
+
+    def test_no_cache_and_failed_fetch_reports_unavailable(self):
+        def boom(_cfg):
+            raise TimeoutError("network down")
+
+        orig, dashd.fetch_nws_alerts = dashd.fetch_nws_alerts, boom
+        try:
+            out = dashd.cached_nws_alerts(self._cfg())
+        finally:
+            dashd.fetch_nws_alerts = orig
+        self.assertTrue(out["unavailable"])
+
+
+class TestInvalidateWeatherCache(unittest.TestCase):
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self._orig = dashd.DATA
+        dashd.DATA = Path(self._tmp.name)
+
+    def tearDown(self):
+        dashd.DATA = self._orig
+        self._tmp.cleanup()
+
+    def test_drops_all_three_location_derived_caches(self):
+        for name in ("weather.json", "air_quality.json", "nws_alerts.json"):
+            (dashd.DATA / name).write_text("{}")
+        dashd.invalidate_weather_cache()
+        for name in ("weather.json", "air_quality.json", "nws_alerts.json"):
+            self.assertFalse((dashd.DATA / name).exists())
+
+
 class TestBuildState(unittest.TestCase):
     def setUp(self):
         # build_state() reads weather.json/extra.json from DATA -- keep
@@ -455,16 +635,22 @@ class TestBuildState(unittest.TestCase):
         orig_weather, orig_logs = dashd.cached_weather, dashd.logsrc.read_log_lines
         orig_projects = dashd.cached_projects
         orig_apt = dashd.cached_apt_updates
+        orig_aq, orig_nws = dashd.cached_air_quality, dashd.cached_nws_alerts
         dashd.cached_weather = lambda _c: {"stale": False, "unavailable": True}
         dashd.logsrc.read_log_lines = lambda _c: []
         # Stubbed, not just tolerated: the real cached_projects()/
         # cached_apt_updates() would spawn a background `gh`/`apt-get` fetch
         # on a cache miss, making this hermetic unit test shell out to the
         # network or take the ~4s a real apt simulation costs.
+        # cached_air_quality/cached_nws_alerts would do the same on an
+        # empty cache dir (no cache -> straight to the live fetch), so
+        # they're stubbed too.
         dashd.cached_projects = lambda _c: {"available": True, "rows": [],
                                             "totals": {}}
         dashd.cached_apt_updates = lambda _c: {"available": True, "total": 0,
                                                 "security": 0}
+        dashd.cached_air_quality = lambda _c: {"stale": False, "unavailable": True}
+        dashd.cached_nws_alerts = lambda _c: {"stale": False, "unavailable": True}
         try:
             st = dashd.build_state(cfg)
         finally:
@@ -472,8 +658,11 @@ class TestBuildState(unittest.TestCase):
             dashd.logsrc.read_log_lines = orig_logs
             dashd.cached_projects = orig_projects
             dashd.cached_apt_updates = orig_apt
-        for key in ("ts", "config", "weather", "sys", "music", "projects",
-                    "updates", "tasks", "logs", "extra", "locations"):
+            dashd.cached_air_quality = orig_aq
+            dashd.cached_nws_alerts = orig_nws
+        for key in ("ts", "config", "weather", "air_quality", "nws_alerts",
+                    "sys", "music", "projects", "updates",
+                    "tasks", "logs", "extra", "locations"):
             self.assertIn(key, st)
         self.assertEqual(st["logs"], [])
         for key in ("units", "display", "location", "poll", "metrics_retain_hours"):

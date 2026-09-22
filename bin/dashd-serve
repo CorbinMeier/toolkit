@@ -4,6 +4,12 @@
 Serves web/ as static files and a merged /api/state document:
 
     weather   Open-Meteo, cached to data/weather.json (refetched on interval)
+    air_quality  Open-Meteo Air Quality API (#79), cached to
+              data/air_quality.json on its own TTL -- US AQI + PM2.5,
+              same lat/lon as weather, same stale-beats-error posture
+    nws_alerts   api.weather.gov active alerts by lat/lon (#80), cached to
+              data/nws_alerts.json -- kept distinct from weather.alert
+              (our own threshold-derived signal); empty outside the US
     sun/moon  sunrise/sunset from Open-Meteo, moon phase computed locally
     sys       live CPU/RAM/disk/net/battery via psutil (lib/sysinfo.py)
     music     current MPRIS now-playing state via `playerctl`, or None if
@@ -337,18 +343,30 @@ def cached_weather(cfg: dict) -> dict:
 
 
 def invalidate_weather_cache() -> None:
-    """Drop data/weather.json so the next /api/state poll refetches
-    immediately instead of serving the old location's cached observations
-    for up to weather_seconds (#77). Missing file is a no-op, not an error
-    -- same posture as every other data/ read in this file."""
+    """Drop the location-derived caches (weather, air quality, NWS alerts)
+    so the next /api/state poll refetches all three immediately instead of
+    serving the old location's data for up to their own TTLs (#77, extended
+    by #79/#80 -- air quality and alerts key off the same lat/lon and are
+    subject to the identical stale-city problem). Missing file is a no-op,
+    not an error -- same posture as every other data/ read in this file."""
     with _lock:
         (DATA / "weather.json").unlink(missing_ok=True)
+    with _aq_lock:
+        (DATA / "air_quality.json").unlink(missing_ok=True)
+    with _nws_lock:
+        (DATA / "nws_alerts.json").unlink(missing_ok=True)
 
 
-def _fetch_or_cache_weather(cfg: dict) -> dict:
-    path = DATA / "weather.json"
-    ttl = cfg["refresh"]["weather_seconds"]
-    with _lock:
+def _fetch_or_cache(path: Path, ttl: float, fetch_fn, lock: threading.Lock) -> dict:
+    """Generic cache-with-TTL-and-stale-fallback, the shape #46 established
+    for weather and #79/#80 reuse verbatim for air quality and NWS alerts:
+    serve the cache under its TTL, refetch past it, and on a failed refetch
+    serve the stale cache with stale=True rather than raising -- old data
+    beats an error on a wallpaper. No cache and a failed fetch degrades to
+    unavailable=True, the same posture ghstats/now_playing use for a source
+    that simply isn't there.
+    """
+    with lock:
         cache = None
         if path.exists():
             try:
@@ -359,7 +377,7 @@ def _fetch_or_cache_weather(cfg: dict) -> dict:
         if age < ttl:
             return {**cache, "stale": False, "age_seconds": round(age)}
         try:
-            fresh = fetch_weather(cfg)
+            fresh = fetch_fn()
             path.write_text(json.dumps(fresh, indent=1))
             return {**fresh, "stale": False, "age_seconds": 0}
         except (urllib.error.URLError, OSError, KeyError, ValueError,
@@ -368,6 +386,135 @@ def _fetch_or_cache_weather(cfg: dict) -> dict:
                 return {**cache, "stale": True, "age_seconds": round(age),
                         "error": str(exc)}
             return {"error": str(exc), "stale": True, "unavailable": True}
+
+
+def _fetch_or_cache_weather(cfg: dict) -> dict:
+    return _fetch_or_cache(DATA / "weather.json", cfg["refresh"]["weather_seconds"],
+                            lambda: fetch_weather(cfg), _lock)
+
+
+# ---------------------------------------------------------- air quality (#79)
+#
+# Open-Meteo's Air Quality API -- same provider, no key, same lat/lon as the
+# forecast, so it inherits #77's location selection automatically. A
+# separate cache/lock/TTL from weather (own file, own age, own stale flag)
+# rather than nesting inside `weather`: the two sources have independent
+# fetch lifecycles and stuffing AQ into the weather dict would conflate two
+# different `stale` flags into one.
+
+_aq_lock = threading.Lock()
+
+# US AQI bands (airnow.gov / EPA); the label is what the row highlights
+# against, not a numeric threshold comparison in the frontend.
+_AQI_BANDS = (
+    (50, "Good"), (100, "Moderate"), (150, "Unhealthy for Sensitive Groups"),
+    (200, "Unhealthy"), (300, "Very Unhealthy"), (float("inf"), "Hazardous"),
+)
+
+
+def aqi_category(aqi: float) -> str:
+    for ceiling, label in _AQI_BANDS:
+        if aqi <= ceiling:
+            return label
+    return "Hazardous"  # pragma: no cover -- inf ceiling above always matches
+
+
+def fetch_air_quality(cfg: dict) -> dict:
+    loc = cfg["location"]
+    q = urllib.parse.urlencode({
+        "latitude": loc["latitude"], "longitude": loc["longitude"],
+        "timezone": loc["timezone"], "current": "us_aqi,pm2_5",
+    })
+    url = f"https://air-quality-api.open-meteo.com/v1/air-quality?{q}"
+    with urllib.request.urlopen(url, timeout=15) as resp:
+        raw = json.load(resp)
+    cur = raw["current"]
+    aqi = cur.get("us_aqi")
+    return {
+        "aqi": round(aqi) if aqi is not None else None,
+        "pm2_5": cur.get("pm2_5"),
+        "category": aqi_category(aqi) if aqi is not None else None,
+        "fetched_at": time.time(),
+    }
+
+
+def air_quality_alert(aq: dict, cfg: dict) -> bool:
+    """Config-driven threshold, same shape as weather_alert() -- the AQI row
+    gets the alert-badge treatment once it reaches config.weather_alerts.
+    aqi_high (default 101, the first "Unhealthy for Sensitive Groups" value).
+    """
+    threshold = cfg.get("weather_alerts", {}).get("aqi_high")
+    aqi = aq.get("aqi")
+    return threshold is not None and aqi is not None and aqi >= threshold
+
+
+def cached_air_quality(cfg: dict) -> dict:
+    """Last known air quality, refetching past its TTL; degrades to
+    unavailable the same way cached_weather does on a first-ever failure."""
+    ttl = cfg["refresh"].get("air_quality_seconds", 900)
+    aq = _fetch_or_cache(DATA / "air_quality.json", ttl,
+                         lambda: fetch_air_quality(cfg), _aq_lock)
+    if not aq.get("unavailable"):
+        aq["alert"] = air_quality_alert(aq, cfg)
+    return aq
+
+
+# ---------------------------------------------------------------- NWS alerts (#80)
+#
+# api.weather.gov active alerts by lat/lon -- free, no key, no auth. Kept
+# entirely distinct from weather.alert (our own threshold-derived signal,
+# #46): an official Red Flag Warning and "today's forecast high crossed a
+# configured number" answer different questions and can both be true at
+# once. Only US coordinates ever return anything; elsewhere this always
+# degrades to an empty list, which is the correct behavior, not a bug.
+
+_nws_lock = threading.Lock()
+_NWS_SEVERITY_ORDER = {"Extreme": 0, "Severe": 1, "Moderate": 2, "Minor": 3,
+                       "Unknown": 4}
+
+
+def shape_nws_alerts(raw: dict) -> list[dict]:
+    """GeoJSON FeatureCollection -> the compact rows the panel needs, most
+    severe first. Drops `description`/`instruction` (can run to several KB
+    per alert and nothing renders them) and anything not status=="Actual"
+    (NWS also returns Test/Exercise/Draft alerts in the same feed)."""
+    rows = []
+    for feat in raw.get("features") or []:
+        p = feat.get("properties") or {}
+        if p.get("status") and p["status"] != "Actual":
+            continue
+        rows.append({
+            "event": p.get("event"), "severity": p.get("severity") or "Unknown",
+            "headline": p.get("headline"), "onset": p.get("onset"),
+            "ends": p.get("ends") or p.get("expires"),
+            "sender": p.get("senderName"),
+        })
+    rows.sort(key=lambda r: _NWS_SEVERITY_ORDER.get(r["severity"], 4))
+    return rows
+
+
+def fetch_nws_alerts(cfg: dict) -> dict:
+    loc = cfg["location"]
+    # NWS requires an identifying User-Agent on every request; an
+    # unidentified UA is documented to be throttled/rejected.
+    q = urllib.parse.urlencode(
+        {"point": f"{loc['latitude']:.4f},{loc['longitude']:.4f}"})
+    req = urllib.request.Request(
+        f"https://api.weather.gov/alerts/active?{q}",
+        headers={"User-Agent": "desktop-dashboard (github.com/CorbinMeier/desktop)",
+                 "Accept": "application/geo+json"})
+    with urllib.request.urlopen(req, timeout=15) as resp:
+        raw = json.load(resp)
+    return {"alerts": shape_nws_alerts(raw), "fetched_at": time.time()}
+
+
+def cached_nws_alerts(cfg: dict) -> dict:
+    """Last known NWS alerts, refetching past its TTL -- shorter than
+    weather's, since freshness matters more for an active warning than for
+    a temperature reading."""
+    ttl = cfg["refresh"].get("nws_alerts_seconds", 300)
+    return _fetch_or_cache(DATA / "nws_alerts.json", ttl,
+                           lambda: fetch_nws_alerts(cfg), _nws_lock)
 
 
 # ---------------------------------------------------------------- system
@@ -623,6 +770,8 @@ def build_state(cfg: dict) -> dict:
                    "metrics_retain_hours": cfg["refresh"].get(
                        "metrics_retain_hours", 24)},
         "weather": cached_weather(cfg),
+        "air_quality": cached_air_quality(cfg),
+        "nws_alerts": cached_nws_alerts(cfg),
         "sys": sys_stats,
         "music": now_playing(),
         "projects": cached_projects(cfg),

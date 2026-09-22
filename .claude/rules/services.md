@@ -37,7 +37,17 @@ bin/dashd-serve     HTTP server; /api/state merges weather+sys+extra (and
                     now (#77, same shape as `display.theme`), and accepting
                     a location patch calls invalidate_weather_cache() to
                     drop data/weather.json immediately rather than serving
-                    the old city's cache for the rest of its TTL
+                    the old city's cache for the rest of its TTL --
+                    invalidate_weather_cache() also drops
+                    data/air_quality.json and data/nws_alerts.json (#79/#80),
+                    the same stale-city problem applying to both. Air
+                    quality (fetch_air_quality/cached_air_quality) and NWS
+                    alerts (fetch_nws_alerts/cached_nws_alerts) reuse a new
+                    generic _fetch_or_cache(path, ttl, fetch_fn, lock)
+                    helper -- weather's own cache function is now a thin
+                    wrapper over it, own cache file/lock/TTL each so a slow
+                    NWS fetch never serializes behind weather on the
+                    request thread
 bin/dashd-collect   standalone timer loop (config.metrics_sample_seconds);
                     the sole writer of data/metrics.db, independent of
                     whether any view or dashd-serve poll is happening (#14)

@@ -860,6 +860,12 @@
 
               <span class="kv-key text-faint uppercase tracking-[0.1em]">UV</span>
               <span id="wuv" class="kv-val num text-ink"></span>
+
+              <!-- Air quality (#79). Both spans start hidden and renderAirQuality()
+                   un-hides the pair together -- hiding only the value would leave
+                   an orphan key label and shift every kv-grid row below it. -->
+              <span id="waqi-key" class="kv-key text-faint uppercase tracking-[0.1em] hidden">AQI</span>
+              <span id="waqi" class="kv-val num text-ink hidden"></span>
             </div>
 
             <!-- Hourly strip hidden -- user feedback: too much dead space on
