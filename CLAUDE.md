@@ -74,9 +74,8 @@ Status: approved 2026-09-21
 - QR-paired, token-gated config for units/display/logs (#30).
 
 ### External services
-- Open-Meteo: no key, no auth. Forecast, plus `geocoding-api.open-meteo.com` to
-  resolve a city to coordinates (#77), proxied server-side - `web/` never calls out.
-  Default Chico, CA (39.72849, -121.83748); IP geolocation returned nulls, unused.
+- Open-Meteo: no key, no auth. Forecast, plus `geocoding-api.open-meteo.com` to resolve
+  a city (#77), proxied server-side - `web/` never calls out. Default Chico, CA.
 - GitHub through `gh` (`lib/ghstats.py`): the authenticated user plus every org they
   belong to, `totalCount` sub-selections only.
 - Local only, degrading to `available: False` when absent: `playerctl` (MPRIS),
@@ -85,8 +84,7 @@ Status: approved 2026-09-21
 
 ## Decisions
 
-Anything under `Over:` is off the table: hit a limit, raise it, don't switch.
-Superseded entries move to `.corbin/history.md`.
+`Over:` is off the table: raise the limit, don't switch. Superseded entries move to `.corbin/history.md`.
 
 ### Surface
 - **BOTTOM layer** - 2026-08-20
@@ -112,6 +110,11 @@ Superseded entries move to `.corbin/history.md`.
   - Over: reusing `--color-online`
   - Why: every theme overrides `--color-online`, which collapsed the triad to two colors
 
+### Process
+- **Work lands on `dev`; `main` is the integration branch** - 2026-09-21
+  - Over: committing straight to `main`
+  - Why: user - "it's just a standard we follow"; #77 found `main` missing the Scope its contract needed (#86)
+
 ### Data
 - **`config.json` is tracked definitions; `data/config.local.json` is this machine's
   selections** - 2026-09-01
@@ -131,10 +134,7 @@ Superseded entries move to `.corbin/history.md`.
   both monitors render the same two-column grid.
 - TBD: `display.safe_area_top`/`safe_area_bottom` default to 48px, a guess at COSMIC's
   panel height, never confirmed against this machine.
-- TBD: #36/#64/#65, #66 and #71/#72 are merged but not yet eyeballed on the live
-  desktop; the human is the final visual check.
-- TBD: `data/devices.json` is a dead file left by #56 and has no `.gitignore` entry -
-  delete it, or ignore it?
+- TBD: #36/#64/#65, #66, #71/#72 and #77 are merged but not eyeballed live.
 
 ## Conventions
 
