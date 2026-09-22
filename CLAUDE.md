@@ -48,16 +48,14 @@ Status: approved 2026-09-21
   all three (#5, #9). The Weather header may name the city whose forecast it shows.
 - No Devices panel (removed at #56), and no Tasks or Schedule panel in the frontend
   (deleted at 583229d). Their server-side feeds deliberately stay (#63).
-- No network access at runtime from `web/` - Tailwind is vendored for this reason.
-- No sudo, no new system packages; not a wallpaper-on-a-timer or widget framework.
+- No runtime network from `web/` (Tailwind vendored); no sudo/new packages; not a timer-driven wallpaper image or widget framework.
 
 ### Surfaces
 #### Wallpaper surface - `bin/dashd-host`, one per output [live]
 - BOTTOM layer-shell: above `cosmic-bg`, below every normal window.
-- Pointer-interactive (`display.interactive`, default true); keyboard mode stays `NONE`,
-  so a click never steals focus (#36).
-- Right-click opens our own themed context menu: Reload, plus a theme row per
-  `display._theme_options` (#66).
+- Pointer-interactive (`display.interactive`, default true); keyboard mode stays
+  `NONE` so a click never steals focus (#36).
+- Right-click opens our own themed context menu: Reload + theme rows (#66).
 #### System panel, left half [live]
 - CPU / MEM / BAT, Storage, Network as `.sys-grid` rows with three-tier step graphs
   for CPU and Memory (#12, #17, #57, #58, #59).
@@ -109,18 +107,20 @@ Status: approved 2026-09-21
 - **Projects' green is `--color-actionable`** - 2026-08-27
   - Over: reusing `--color-online`
   - Why: every theme overrides `--color-online`, which collapsed the triad to two colors
+- **Pressure/cloud stay unrendered** - 2026-09-21
+  - Over: plain rows, or pressure with a trend (needs `dashd-collect` reading
+    `weather.json`, a coupling #14 avoided); cloud duplicates desc/code (#84)
 
 ### Process
 - **Work lands on `dev`; `main` is the integration branch** - 2026-09-21
-  - Over: committing straight to `main`
-  - Why: user - "it's just a standard we follow"; #77 found `main` missing the Scope its contract needed (#86)
+  - Over: committing straight to `main` - user - "it's just a standard we follow";
+    #77 found `main` missing the Scope its contract needed (#86)
 
 ### Data
-- **`config.json` is tracked definitions; `data/config.local.json` is this machine's
-  selections** - 2026-09-01
-  - Over: one writable `config.json`, and writing a full snapshot instead of the overrides
-  - Why: user - selections like the theme change often and should not be tracked; a
-    snapshot would freeze the defaults (#74)
+- **`config.json` is tracked definitions; `data/config.local.json` holds this
+  machine's selections** - 2026-09-01
+  - Over: one writable `config.json`, and a full snapshot instead of just the overrides
+  - Why: user - selections like the theme change often; a snapshot would freeze defaults (#74)
 - **OR'd indexed journal field matches** - 2026-09-01
   - Over: a system-wide `journalctl --grep`
   - Why: measured 126ms against 4.3s bounded and 60s+ unbounded, at a 5s poll (#72)

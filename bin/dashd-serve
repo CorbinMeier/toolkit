@@ -224,6 +224,14 @@ def fetch_weather(cfg: dict) -> dict:
         "is_day": bool(cur["is_day"]),
         "wind": round(cur["wind_speed_10m"]),
         "wind_dir": cur["wind_direction_10m"],
+        # fetched, deliberately unrendered -- #84. Cloud cover partly
+        # duplicates desc/code (a "Clear"/"Overcast" condition string
+        # already implies it); raw pressure without a trend isn't
+        # actionable, and storing a trend would make dashd-collect (the
+        # sole metrics.db writer, #14) read data/weather.json, a new
+        # cross-process coupling deliberately not taken on here. Neither
+        # earned Forecast's space alongside #79/#80's two new rows --
+        # closed with this reasoning recorded rather than rendered.
         "pressure": round(cur["pressure_msl"]),
         "cloud": cur["cloud_cover"],
         "high": round(daily["temperature_2m_max"][0]),
