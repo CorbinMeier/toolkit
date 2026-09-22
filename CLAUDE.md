@@ -91,10 +91,9 @@ Status: approved 2026-09-21
 - **Input region covers the whole surface** - 2026-08-27
   - Over: scoped per-widget click-through rects, and the JS-to-Python rect bridge they need
   - Why: user - "I don't use my desktop (nothing on my desktop)" (#36)
-- **`display.transparent` = false; the time-of-day tint IS the opaque background** - 2026-09-21
-  - Over: the RGBA/backdrop-blur path riding a tint over `cosmic-bg`'s wallpaper
-  - Why: user - "The background is still transparent... It should not be." Two
-    rounds (#78, #88) tuned tint alpha; the premise, not the amplitude, was wrong (#89)
+- **`display.transparent` = false; tint is a real time-of-day color, not "barely present"** - 2026-09-21
+  - Over: RGBA/backdrop-blur over `cosmic-bg` (#89); slate-only "barely present" palette (#78/#88, retired by #90)
+  - Why: user - "still transparent... shouldn't be" (#89); "doesn't feel like midnight" (#90) - panels stay readable via their own 88% opacity
   - Supersedes: "= true, with a time-of-day slate tint to come" (2026-09-21, #78)
 
 ### Panels

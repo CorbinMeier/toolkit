@@ -42,42 +42,57 @@ let failures = 0;
 const RING_WINDOW_MS = 5 * 60 * 1000;
 let ring = { t: [], down: [], up: [], diskRead: [], diskWrite: [] };
 
-// Surface tint (#78; made the opaque background itself, #89): a full-
-// viewport slate gradient painted by the surface -- since #89 this IS the
-// background, at alpha 1, not a translucent layer riding cosmic-bg's real
-// wallpaper (display.transparent is now false; two rounds, #78/#88, tuned
-// the wrong dimension -- the surface was see-through at any alpha). Four
-// phases, each a small departure from a neutral dark slate so none reads
-// as its own coloured background: morning sunrise (warm orange-slate),
-// afternoon (blue-slate), evening sunset (warm, deeper), midnight
-// (purple-slate).
+// Surface tint (#78; made the opaque background itself, #89; recolored to
+// actually read as time-of-day, #90): a full-viewport slate gradient
+// painted by the surface -- this IS the background, at alpha 1, not a
+// translucent layer riding cosmic-bg's real wallpaper. Four phases, each a
+// real, recognisable colour rather than a near-neutral variant: sunrise
+// (warm orange/rose over a still-dark sky), noon (open daylight blue),
+// sunset (deeper and redder than sunrise -- the two must never be
+// interchangeable), midnight (a genuinely dark blue-violet, not a purple
+// wash). #78/#88's "subset of slate gray, barely present" bar governed
+// this palette for three rounds and was explicitly withdrawn by #90: the
+// user's complaint was that midnight "doesn't really feel like midnight",
+// i.e. the old near-neutral spread was the bug, not a target to protect.
 //
-// TINT_NEUTRAL is the flat, unshifted slate (Off, #89) -- close in tone to
-// the pre-#78 non-transparent body background (dark, low-chroma blue-grey)
-// so panels keep the same lift they always had. TINT_PHASES holds each
-// phase's Medium-strength target color; strength (#88, semantics changed
-// by #89) now blends from TINT_NEUTRAL toward that target rather than
-// scaling alpha -- 0 (Off) is the flat neutral with no time shift at all,
-// 1 (Medium) is the tuned target, 1.6 (Strong) extrapolates a little past
-// it for a more pronounced cast. Every channel stays within ~25 of neutral
-// even at Strong, which is the "subset of slate gray, not distracting" bar
-// applied to hue instead of opacity.
+// TINT_NEUTRAL is still the flat, unshifted slate (Off) -- unchanged from
+// #89, since nobody has complained about the Off state and it still needs
+// to look like a deliberate flat background, not a broken one.
+// TINT_PHASES holds each phase's Medium-strength target color; strength
+// (#88, re-scoped to colour departure by #89) blends from TINT_NEUTRAL
+// toward that target -- 0 (Off) is the flat neutral with no time shift at
+// all, 1 (Medium) is the tuned target, 1.6 (Strong, the user's own live
+// pick) extrapolates further past it for a bolder cast. Panel content
+// stays readable at every phase regardless of how far this departs from
+// neutral: `.panel`'s background is 88% opaque (`--color-panel`), so only
+// ~12% of any tint value ever bleeds into a panel's own fill. Measured
+// (WCAG contrast ratio, panel fill blended with each phase's average
+// top/bottom tint, at Strength 1.6 -- the widest spread shipped, worst
+// case for all four phases): --color-ink >= 14.88:1, --color-muted >=
+// 6.29:1, --color-faint >= 3.05:1, the accent triad (cyan/warm/crimson)
+// all >= 5.02:1 -- every figure within a point of the Off baseline
+// (ink 16.25:1, muted 6.87:1, faint 3.33:1). No raw text ever sits
+// directly on #suntint (the boot screen and offline banner both have
+// their own opaque layers above it), so the panel's own opacity is what
+// keeps content readable, not restraint on how saturated the background
+// is allowed to be -- the bar this issue sets.
 //
 // Phase centers follow the real sun rather than the clock: sunrise/sunset
-// come straight from weather.sun; afternoon centers on solar noon (their
-// midpoint) and midnight on the midpoint of the night span, so all four
-// drift with the season the same way, not just the two that are given
-// directly. Theme-independent (see DESIGN.md's Surface Tint entry): this
-// is a daylight cue on the background layer, not HUD chrome, so it renders
-// identically under night_ops/retro_terminal/retro_orange (the CRT themes'
-// own opaque body backgrounds sit underneath and are now fully covered --
-// see DESIGN.md).
+// come straight from weather.sun; afternoon (noon) centers on solar noon
+// (their midpoint) and midnight on the midpoint of the night span, so all
+// four drift with the season the same way, not just the two that are
+// given directly -- #90 keeps this exactly as #78 built it, unchanged.
+// Theme-independent (see DESIGN.md's Surface Tint entry): this is a
+// daylight cue on the background layer, not HUD chrome, so it renders
+// identically under night_ops/retro_terminal/retro_orange (the CRT
+// themes' own opaque body backgrounds sit underneath and are now fully
+// covered -- see DESIGN.md).
 const TINT_NEUTRAL = { top: [34, 36, 44], bottom: [20, 21, 27] };
 const TINT_PHASES = {
-  sunrise:   { top: [48, 42, 38], bottom: [29, 25, 23] },
-  afternoon: { top: [30, 39, 55], bottom: [18, 23, 34] },
-  sunset:    { top: [50, 34, 36], bottom: [31, 21, 22] },
-  midnight:  { top: [39, 31, 55], bottom: [23, 18, 34] },
+  sunrise:   { top: [104, 62, 48], bottom: [32, 21, 20] },
+  afternoon: { top: [60, 100, 155], bottom: [36, 55, 85] },
+  sunset:    { top: [135, 45, 38], bottom: [58, 22, 20] },
+  midnight:  { top: [24, 18, 46], bottom: [7, 6, 16] },
 };
 
 // Named strength levels for the context menu's Tint submenu (#88). Since

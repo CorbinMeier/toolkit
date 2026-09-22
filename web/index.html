@@ -258,7 +258,6 @@
      for anyone who flips the config flag back. */
   body.transparent{background:transparent}
   body.transparent .panel{backdrop-filter:blur(18px) saturate(1.3)}
-  body.transparent .glow{display:none}
 
   /* Cyberpunk UIKit accent triad -- any element opts in with one of these
      classes; .panel/.sec-head/.glowtext/.dot read the accent back via the
@@ -477,16 +476,14 @@
   .util-bars polygon{transition:fill .6s ease}
   .util-bars{filter:drop-shadow(0 0 1.5px rgb(0 0 0 / .4))}
 
-  /* slow drifting light so a static desktop still feels alive --
-     crimson/cyan, matching CyberpunkEnvironment's reddish ambient glow.
-     Lives on the bg layer (#32) -- behind every panel, never above content. */
   /* Surface tint (#78; strength live-adjustable per #88; opaque and IS the
      background since #89 -- display.transparent now defaults false, so
-     this replaces cosmic-bg's wallpaper rather than riding on top of it):
-     a full-viewport slate gradient painted by the surface itself -- lives
-     on the same bg layer as the ambient glow blobs below (behind every
-     panel, never above content), but as its own element rather than a
-     .glow instance: it is a daylight cue tied to the real sun, not the
+     this replaces cosmic-bg's wallpaper rather than riding on top of it;
+     recolored to real time-of-day hues by #90, see the palette note in
+     app.js): a full-viewport slate gradient painted by the surface itself
+     -- lives on the same bg layer as the ambient glow blobs below (behind
+     every panel, never above content), but as its own element rather than
+     a .glow instance: it is a daylight cue tied to the real sun, not the
      Night Ops HUD's cyberpunk ambient lighting, so it is NOT hidden by the
      theme overrides that hide .glow (see DESIGN.md's Surface Tint entry
      for the theme-independence decision). app.js's sunTint() recomputes
@@ -499,6 +496,19 @@
   #suntint{position:fixed;inset:0;pointer-events:none;z-index:var(--z-bg);
     background:linear-gradient(180deg,var(--tint-top),var(--tint-bottom))}
 
+  /* Ambient glow blobs (crimson/cyan, matching CyberpunkEnvironment's
+     reddish ambient glow) -- Night Ops HUD chrome, not a background
+     treatment. #90: with the surface opaque (#89) and #suntint now a real,
+     saturated time-of-day colour rather than a near-neutral slate, these
+     sat on the same bg layer and directly fought the signal the tint
+     exists to send -- a cyan blob over a warm sunrise, or a crimson one
+     over noon's open blue, muddies exactly the read this issue asks for.
+     Removed under the opaque surface, same call retro_terminal/
+     retro_orange already made for their own reasons (see below) -- no
+     theme depends on them, and .g1/.g2 stay declared so the one-key revert
+     to display.transparent:true (documented at #89) also brings the
+     original cyberpunk-over-wallpaper look back with it. */
+  body:not(.transparent) .glow{display:none}
   .glow{position:fixed;border-radius:50%;filter:blur(110px);pointer-events:none;z-index:var(--z-bg)}
   .g1{width:44vw;height:44vw;top:-16vw;left:-8vw;
       background:oklch(0.55 0.17 25/.30);animation:d1 42s ease-in-out infinite alternate}
