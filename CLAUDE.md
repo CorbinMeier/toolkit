@@ -63,9 +63,9 @@ Status: approved 2026-09-21
   rather than hiding (#26, #65).
 - Projects: per-repo GitHub stats, paginated (#62, #64); Sessions: since-boot logins (#71).
 #### Forecast panel, right half [live]
-- Current conditions, hourly, week, sun/moon - one panel (#10). AQI kv-grid
-  row (#79) and an NWS alert banner (#80, distinct from `weather.alert`) -
-  both hidden entirely when there's nothing to show.
+- Current conditions, hourly, week, sun/moon - one panel (#10), beside a Calendar
+  month grid (#22). AQI kv-grid row (#79) and an NWS alert banner (#80, distinct
+  from `weather.alert`) - both hidden entirely when there's nothing to show.
 #### Log panel, below both [live]
 - Matched and highlighted lines only, never a full tail (#28, #72).
 #### Mobile control surface - `bin/dashd-control` [built, unit not enabled]

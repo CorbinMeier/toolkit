@@ -42,8 +42,12 @@ web/app.js          all rendering; pure function of last good state.
                     apply()) drives any class="auto-cycle" element through a
                     passive scroll-dwell-reset loop -- the only way to reveal
                     overflowing panel content on a surface with no pointer
-                    reach (#29); general mechanism only, no shipped panel
-                    opts in yet
+                    reach (#29); Sessions/Log (#91, bounded by .sess-scroll/
+                    .log-scroll's max-height) are its shipped consumers now.
+                    placePanels() (#91, follow-up to #3) moves each panel
+                    <section> into #colLeft/#colCenter/#colRight per
+                    data-layout, resolved from outputs.<name>.layout by
+                    measured aspect ratio when it's 'auto'
 web/vendor/         Tailwind v4 browser build, vendored (no network at runtime)
 web/control/        standalone mobile control UI served by bin/dashd-control
                     (plain HTML/JS, deliberately not styled to DESIGN.md's

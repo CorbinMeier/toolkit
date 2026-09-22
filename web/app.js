@@ -1444,13 +1444,75 @@ function refreshAutoCycles() {
   });
 }
 
+/* ---------------------------------------------------------- panel layout
+ * #91 (follow-up to #3): outputs.<name>.layout reaches this far but nothing
+ * used to key off it. #root is a 2- or 3-track CSS Grid of #colLeft/
+ * #colCenter/#colRight (see index.html's [data-layout] rules); this is
+ * what decides which of those columns each top-level panel <section>
+ * belongs in, and physically moves it there.
+ *
+ * A CSS grid-template-areas switch can't do this: each column stacks
+ * panels of genuinely different natural heights (System/Projects/Sessions
+ * vs. Forecast/Music/Log), and grid-template-areas requires every named
+ * area to form a rectangle, which independent per-column stacks don't --
+ * so the columns are real DOM containers and the panels move between them.
+ */
+const LAYOUTS = {
+  narrow: {
+    colLeft: ['secSystem', 'secProjects', 'secSessions'],
+    colCenter: [],
+    colRight: ['secForecast', 'musicSection', 'secLog'],
+  },
+  // Sessions moves under Forecast in its own center column -- this is what
+  // actually fills the wide output's empty middle third, rather than just
+  // stretching the two flanking columns wider with nothing new in them.
+  wide: {
+    colLeft: ['secSystem', 'secProjects'],
+    colCenter: ['secForecast', 'secSessions'],
+    colRight: ['musicSection', 'secLog'],
+  },
+};
+
+// 'auto' (the default, unset in config.json) resolves by measured aspect
+// ratio rather than a fixed pixel breakpoint -- the two real outputs here
+// are 1.6 (1440x900) and 2.37 (2560x1080), and >=2 is "has room for a
+// third column." An explicit 'wide'/'narrow' in config.json always wins.
+function resolveLayout(raw) {
+  if (raw === 'wide' || raw === 'narrow') return raw;
+  return (innerWidth / Math.max(innerHeight, 1)) >= 2 ? 'wide' : 'narrow';
+}
+
+let placedLayout = null;
+function placePanels(resolved) {
+  if (placedLayout === resolved) return; // idempotent -- apply() runs every poll
+  placedLayout = resolved;
+  const layout = LAYOUTS[resolved] || LAYOUTS.narrow;
+  ['colLeft', 'colCenter', 'colRight'].forEach((colId) => {
+    const col = $(colId);
+    if (!col) return;
+    (layout[colId] || []).forEach((secId) => {
+      const sec = $(secId);
+      if (sec) col.appendChild(sec);
+    });
+    // index.html's [data-layout] rule is what actually removes #colCenter
+    // from grid layout under 'narrow' (display:none there, so it claims no
+    // track and #colLeft/#colRight land in #root's two explicit columns
+    // instead of wrapping to a second row) -- this is a defensive second
+    // layer keyed off real content rather than the layout name, in case a
+    // future layout value ever leaves a column childless.
+    col.classList.toggle('hidden', col.children.length === 0);
+  });
+}
+
 function apply(s) {
   state = s;
 
   const disp = s.config.display || {};
   const outCfg = (s.config.outputs || {})[OUTPUT] || (s.config.outputs || {}).default || {};
   document.body.classList.toggle('transparent', !!disp.transparent);
-  document.documentElement.dataset.layout = outCfg.layout || 'auto';
+  const layout = resolveLayout(outCfg.layout || 'auto');
+  document.documentElement.dataset.layout = layout;
+  placePanels(layout);
   // Theme toggle surface: a config.json field for now (issue #32) -- a
   // natural future home is the Control Backend (#30) once it exists, but
   // this doesn't block on that. data-theme on <html> drives the CSS
@@ -1501,6 +1563,35 @@ function apply(s) {
         p.classList.remove('fadein');
         p.style.animationDelay = '';
       }), 1600);
+    }
+  }
+
+  // #91 verification hook, STATIC-only (never runs on the live wallpaper):
+  // a headless render can screenshot a page and still not prove anything
+  // clips, since refreshAutoCycles() is a no-op under STATIC and only ever
+  // shows page 1. Dump every top-level panel's real rect plus how much
+  // overflow each bounded/auto-cycle box is carrying, as plain JSON text a
+  // --dump-dom render can read back -- an honest coordinate table instead
+  // of eyeballing a screenshot.
+  if (STATIC) {
+    const dbg = $('layoutdebug');
+    if (dbg) {
+      const rects = {};
+      document.querySelectorAll('main#root > * > [id]').forEach((sec) => {
+        if (!sec.id) return;
+        const r = sec.getBoundingClientRect();
+        rects[sec.id] = {
+          top: Math.round(r.top), left: Math.round(r.left),
+          right: Math.round(r.right), bottom: Math.round(r.bottom),
+        };
+      });
+      const overflow = {};
+      document.querySelectorAll('.auto-cycle, .proj-scroll').forEach((box, i) => {
+        overflow[box.id || `box${i}`] = box.scrollHeight - box.clientHeight;
+      });
+      dbg.textContent = JSON.stringify({
+        layout, innerWidth, innerHeight, rects, overflow,
+      });
     }
   }
 }

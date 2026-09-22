@@ -379,6 +379,16 @@
   .proj-scroll{--proj-page:8;
     height:calc(var(--proj-page) * 1.5em + (var(--proj-page) - 1) * 0.28vmin);
     overflow:hidden}
+  /* #91: Projects always shares #colLeft with System, but what else joins
+     it there differs by layout -- Sessions stacks under it in 'narrow',
+     nothing does in 'wide' (Sessions moves to #colCenter, see placePanels()
+     in app.js) -- so the page size is retuned per layout rather than left
+     at one value that's too tall for narrow and wastes space in wide.
+     Still the same single-source-of-truth property #64 established:
+     renderProjects() reads --proj-page back off the computed style,
+     wherever it lands. */
+  [data-layout="wide"] .proj-scroll{--proj-page:10}
+  [data-layout="narrow"] .proj-scroll{--proj-page:5}
 
   /* Sessions panel (#71): user | where | login | duration. Same "one grid,
      so the columns line up top to bottom" principle as .proj-grid/.sys-grid/
@@ -391,6 +401,18 @@
     column-gap:0.9vmin;row-gap:0.28vmin;align-items:baseline;width:100%;
     line-height:1.5}
   .sess-grid > .sess-num{text-align:right;font-variant-numeric:tabular-nums}
+  /* #91: bounded box, not a fixed page like Projects -- Sessions has no
+     pager UI (see the panel's own comment) and its row count is genuinely
+     open-ended (every login since boot), so overflow past --sess-rows
+     reveals via the auto-cycle scroll-dwell loop (#29) instead. max-height
+     (not height, unlike .proj-scroll) so a boot with only two logins
+     doesn't force a tall empty box -- DESIGN.md's "leftover space stays
+     unfilled" still holds, this just caps how much space it's ALLOWED to
+     claim. --sess-rows is retuned per column composition, same reasoning
+     as .proj-scroll's --proj-page above. */
+  .sess-scroll{max-height:calc(var(--sess-rows, 6) * 1.6em);overflow:hidden}
+  [data-layout="narrow"] #colLeft .sess-scroll{--sess-rows:4}
+  [data-layout="wide"] #colCenter .sess-scroll{--sess-rows:9}
   /* A session that is still open is a genuine live status condition, so it
      takes the region's own accent rather than introducing a hue for this
      panel -- DESIGN.md's One Accent Per Region Rule. Ended sessions stay
@@ -450,14 +472,33 @@
   .kv-grid > .kv-val{text-align:right;justify-self:end}
 
   /* Per-output layout (config.json outputs.<name>.layout, plumbed onto
-     <html data-layout> by app.js's apply() -- #3). 'auto' (the
-     default, e.g. the 1440x900 laptop) keeps #root's single stacked
-     column; 'wide' (the 2560px Dell ultrawide, which has room to spare)
-     switches back to the System | Forecast side-by-side split. The ID
-     selector on #root outweighs Tailwind's grid-cols-1 utility class
-     regardless of source order (a plain-CSS ID selector always beats a
-     single-class Tailwind utility on specificity). */
-  [data-layout="wide"] #root{grid-template-columns:repeat(2, minmax(0, 1fr))}
+     <html data-layout> by app.js's apply() -- #3, wired up for real at
+     #91). 'auto' resolves in app.js to 'narrow' or 'wide' by measured
+     aspect ratio (>=2 counts as wide) rather than a fixed breakpoint,
+     since the two real outputs here are 1.6 and 2.37 -- a config author
+     can still force either value explicitly per-output. #root is a real
+     CSS Grid of #colLeft/#colCenter/#colRight (placePanels() in app.js
+     moves the panel <section>s between them, since the same section
+     needs to sit in a different column depending on layout and a column
+     can't be built from grid-template-areas when its members' natural
+     heights differ from its neighbour's). 'narrow' is 2 tracks
+     (System/Projects/Sessions | Forecast/Music/Log, matching the
+     pre-#91 arrangement); 'wide' is 3 -- Sessions moves into a new
+     center track under Forecast, which is what actually fills the Dell's
+     empty middle rather than just widening the two existing columns
+     (regrouping existing panels per the issue, not adding a new one).
+     #colCenter is unused and hidden under 'narrow'. grid-auto-rows:
+     minmax(0,1fr) with a single row is what gives every column a real,
+     definite height to stretch to -- without it the flex children below
+     (min-h-0) have nothing to measure their own overflow against, which
+     was the actual root cause of #91's clipping (the old wrapper was
+     items-start, i.e. shrink-to-fit, so min-h-0 on every section below
+     it was inert). */
+  #root{grid-template-columns:repeat(2, minmax(0, 1fr));grid-auto-rows:minmax(0,1fr)}
+  [data-layout="wide"] #root{grid-template-columns:repeat(3, minmax(0, 1fr))}
+  #colCenter{display:none}
+  [data-layout="wide"] #colCenter{display:flex}
+  #colLeft,#colCenter,#colRight{overflow:hidden}
 
   /* Small inline sysIcon variant for the sun/moon rise/set readout --
      same hand-rolled-SVG philosophy as .sysicon (no emoji, no external
@@ -533,6 +574,17 @@
   .auto-cycle-x{overflow-x:hidden;white-space:nowrap}
   .auto-cycle{overflow-y:hidden}
 
+  /* #91: Log's first opt-in ("no shipped panel opts in yet" no longer
+     holds -- Sessions above is the other). renderLog() already caps at the
+     12 most recent matched lines; this just bounds how tall that list is
+     allowed to render so #colRight's other members (Music, and Log itself
+     in the narrow layout) always have room, with anything past the fold
+     reachable via the same scroll-dwell loop as Sessions/Music's title
+     marquee rather than clipped. */
+  .log-scroll{max-height:calc(var(--log-rows, 8) * 1.55em);overflow:hidden}
+  [data-layout="narrow"] .log-scroll{--log-rows:6}
+  [data-layout="wide"] .log-scroll{--log-rows:10}
+
   /* CRT fx layer (#32): a component-independent overlay above panel
      content (fx layer) but below the offline banner/boot. Hidden by
      default for every theme except retro_terminal -- the layer mechanism
@@ -586,6 +638,14 @@
        above #root's panel content -- see --z-fx in the theme block above. -->
   <div id="crtfx" aria-hidden="true"></div>
 
+  <!-- #91 verification hook: STATIC-only (see apply()'s STATIC block in
+       app.js), never populated on the live wallpaper. Holds a JSON dump of
+       every panel's rect plus each bounded box's real overflow, so a
+       headless render can prove nothing clips instead of relying on a
+       screenshot -- refreshAutoCycles() is inert under STATIC and a
+       screenshot alone would only ever show page 1 of any list. -->
+  <div id="layoutdebug" class="hidden" aria-hidden="true"></div>
+
   <div id="boot"><div class="glowtext text-faint text-2xl tracking-widest">STARTING…</div></div>
 
   <!-- offline / server-down banner -->
@@ -595,38 +655,25 @@
   </div>
 
   <!-- No date/clock/location readout -- the user's system already shows
-       all three (see #5, #9). Single stacked column: System above
-       Forecast, both compact (justify-self-start) rather than the old
-       side-by-side halves. -->
+       all three (see #5, #9). #91: #root is a real CSS Grid of 2 or 3
+       column tracks (data-layout, see the stylesheet rule above) --
+       #colLeft/#colCenter/#colRight are its only direct children, each
+       given the grid row's full, definite height (grid-auto-rows:
+       minmax(0,1fr) + the grid default align-items:stretch) so the
+       min-h-0/flex chain inside them can actually bound overflow instead
+       of growing past the viewport (#91's root cause: the old items-start
+       wrapper was shrink-to-fit, so nothing below it had a real height to
+       measure against). app.js's placePanels() moves each panel <section>
+       into the column the current layout wants it in; the markup below is
+       the 'narrow' arrangement (System/Projects/Sessions left, Forecast/
+       Music/Log right) since that's the pre-#91 grouping and the
+       reasonable no-JS fallback. -->
   <main id="root" class="h-full w-full px-[2.2vmin] gap-[1.8vmin]
         pt-[calc(2.2vmin+var(--safe-top))] pb-[calc(2.2vmin+var(--safe-bottom))]
-        grid grid-cols-1">
+        grid">
 
-    <!-- ============ TOP ROW: System (left) + Calendar/Weather/Music/Log (right) ============ -->
-    <!-- col-span-full: always spans the FULL grid width as row 1, on every
-         output -- not just the wide 2-col Dell layout, where row-major
-         auto-placement happened to land things in the same row only by
-         coincidence of DOM order. On the single-column "auto" layout
-         (this laptop) that coincidence doesn't hold -- each direct grid
-         child gets its own full-width row, which is what broke "top
-         right" the first time this was fixed (see the right-side stack's
-         own comment below for the full history). Wrapping the two
-         top-level groups in their own flex row, spanning the grid
-         unconditionally, makes "System top-left, everything else
-         top-right" true regardless of the auto/wide toggle. items-start
-         (not the grid self-start/justify-self-start pair #35 used to
-         need) is the flex equivalent: without it, flex's default
-         align-items:stretch would force both sides to match each other's
-         height instead of each hugging its own content. -->
-    <div class="col-span-full flex items-start justify-between gap-[1.8vmin]">
-    <!-- LEFT STACK: System, then Projects. System used to be the lone left
-         item; the wrapper exists so Projects can sit beneath it and reclaim
-         the vertical space items-start already left empty on this side,
-         mirroring how the right stack composes Calendar/Weather/Music/Log.
-         items-stretch so Projects matches System's width instead of each
-         hugging its own content and leaving a ragged left column. -->
-    <div class="flex flex-col items-stretch gap-[1.8vmin] min-h-0">
-    <section class="accent-cyan flex flex-col min-h-0">
+    <div id="colLeft" class="flex flex-col items-stretch gap-[1.8vmin] min-h-0">
+    <section id="secSystem" class="accent-cyan flex flex-col min-h-0 shrink-0">
       <div class="panel px-[2vmin] py-[1.5vmin] flex flex-col gap-[0.6vmin]">
         <h2 class="sec-head text-faint uppercase tracking-[0.3em] text-[clamp(.55rem,1.15vmin,.8rem)]">
           System</h2>
@@ -682,7 +729,7 @@
 
          Data is fetched once every few hours on a background thread (see
          cached_projects in bin/dashd-serve), not per poll. -->
-    <section class="accent-cyan flex flex-col min-h-0">
+    <section id="secProjects" class="accent-cyan flex flex-col min-h-0 shrink-0">
       <div class="panel px-[2vmin] py-[1.5vmin] flex flex-col gap-[0.6vmin]">
         <!-- No sibling on this row (totals dropped, pager moved below) --
              h2 is back to being a direct flex item of .panel's column
@@ -741,21 +788,35 @@
          Failed login attempts are deliberately NOT here: they belong to the
          Log panel's highlight feed (#28/#72), which already carries a
          "Failed login" pattern. -->
-    <section class="accent-cyan flex flex-col min-h-0">
-      <div class="panel px-[2vmin] py-[1.5vmin] flex flex-col gap-[0.6vmin]">
+    <section id="secSessions" class="accent-cyan flex flex-col min-h-0">
+      <div class="panel px-[2vmin] py-[1.5vmin] flex flex-col min-h-0 gap-[0.6vmin]">
         <h2 class="sec-head text-faint uppercase tracking-[0.3em] text-[clamp(.55rem,1.15vmin,.8rem)]">
           Sessions</h2>
-        <!-- No fixed-height fold and no pager here, unlike Projects: the row
-             count is bounded server-side by config.sessions.max_rows, and a
-             machine with a dozen logins in one boot is already the unusual
-             case worth seeing in full. Anything past the cap is reported as
-             a count rather than silently dropped. -->
-        <div id="sessgrid" class="sess-grid text-[clamp(.44rem,.9vmin,.62rem)] num"></div>
+        <!-- #91: was "no fixed-height fold and no pager here, unlike
+             Projects" -- true until this issue, but the server-side cap
+             (config.sessions.max_rows) bounds the DATA, not the box it
+             renders into, and a column with System+Projects above it
+             doesn't always have room for every row. .sess-scroll (max-
+             height, #91) + class="auto-cycle" reveals anything past the
+             fold via the same scroll-dwell loop Projects used before #64
+             gave it a pager -- Sessions has no pointer-driven pager of its
+             own, so auto-cycle (passive, #29) is the right mechanism here,
+             not a second copy of Projects' prev/next UI. -->
+        <div id="sessscroll" class="sess-scroll auto-cycle flex-1 min-h-0">
+          <div id="sessgrid" class="sess-grid text-[clamp(.44rem,.9vmin,.62rem)] num"></div>
+        </div>
       </div>
     </section>
     </div>
 
-    <!-- ============ RIGHT STACK: Calendar + Weather, Music, Log ============ -->
+    <!-- #91: center column -- only populated (and only given a track by
+         #root's grid) under data-layout="wide". placePanels() moves
+         #secSessions here, under Forecast, which is what actually fills
+         the Dell's previously-empty middle third rather than just
+         widening the two flanking columns. -->
+    <div id="colCenter" class="flex-col items-stretch gap-[1.8vmin] min-h-0"></div>
+
+    <!-- ============ RIGHT COLUMN: Calendar + Weather, Music, Log ============ -->
     <!-- Moved here from a fixed bottom-right anchor (user request: "keeping
          the same layout for the calendar, weather, and music, move it to
          the top right (where the log is placed)") -- this whole group is
@@ -779,7 +840,7 @@
          same left edge (originally "these should border the right side"
          when this was screen-edge-anchored; now it just means flush
          against each other, which items-stretch still gives for free). -->
-    <div class="flex flex-col items-stretch gap-[1.8vmin]">
+    <div id="colRight" class="flex flex-col items-stretch gap-[1.8vmin] min-h-0">
 
       <!-- Calendar (left) + Weather/Forecast (right). grid grid-cols-2 (not
            flex) + items-stretch: user request "expand the calendar to be
@@ -795,7 +856,7 @@
            Weather," not "both meet in the middle." A plain flex row with
            flex-1 on both sides would do the latter instead, which isn't
            what was asked. -->
-      <div class="grid grid-cols-2 items-stretch gap-[1.8vmin]">
+      <div id="secForecast" class="grid grid-cols-2 items-stretch gap-[1.8vmin] shrink-0">
         <!-- CALENDAR (#22): current-month grid. Reuses Forecast's amber
              accent (date/schedule data, same family as weather) rather
              than inventing a fourth color, same reasoning System/Log
@@ -963,7 +1024,7 @@
            section's own default (unset) align-items:stretch on its single
            flex-col child, same mechanism every other panel here already
            relies on for height. -->
-      <section id="musicSection" class="accent-cyan flex flex-col">
+      <section id="musicSection" class="accent-cyan flex flex-col shrink-0">
         <div class="panel px-[2vmin] py-[1.5vmin] flex flex-col gap-[0.6vmin]">
           <!-- sec-head (the glowing underline) lives on this row, not the
                h2 alone -- the row stretches to the panel's full width (flex
@@ -1032,20 +1093,26 @@
            Source (journalctl unit or file) + patterns are config.logs,
            editable via the Control Backend (#30). Moved below Music (user
            request) -- was the sole occupant of this top-right slot before
-           Calendar/Weather/Music joined it here. shrink-0 -- this stack's
-           main axis is vertical now (flex-col), so shrink-0 here means
-           "don't compress Log's height to make room," same protective
-           intent as before just applied to the axis that actually matters
-           in this new arrangement. -->
-      <section class="accent-crimson flex flex-col min-h-0 shrink-0">
-        <div class="panel px-[2vmin] py-[1.5vmin] flex flex-col gap-[0.6vmin]">
+           Calendar/Weather/Music joined it here. #91: dropped shrink-0 --
+           it used to mean "protect Log's height from a flex-shrink fight
+           it can't win," but #colRight's Forecast row and Music are both
+           shrink-0 themselves now, and Log is the one member with a
+           genuinely unbounded row count (matched log lines keep coming),
+           so it's the natural one to take flex-1 and absorb whatever
+           vertical space #colRight has left -- same split Sessions took
+           in #colLeft/#colCenter. min-h-0 on both the section and .panel
+           is what lets .log-scroll's own max-height (not this section's)
+           be the thing that actually bounds it. -->
+      <section id="secLog" class="accent-crimson flex flex-col min-h-0 flex-1">
+        <div class="panel px-[2vmin] py-[1.5vmin] flex flex-col min-h-0 gap-[0.6vmin]">
           <h2 class="sec-head text-faint uppercase tracking-[0.3em] text-[clamp(.55rem,1.15vmin,.8rem)]">
             Log</h2>
-          <div id="logbox" class="flex flex-col gap-[0.25vmin]
-               text-[clamp(.42rem,.85vmin,.6rem)] num"></div>
+          <div id="logscroll" class="log-scroll auto-cycle flex-1 min-h-0">
+            <div id="logbox" class="flex flex-col gap-[0.25vmin]
+                 text-[clamp(.42rem,.85vmin,.6rem)] num"></div>
+          </div>
         </div>
       </section>
-    </div>
     </div>
   </main>
 
