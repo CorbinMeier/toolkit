@@ -12,8 +12,9 @@ lib/metrics.py      SQLite historical-metrics store (cpu/mem/battery_pct);
                     self-migrates ALTER TABLE ADD COLUMN for an older DB
 lib/userconf.py     two-file config (#74): config.json holds tracked
                     DEFINITIONS and is never written at runtime; this
-                    machine's SELECTIONS (theme, units, log source) live in
-                    untracked data/config.local.json. load() deep-merges,
+                    machine's SELECTIONS (theme, units, log source, and
+                    since #77 location) live in untracked
+                    data/config.local.json. load() deep-merges,
                     local winning; every write path stores ONLY the
                     overrides, never a full snapshot -- a snapshot would
                     freeze the defaults so a later config.json edit would
@@ -27,10 +28,14 @@ config.json         location, units, port, display layer, per-output overrides,
 data/               weather.json cache, extra.json, tasks.json (read but
                     unrendered, #63), metrics.db, projects.json cache
                     (#62), control_token.txt, config.local.json (this
-                    machine's selections, #74). All gitignored -- but note
-                    .gitignore lists these files INDIVIDUALLY, it does not
-                    ignore the directory, so a new file here needs its own
-                    entry or it shows up as untracked
+                    machine's selections, #74), locations.json (selectable
+                    locations for the context menu's Location submenu,
+                    #77 -- nothing in this repo writes it yet, hand-edit
+                    or a future helper populates it from /api/geocode).
+                    All gitignored -- but note .gitignore lists these
+                    files INDIVIDUALLY, it does not ignore the directory,
+                    so a new file here needs its own entry or it shows up
+                    as untracked
 ```
 
 ## Gotchas

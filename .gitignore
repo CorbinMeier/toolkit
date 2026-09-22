@@ -1,6 +1,10 @@
 data/weather.json
 data/extra.json
 data/tasks.json
+# Selectable locations for the Location submenu (#77) -- source-agnostic
+# like tasks.json/extra.json, populated by GET /api/geocode or hand-edited,
+# never by the wallpaper itself.
+data/locations.json
 data/metrics.db
 data/metrics.db-wal
 data/metrics.db-shm

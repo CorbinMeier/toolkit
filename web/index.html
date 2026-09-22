@@ -780,8 +780,16 @@
                  the weather panel doesn't have a label") -- every other
                  panel has one, this one only lost it because "NOW" used
                  to read as enough of a heading on its own. -->
-            <h2 class="sec-head text-faint uppercase tracking-[0.3em] text-[clamp(.55rem,1.15vmin,.8rem)]">
+            <!-- #77: the city name sits to the right of the heading text,
+                 same "sec-head row stretches full width, second element
+                 floats right of it" shape Music's transport controls use
+                 (#65) -- no new card, no new accent, a label on the
+                 existing header band. renderWeather() fills #wlocation
+                 from weather.location; empty until the first /api/state
+                 poll lands. -->
+            <h2 class="sec-head flex items-baseline justify-between gap-[1.2vmin] text-faint uppercase tracking-[0.3em] text-[clamp(.55rem,1.15vmin,.8rem)]">
               <span>Weather</span>
+              <span id="wlocation" class="text-ink normal-case tracking-normal"></span>
             </h2>
             <!-- No icons in this card (user request). Spreadsheet-style
                  key:value grid (#50, .kv-grid) -- every stat is one row,

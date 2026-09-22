@@ -79,7 +79,7 @@ def main() -> int:
         state = json.loads(get("/api/state"))
         check("state has all top-level keys",
               {"ts", "config", "weather", "sys", "projects", "sessions",
-               "tasks", "logs", "extra"}
+               "tasks", "logs", "extra", "locations"}
               <= state.keys(), str(sorted(state.keys())))
         # #62: the panel must always get a rows list to iterate, in every
         # state -- pending, unavailable, disabled, or populated. A missing
@@ -106,6 +106,8 @@ def main() -> int:
                   f"({state['sessions'].get('error')}) -- skipping row checks")
         check("tasks has an items list",
               isinstance(state["tasks"].get("items"), list), state["tasks"])
+        check("locations is a list", isinstance(state["locations"], list),
+              state["locations"])
         check("logs is a list", isinstance(state["logs"], list), state["logs"])
 
         w = state["weather"]

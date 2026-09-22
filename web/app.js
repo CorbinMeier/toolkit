@@ -794,7 +794,7 @@ function renderSessions(s) {
 // didn't share a column grid, so their value columns started at different
 // x positions). Upcoming (renderWeek) is removed from this card (still
 // called, targets a hidden node -- #40's pattern for Hourly/Sun & Moon).
-function renderWeather(w) {
+function renderWeather(w, configLocation) {
   const descEl = $('wdesc');
   const feelsEl = $('wfeels');
   const tempEl = $('wtemp');
@@ -803,6 +803,14 @@ function renderWeather(w) {
   const humidEl = $('whumid');
   const rainEl = $('wrain');
   const uvEl = $('wuv');
+  // #77: the city this forecast is for, next to the "Weather" heading --
+  // renders regardless of unavailable/stale, since it names the location
+  // the (possibly stale) numbers below belong to, not a live reading
+  // itself. w.location comes from the cached fetch and is missing when
+  // there's no cache at all yet (total unavailability); configLocation
+  // (state.config.location, always present) covers that gap.
+  const locEl = $('wlocation');
+  if (locEl) locEl.textContent = w.location || configLocation || '';
   if (w.unavailable) {
     if (descEl) {
       descEl.textContent = 'weather unavailable';
@@ -1197,7 +1205,7 @@ function apply(s) {
   root.setProperty('--safe-bottom', `${disp.safe_area_bottom || 0}px`);
 
   pushRing(s.sys);
-  renderWeather(s.weather);
+  renderWeather(s.weather, s.config.location);
   renderCpuMemBat(s.sys);
   renderDisks(s.sys.disks);
   renderNetwork(s.sys);
@@ -1316,6 +1324,47 @@ async function setTheme(theme) {
   setTimeout(refreshNow, 250);
 }
 
+async function setLocation(loc) {
+  try {
+    await fetch('/api/config', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        location: {
+          name: loc.name, latitude: loc.latitude,
+          longitude: loc.longitude, timezone: loc.timezone,
+        },
+      }),
+    });
+  } catch { /* next poll re-syncs from whatever config actually holds */ }
+  setTimeout(refreshNow, 250);
+}
+
+// data/locations.json entries plus whatever's currently configured (#77) --
+// deduped by name so the active selection doesn't show up twice when it's
+// also one of the saved locations. The current selection only carries a
+// `name` in state.config (bin/dashd-serve's build_state trims it to that),
+// so an entry with no lat/lon/timezone gets a no-op action instead of
+// resending a patch it doesn't have full data for -- it's just there to be
+// checked, not reselected.
+function locationItems() {
+  const known = new Map();
+  for (const loc of state?.locations || []) known.set(loc.name, loc);
+  const currentName = state?.config?.location;
+  if (currentName && !known.has(currentName)) {
+    known.set(currentName, { name: currentName });
+  }
+  return [...known.values()].map((loc) => {
+    const checked = loc.name === currentName;
+    const complete = loc.latitude != null && loc.longitude != null
+      && loc.timezone != null;
+    return {
+      label: `${loc.name}${checked ? ' ✓' : ''}`,
+      action: complete ? () => setLocation(loc) : () => {},
+    };
+  });
+}
+
 function menuItems() {
   const disp = state?.config.display || {};
   const themes = disp._theme_options || [disp.theme || 'night_ops'];
@@ -1329,6 +1378,10 @@ function menuItems() {
       action: () => setTheme(t),
     });
   }
+  // Submenu, not two hardcoded entries -- data/locations.json can hold any
+  // number of saved cities, and menuItems() stays the single place a new
+  // item type gets added.
+  items.push({ label: 'Location', children: locationItems() });
   return items;
 }
 
@@ -1347,32 +1400,59 @@ function ctxMenuKeydown(e) {
   if (e.key === 'Escape') closeContextMenu();
 }
 
-function openContextMenu(x, y) {
-  closeContextMenu();
-  const menu = document.createElement('div');
-  menu.id = 'ctxMenu';
-  menu.className = 'panel accent-cyan ctx-menu';
-  for (const item of menuItems()) {
-    const btn = document.createElement('button');
-    btn.type = 'button';
-    btn.className = 'ctx-menu-item';
-    btn.textContent = item.label;
-    btn.addEventListener('click', () => {
-      closeContextMenu();
-      item.action();
-    });
-    menu.appendChild(btn);
-  }
-  document.body.appendChild(menu);
-
+function positionMenu(menu, x, y) {
   // Clamp inside the viewport rather than letting the menu render off-screen
   // -- a right-click near the output's right/bottom edge is the common case
-  // on a wallpaper that spans the whole screen.
+  // on a wallpaper that spans the whole screen. Re-run on every level swap,
+  // not just at open time -- a submenu is rarely the same height as the
+  // root list.
   const rect = menu.getBoundingClientRect();
   const left = Math.min(x, innerWidth - rect.width - 4);
   const top = Math.min(y, innerHeight - rect.height - 4);
   menu.style.left = `${Math.max(4, left)}px`;
   menu.style.top = `${Math.max(4, top)}px`;
+}
+
+// Renders one level of the menu into the already-open panel -- a `children`
+// item (#77's Location submenu) swaps the panel's contents in place rather
+// than opening a second panel, with a "Back" entry returning to the root.
+// Generic on item shape (`children` vs `action`) so a future nested item
+// needs nothing here.
+function renderMenuLevel(menu, items, x, y, atRoot) {
+  menu.replaceChildren();
+  if (!atRoot) {
+    const back = document.createElement('button');
+    back.type = 'button';
+    back.className = 'ctx-menu-item';
+    back.textContent = '‹ Back';
+    back.addEventListener('click', () => renderMenuLevel(menu, menuItems(), x, y, true));
+    menu.appendChild(back);
+  }
+  for (const item of items) {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'ctx-menu-item';
+    btn.textContent = item.children ? `${item.label} ›` : item.label;
+    btn.addEventListener('click', () => {
+      if (item.children) {
+        renderMenuLevel(menu, item.children, x, y, false);
+      } else {
+        closeContextMenu();
+        item.action();
+      }
+    });
+    menu.appendChild(btn);
+  }
+  positionMenu(menu, x, y);
+}
+
+function openContextMenu(x, y) {
+  closeContextMenu();
+  const menu = document.createElement('div');
+  menu.id = 'ctxMenu';
+  menu.className = 'panel accent-cyan ctx-menu';
+  document.body.appendChild(menu);
+  renderMenuLevel(menu, menuItems(), x, y, true);
 
   // Any click outside, or Escape, dismisses -- capture phase so it fires
   // before the click that opened it (its own contextmenu listener already

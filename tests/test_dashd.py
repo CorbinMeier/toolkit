@@ -468,7 +468,7 @@ class TestBuildState(unittest.TestCase):
             dashd.logsrc.read_log_lines = orig_logs
             dashd.cached_projects = orig_projects
         for key in ("ts", "config", "weather", "sys", "music", "projects",
-                    "tasks", "logs", "extra"):
+                    "tasks", "logs", "extra", "locations"):
             self.assertIn(key, st)
         self.assertEqual(st["logs"], [])
         for key in ("units", "display", "location", "poll", "metrics_retain_hours"):
@@ -902,6 +902,162 @@ class TestConfigPatch(unittest.TestCase):
         accepted, rejected = dashd.filter_patch(["not", "a", "dict"])
         self.assertEqual(rejected, ["<patch body>"])
         self.assertEqual(accepted, {})
+
+    def test_location_is_editable_since_77(self):
+        """#77: location moved from a config.json-only definition to a
+        selection, same as display.theme -- the whole point of the
+        Location submenu (#66/#77)."""
+        accepted, rejected = dashd.filter_patch(
+            {"location": {"name": "Reno, NV", "latitude": 39.5296,
+                          "longitude": -119.8138, "timezone": "America/Los_Angeles"}})
+        self.assertEqual(rejected, [])
+        self.assertEqual(accepted["location"]["name"], "Reno, NV")
+
+    def test_location_field_outside_the_whitelist_is_rejected(self):
+        accepted, rejected = dashd.filter_patch(
+            {"location": {"name": "X", "elevation": 500}})
+        self.assertEqual(rejected, ["location.elevation"])
+        self.assertEqual(accepted, {"location": {"name": "X"}})
+
+
+class TestGeocodeQuery(unittest.TestCase):
+    """GET /api/geocode?q= input validation (#77) -- whitelist, not
+    sanitisation, same posture as MUSIC_COMMANDS: a request must never
+    reach the network as arbitrary text."""
+
+    def test_ordinary_place_names_match(self):
+        for q in ("Chico", "Chico, CA", "San Francisco", "München",
+                  "St. Louis", "Winston-Salem"):
+            self.assertTrue(dashd.GEOCODE_QUERY_RE.match(q), q)
+
+    def test_empty_query_is_rejected(self):
+        self.assertIsNone(dashd.GEOCODE_QUERY_RE.match(""))
+
+    def test_overlong_query_is_rejected(self):
+        self.assertIsNone(dashd.GEOCODE_QUERY_RE.match("a" * 81))
+
+    def test_shell_and_url_metacharacters_are_rejected(self):
+        for q in ("Chico; rm -rf /", "Chico`whoami`", "Chico$(id)",
+                  "http://evil/", "Chico&x=1", "Chico\nInjected",
+                  "../../etc/passwd"):
+            self.assertIsNone(dashd.GEOCODE_QUERY_RE.match(q), q)
+
+    def test_geocode_hits_the_expected_url_and_trims_fields(self):
+        raw = {"results": [
+            {"name": "Chico", "admin1": "California", "country": "United States",
+             "latitude": 39.72849, "longitude": -121.83748,
+             "timezone": "America/Los_Angeles", "population": 101475,
+             "id": 5327684},
+        ]}
+
+        class FakeResp:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *a):
+                return False
+
+            def read(self):
+                return json.dumps(raw).encode()
+
+        with patch.object(dashd.urllib.request, "urlopen",
+                           return_value=FakeResp()) as urlopen:
+            results = dashd.geocode("Chico", count=3)
+        url = urlopen.call_args[0][0]
+        self.assertTrue(url.startswith(
+            "https://geocoding-api.open-meteo.com/v1/search?"))
+        self.assertIn("name=Chico", url)
+        self.assertIn("count=3", url)
+        self.assertEqual(results, [
+            {"name": "Chico", "admin1": "California",
+             "country": "United States", "latitude": 39.72849,
+             "longitude": -121.83748, "timezone": "America/Los_Angeles"},
+        ])
+
+    def test_geocode_rejects_an_invalid_query_before_touching_the_network(self):
+        """geocode() validates itself -- same "checked at the point that
+        would reach a network/subprocess call, not just at the HTTP edge"
+        posture as sysinfo.music_command() -- so a caller that isn't the
+        HTTP route (e.g. a future data/locations.json-populating script)
+        can't skip the whitelist by not going through do_GET."""
+        with patch.object(dashd.urllib.request, "urlopen") as urlopen:
+            with self.assertRaises(ValueError):
+                dashd.geocode("Chico; rm -rf /")
+            urlopen.assert_not_called()
+
+    def test_geocode_count_is_capped(self):
+        with patch.object(dashd.urllib.request, "urlopen") as urlopen:
+            urlopen.return_value.__enter__.return_value.read.return_value = (
+                json.dumps({"results": []}).encode())
+            dashd.geocode("Chico", count=999)
+        url = urlopen.call_args[0][0]
+        self.assertIn(f"count={dashd.GEOCODE_MAX_COUNT}", url)
+
+
+class TestLoadLocations(unittest.TestCase):
+    """data/locations.json, read the same source-agnostic way as
+    tasks.json/extra.json (#77): missing file just means the configured
+    location is the only choice."""
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self._orig = dashd.DATA
+        dashd.DATA = Path(self._tmp.name)
+
+    def tearDown(self):
+        dashd.DATA = self._orig
+        self._tmp.cleanup()
+
+    def test_missing_file_returns_empty_list(self):
+        self.assertEqual(dashd.load_locations(), [])
+
+    def test_valid_entries_are_trimmed_to_the_expected_shape(self):
+        entries = [
+            {"name": "Reno, NV", "latitude": 39.5, "longitude": -119.8,
+             "timezone": "America/Los_Angeles", "extra_junk": True},
+        ]
+        (dashd.DATA / "locations.json").write_text(json.dumps(entries))
+        self.assertEqual(dashd.load_locations(), [
+            {"name": "Reno, NV", "latitude": 39.5, "longitude": -119.8,
+             "timezone": "America/Los_Angeles"},
+        ])
+
+    def test_malformed_entries_are_dropped_not_fatal(self):
+        entries = [{"name": "Incomplete"}, "not a dict", 5]
+        (dashd.DATA / "locations.json").write_text(json.dumps(entries))
+        self.assertEqual(dashd.load_locations(), [])
+
+    def test_non_list_json_returns_empty_list(self):
+        (dashd.DATA / "locations.json").write_text(json.dumps({"oops": 1}))
+        self.assertEqual(dashd.load_locations(), [])
+
+    def test_corrupt_json_returns_empty_list_not_an_error(self):
+        (dashd.DATA / "locations.json").write_text("{not json")
+        self.assertEqual(dashd.load_locations(), [])
+
+
+class TestWeatherCacheInvalidation(unittest.TestCase):
+    """#77 acceptance criterion: a location change must invalidate
+    data/weather.json immediately, not wait out the TTL, or the header
+    names the new city over the old city's cached observations."""
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self._orig = dashd.DATA
+        dashd.DATA = Path(self._tmp.name)
+
+    def tearDown(self):
+        dashd.DATA = self._orig
+        self._tmp.cleanup()
+
+    def test_deletes_an_existing_cache_file(self):
+        path = dashd.DATA / "weather.json"
+        path.write_text(json.dumps({"temp": 70, "fetched_at": time.time()}))
+        dashd.invalidate_weather_cache()
+        self.assertFalse(path.exists())
+
+    def test_missing_cache_file_is_a_no_op(self):
+        dashd.invalidate_weather_cache()  # must not raise
 
 
 class TestUserConfig(unittest.TestCase):

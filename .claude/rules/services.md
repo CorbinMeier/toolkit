@@ -22,7 +22,22 @@ bin/dashd-serve     HTTP server; /api/state merges weather+sys+extra (and
                     deleted from web/ (#63). Deliberately kept: the reads
                     are harmless (missing file is not an error), source-
                     agnostic, and smoke.py asserts on `tasks`, so dropping
-                    them is a code change with test fallout, not cleanup
+                    them is a code change with test fallout, not cleanup.
+                    GET /api/geocode?q= proxies geocoding-api.open-meteo.com
+                    (#77), query validated whitelist-style against
+                    GEOCODE_QUERY_RE before it ever reaches urllib -- same
+                    posture as MUSIC_COMMANDS, checked inside geocode()
+                    itself, not just at the HTTP edge. load_locations()
+                    reads data/locations.json the same source-agnostic way
+                    as tasks.json (merged into /api/state as `locations`);
+                    nothing in this repo writes that file yet -- it's
+                    populated by hand or a future helper/control-surface
+                    write, /api/geocode only looks matches up. POST
+                    /api/config's EDITABLE whitelist also covers `location`
+                    now (#77, same shape as `display.theme`), and accepting
+                    a location patch calls invalidate_weather_cache() to
+                    drop data/weather.json immediately rather than serving
+                    the old city's cache for the rest of its TTL
 bin/dashd-collect   standalone timer loop (config.metrics_sample_seconds);
                     the sole writer of data/metrics.db, independent of
                     whether any view or dashd-serve poll is happening (#14)
