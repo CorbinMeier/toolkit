@@ -1211,6 +1211,15 @@ class TestConfigPatch(unittest.TestCase):
         self.assertEqual(rejected, ["location.elevation"])
         self.assertEqual(accepted, {"location": {"name": "X"}})
 
+    def test_tint_strength_is_editable_since_88(self):
+        """#88: the Tint submenu's live pick, same selection mechanism as
+        display.theme -- a request body can set the multiplier but nothing
+        else in the display section beyond theme/tint_strength."""
+        accepted, rejected = dashd.filter_patch(
+            {"display": {"tint_strength": 0.6}})
+        self.assertEqual(rejected, [])
+        self.assertEqual(accepted, {"display": {"tint_strength": 0.6}})
+
 
 class TestGeocodeQuery(unittest.TestCase):
     """GET /api/geocode?q= input validation (#77) -- whitelist, not

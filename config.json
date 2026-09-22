@@ -92,6 +92,8 @@
       "retro_terminal",
       "retro_orange"
     ],
+    "tint_strength": 1,
+    "_tint_strength_comment": "Multiplier over web/app.js's TINT_PHASES alphas (#88, follow-up to #78's surface tint which was calibrated to invisible). A selection (#74), same as theme -- edit here only to change the shipped default; a live pick from the context menu's Tint submenu persists to data/config.local.json instead. 1 == Medium (web/app.js's TINT_STRENGTHS), the baseline TINT_PHASES were tuned against; 0 == Off, genuinely no paint.",
     "safe_area_top": 48,
     "safe_area_bottom": 48
   },

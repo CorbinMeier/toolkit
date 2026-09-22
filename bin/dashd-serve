@@ -124,7 +124,7 @@ def load_config() -> dict:
 # a partial patch, so this being leaf-key-whitelisted rather than
 # type-checked is consistent with how "display" already works.
 EDITABLE = {
-    "display": {"theme"},
+    "display": {"theme", "tint_strength"},
     "location": {"name", "latitude", "longitude", "timezone"},
 }
 

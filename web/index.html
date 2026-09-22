@@ -116,11 +116,12 @@
     --safe-top:    0px;
     --safe-bottom: 0px;
 
-    /* Surface tint (#78): app.js's sunTint() sets these every poll to a
-       continuously-interpolated slate-toned rgba pair (never a bare hex --
-       alpha is the entire "barely present" mechanism). transparent
-       defaults here are the pre-first-paint fallback, same convention as
-       --safe-top/-bottom above. Plain custom properties, not part of the
+    /* Surface tint (#78, strength-adjustable per #88): app.js's sunTint()
+       sets these every poll to a continuously-interpolated slate-toned
+       rgba pair, alpha scaled by display.tint_strength (Off == alpha 0,
+       genuinely no paint). transparent defaults here are the pre-first-
+       paint fallback, same convention as --safe-top/-bottom above. Plain
+       custom properties, not part of the
        @theme-scanned --color-* set -- nothing here is ever spelled out in
        an HTML class attribute, so the Tailwind-scanner gotcha (web-
        styling.md) doesn't apply; this pair only ever needs the plain
@@ -471,17 +472,19 @@
   /* slow drifting light so a static desktop still feels alive --
      crimson/cyan, matching CyberpunkEnvironment's reddish ambient glow.
      Lives on the bg layer (#32) -- behind every panel, never above content. */
-  /* Surface tint (#78): a full-viewport, barely-there slate gradient
-     painted by the surface itself over the wallpaper -- lives on the same
-     bg layer as the ambient glow blobs below (behind every panel, never
-     above content), but as its own element rather than a .glow instance:
-     it is a daylight cue tied to the real sun, not the Night Ops HUD's
-     cyberpunk ambient lighting, so it is NOT hidden by the theme/
-     transparent overrides that hide .glow (see DESIGN.md's Surface Tint
-     entry for the theme-independence decision). app.js's sunTint()
+  /* Surface tint (#78, strength live-adjustable per #88): a full-viewport
+     slate gradient painted by the surface itself over the wallpaper --
+     lives on the same bg layer as the ambient glow blobs below (behind
+     every panel, never above content), but as its own element rather than
+     a .glow instance: it is a daylight cue tied to the real sun, not the
+     Night Ops HUD's cyberpunk ambient lighting, so it is NOT hidden by the
+     theme/transparent overrides that hide .glow (see DESIGN.md's Surface
+     Tint entry for the theme-independence decision). app.js's sunTint()
      recomputes --tint-top/--tint-bottom every poll as a continuous
-     interpolation between the two nearest of the four phases, so there is
-     never a discrete step to transition away from. */
+     interpolation between the two nearest of the four phases (so there is
+     never a discrete step to transition away from), alpha scaled by
+     display.tint_strength -- a live multiplier the context menu's Tint
+     submenu edits, Off meaning alpha 0. */
   #suntint{position:fixed;inset:0;pointer-events:none;z-index:var(--z-bg);
     background:linear-gradient(180deg,var(--tint-top),var(--tint-bottom))}
 

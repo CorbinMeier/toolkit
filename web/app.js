@@ -42,13 +42,19 @@ let failures = 0;
 const RING_WINDOW_MS = 5 * 60 * 1000;
 let ring = { t: [], down: [], up: [], diskRead: [], diskWrite: [] };
 
-// Surface tint (#78): a barely-there slate-toned gradient the surface
-// paints over the wallpaper (display.transparent stays true -- this rides
-// on top of it, never replaces it). Four phases, each desaturated toward
-// slate so none reads as a color wash: morning sunrise (warm orange-
-// slate), afternoon (blue-slate), evening sunset (warm, deeper), midnight
-// (purple-slate). Alpha is the entire "barely present" mechanism -- err
-// far toward invisible; every alpha below is well under 0.1.
+// Surface tint (#78): a slate-toned gradient the surface paints over the
+// wallpaper (display.transparent stays true -- this rides on top of it,
+// never replaces it). Four phases, each desaturated toward slate so none
+// reads as a color wash: morning sunrise (warm orange-slate), afternoon
+// (blue-slate), evening sunset (warm, deeper), midnight (purple-slate).
+//
+// #88: #78's baseline alphas were calibrated to genuinely invisible (the
+// user's own wallpaper never showed any color shift) -- these are ~2.7x
+// that baseline, so each phase reads as a colour cast without competing
+// with panel content or the accent triad. This is a *starting point*, not
+// the final calibration: display.tint_strength (a live multiplier, #88)
+// is what the user actually settles on, via the context menu's Tint
+// submenu -- see TINT_STRENGTHS below.
 //
 // Phase centers follow the real sun rather than the clock: sunrise/sunset
 // come straight from weather.sun; afternoon centers on solar noon (their
@@ -58,11 +64,21 @@ let ring = { t: [], down: [], up: [], diskRead: [], diskWrite: [] };
 // is a daylight cue riding the wallpaper layer, not HUD chrome, so it
 // renders identically under night_ops/retro_terminal/retro_orange.
 const TINT_PHASES = {
-  sunrise:   { top: [128, 100, 78], bottom: [72, 60, 54], aTop: 0.07, aBot: 0.03 },
-  afternoon: { top: [70, 88, 108],  bottom: [54, 66, 84], aTop: 0.05, aBot: 0.02 },
-  sunset:    { top: [104, 62, 52],  bottom: [64, 42, 40], aTop: 0.08, aBot: 0.04 },
-  midnight:  { top: [64, 50, 82],   bottom: [40, 34, 54], aTop: 0.05, aBot: 0.02 },
+  sunrise:   { top: [128, 100, 78], bottom: [72, 60, 54], aTop: 0.19, aBot: 0.08 },
+  afternoon: { top: [70, 88, 108],  bottom: [54, 66, 84], aTop: 0.14, aBot: 0.05 },
+  sunset:    { top: [104, 62, 52],  bottom: [64, 42, 40], aTop: 0.22, aBot: 0.11 },
+  midnight:  { top: [64, 50, 82],   bottom: [40, 34, 54], aTop: 0.14, aBot: 0.05 },
 };
+
+// Named strength levels for the context menu's Tint submenu (#88). A plain
+// multiplier over every phase's alpha -- Off is exactly 0 (genuinely no
+// paint, not just a very small alpha), so the feature is fully dismissible
+// without editing config. Medium (1) reproduces TINT_PHASES above as
+// tuned; Subtle/Strong scale it down/up. display.tint_strength stores the
+// raw number (persisted via #74's selection mechanism, same as
+// display.theme), so an old or hand-edited config with an arbitrary value
+// still works -- the menu just won't show any entry checked.
+const TINT_STRENGTHS = { off: 0, subtle: 0.6, medium: 1, strong: 1.6 };
 
 function minutesOf(d) { return d.getHours() * 60 + d.getMinutes() + d.getSeconds() / 60; }
 
@@ -90,8 +106,12 @@ function rgbaStr(rgb, a) {
 // between the two nearest phase centers. A plain lerp, recomputed fresh
 // every call -- there is no discrete step anywhere in this function, which
 // is what keeps a phase change from ever reading as the sudden cut #78
-// explicitly calls out.
-function sunTint(sun, now) {
+// explicitly calls out. `strength` (#88) is a flat multiplier applied to
+// the blended alpha last -- lerp(k*a, k*b, t) === k*lerp(a, b, t), so
+// scaling at the end is equivalent to scaling every phase up front and
+// keeps this the single place strength is applied. 0 multiplies straight
+// through to alpha 0 -- genuinely no paint, not an epsilon.
+function sunTint(sun, now, strength) {
   const anchors = tintAnchors(sun);
   const order = Object.keys(anchors)
     .map((key) => ({ key, at: anchors[key] }))
@@ -105,9 +125,10 @@ function sunTint(sun, now) {
   const elapsed = (nowMin - a.at + 1440) % 1440;
   const t = elapsed / span;
   const pa = TINT_PHASES[a.key], pb = TINT_PHASES[b.key];
+  const k = strength ?? TINT_STRENGTHS.medium;
   return {
-    top: rgbaStr(lerpTriple(pa.top, pb.top, t), lerp(pa.aTop, pb.aTop, t)),
-    bottom: rgbaStr(lerpTriple(pa.bottom, pb.bottom, t), lerp(pa.aBot, pb.aBot, t)),
+    top: rgbaStr(lerpTriple(pa.top, pb.top, t), lerp(pa.aTop, pb.aTop, t) * k),
+    bottom: rgbaStr(lerpTriple(pa.bottom, pb.bottom, t), lerp(pa.aBot, pb.aBot, t) * k),
   };
 }
 function pushRing(s) {
@@ -1408,7 +1429,7 @@ function apply(s) {
   root.setProperty('--safe-top', `${disp.safe_area_top || 0}px`);
   root.setProperty('--safe-bottom', `${disp.safe_area_bottom || 0}px`);
 
-  const tint = sunTint(s.weather && s.weather.sun, new Date());
+  const tint = sunTint(s.weather && s.weather.sun, new Date(), disp.tint_strength);
   root.setProperty('--tint-top', tint.top);
   root.setProperty('--tint-bottom', tint.bottom);
 
@@ -1554,6 +1575,17 @@ async function setTheme(theme) {
   setTimeout(refreshNow, 250);
 }
 
+async function setTintStrength(value) {
+  try {
+    await fetch('/api/config', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ display: { tint_strength: value } }),
+    });
+  } catch { /* next poll re-syncs from whatever config.json actually holds */ }
+  setTimeout(refreshNow, 250);
+}
+
 async function setLocation(loc) {
   try {
     await fetch('/api/config', {
@@ -1595,6 +1627,19 @@ function locationItems() {
   });
 }
 
+// Off/Subtle/Medium/Strong, active one checked (#88) -- the actual
+// calibration is the user's, settled live on their own wallpaper, not
+// guessed at in a headless render. Compares by value rather than name so a
+// hand-edited or pre-#88 config (no tint_strength set at all) still lands
+// on Medium via sunTint()'s own default rather than showing nothing checked.
+function tintItems() {
+  const current = state?.config?.display?.tint_strength ?? TINT_STRENGTHS.medium;
+  return Object.entries(TINT_STRENGTHS).map(([name, value]) => ({
+    label: `${name[0].toUpperCase()}${name.slice(1)}${value === current ? ' ✓' : ''}`,
+    action: () => setTintStrength(value),
+  }));
+}
+
 function menuItems() {
   const disp = state?.config.display || {};
   const themes = disp._theme_options || [disp.theme || 'night_ops'];
@@ -1612,6 +1657,7 @@ function menuItems() {
   // number of saved cities, and menuItems() stays the single place a new
   // item type gets added.
   items.push({ label: 'Location', children: locationItems() });
+  items.push({ label: 'Tint', children: tintItems() });
   return items;
 }
 
