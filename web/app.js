@@ -1844,8 +1844,46 @@ function mergeInto(dst, patch) {
   }
 }
 
-async function patchConfig(patch) {
+// Undo (#99): before a patch applies, capture its inverse from the current
+// config. A leaf that did not exist inverts to null, which the server only
+// accepts for profiles entries, so absent display/outputs leaves are skipped.
+const UNDO_MAX = 20;
+const undoStack = [];
+
+function inversePatch(patch, cur, top) {
+  const inv = {};
+  for (const [k, v] of Object.entries(patch)) {
+    const prev = cur?.[k];
+    const isObj = (x) => x && typeof x === 'object' && !Array.isArray(x);
+    if (isObj(v) && isObj(prev)) {
+      const sub = inversePatch(v, prev, top);
+      if (Object.keys(sub).length) inv[k] = sub;
+    } else if (prev === undefined) {
+      if (top === 'profiles') inv[k] = null;
+    } else {
+      inv[k] = JSON.parse(JSON.stringify(prev));
+    }
+  }
+  return inv;
+}
+
+function recordUndo(patch) {
+  const inv = {};
+  for (const section of ['display', 'outputs', 'profiles']) {
+    if (!patch[section]) continue;
+    const sub = inversePatch(patch[section], state?.config?.[section], section);
+    if (Object.keys(sub).length) inv[section] = sub;
+  }
+  if (!Object.keys(inv).length) return;
+  undoStack.push(inv);
+  if (undoStack.length > UNDO_MAX) undoStack.shift();
+}
+
+const undoLast = () => patchConfig(undoStack.pop(), { undo: true });
+
+async function patchConfig(patch, { undo = false } = {}) {
   if (state) {
+    if (!undo) recordUndo(patch);
     for (const section of ['display', 'outputs', 'profiles']) {
       if (!patch[section]) continue;
       state.config[section] = state.config[section] || {};
@@ -2126,6 +2164,7 @@ function profileItems() {
 
 function rootItems() {
   return [
+    ...(undoStack.length ? [{ label: '↶ Undo', action: undoLast }] : []),
     { label: 'Profiles', children: profileItems },
     { label: 'Cards', children: cardItems },
     { label: 'Settings', children: settingsItems },
