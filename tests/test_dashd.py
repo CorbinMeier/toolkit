@@ -1203,6 +1203,29 @@ class TestConfigPatch(unittest.TestCase):
         self.assertEqual(rejected, ["display.layer"])
         self.assertEqual(accepted, {})
 
+    def test_units_accept_whitelisted_values_only_since_103(self):
+        ok = {"units": {"temperature": "celsius", "wind": "kn",
+                        "precipitation": "mm", "clock24": False}}
+        self.assertEqual(dashd.filter_patch(ok), (ok, []))
+        for key, bad in (("temperature", "kelvin"), ("wind", "furlongs"),
+                         ("precipitation", 3), ("clock24", "yes"),
+                         ("clock24", 1), ("wind", ["mph"])):
+            accepted, rejected = dashd.filter_patch({"units": {key: bad}})
+            self.assertEqual(rejected, [f"units.{key}"], (key, bad))
+            self.assertEqual(accepted, {})
+        _, rejected = dashd.filter_patch({"units": {"speed": "mph"}})
+        self.assertEqual(rejected, ["units.speed"])
+
+    def test_temp_threshold_converts_for_celsius_since_103(self):
+        w = {"temp": 33, "high": 30, "desc": "Clear", "precip_prob": 0}
+        cfg = {"units": {"temperature": "celsius"},
+               "weather_alerts": {"temp_high_f": 90}}
+        f = dashd.weather_alert(w, cfg)["fields"]
+        self.assertTrue(f["temp"])   # 33C ~ 91F
+        self.assertFalse(f["high"])  # 30C = 86F
+        cfg["units"]["temperature"] = "fahrenheit"
+        self.assertFalse(dashd.weather_alert(w, cfg)["fields"]["temp"])
+
     def test_transparent_is_editable_since_94(self):
         accepted, rejected = dashd.filter_patch({"display": {"transparent": True}})
         self.assertEqual(rejected, [])
