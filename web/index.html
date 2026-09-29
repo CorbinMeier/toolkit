@@ -471,6 +471,17 @@
   .ctx-slider{flex-direction:column;padding:0.45em 0.7em;gap:0.3em;color:var(--color-faint)}
   .ctx-slider input{width:100%;accent-color:var(--panel-accent, var(--color-accent))}
   .ctx-menu-item:disabled{opacity:0.3;cursor:default}
+  /* Touch (#107): the menu never scrolls, so no gesture may hijack a press
+     (a pan would pointercancel hold-to-delete); sliders keep horizontal pan. */
+  .ctx-menu{touch-action:none}
+  .ctx-slider input{touch-action:pan-x}
+  @media (pointer: coarse){
+    .ctx-menu{min-width:14rem}
+    .ctx-menu-item{min-height:44px;display:flex;align-items:center}
+    .ctx-menu-row .ctx-menu-item.ctx-mini{min-width:44px;justify-content:center}
+    .ctx-slider{min-height:44px;justify-content:center}
+    .ctx-slider input{min-height:32px}
+  }
   /* Hold-to-delete (#94): the bar sits under the row and fills over the
      remaining hold time; releasing early removes it. */
   .ctx-hold{position:relative}

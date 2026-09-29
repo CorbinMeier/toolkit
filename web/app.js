@@ -2072,8 +2072,17 @@ function profileRow(name, profile) {
     clearTimeout(deleteTimer);
     wrap.querySelector('.ctx-hold-bar')?.remove();
   };
+  // Touch (#107): touch-action:none (CSS) stops a scroll gesture from
+  // starting here, and a finger drifting off the row cancels the hold, since
+  // implicit touch capture means pointerleave never fires.
+  let downAt = null;
+  btn.addEventListener('pointermove', (e) => {
+    if (downAt && Math.hypot(e.clientX - downAt.x, e.clientY - downAt.y) > 10) cancel();
+  });
   btn.addEventListener('pointerdown', (e) => {
     if (e.button !== 0) return;
+    downAt = { x: e.clientX, y: e.clientY };
+    cancel();
     swallowClick = false;
     showTimer = setTimeout(() => {
       // A hold long enough to show the bar is a delete attempt, not a click:
@@ -2092,7 +2101,9 @@ function profileRow(name, profile) {
       patchConfig({ profiles: { [name]: null } });
     }, HOLD_MS);
   });
-  for (const t of ['pointerup', 'pointerleave', 'pointercancel']) btn.addEventListener(t, cancel);
+  for (const t of ['pointerup', 'pointerleave', 'pointercancel']) {
+    btn.addEventListener(t, () => { downAt = null; cancel(); });
+  }
   wrap.appendChild(btn);
   return wrap;
 }
@@ -2208,10 +2219,54 @@ function openContextMenu(x, y) {
   }, 0);
 }
 
+// Touch (#107). Assumption, untested on hardware: WebKitGTK may or may not
+// turn a touch long-press into a DOM `contextmenu` event (dashd-host's
+// `context-menu` handler swallows the native one). So a pointer-events
+// long-press fallback opens the same menu; whichever path fires first wins and
+// the other is ignored within LONGPRESS_DEDUPE_MS. Mouse/pen never take it.
+const LONGPRESS_MS = 500;
+const LONGPRESS_SLOP = 10;          // px of finger drift that cancels the press
+const LONGPRESS_DEDUPE_MS = 1000;
+let ctxOpenedAt = 0;
+let longPress = null;
+
+function cancelLongPress() {
+  if (longPress) clearTimeout(longPress.timer);
+  longPress = null;
+}
+
 addEventListener('contextmenu', (e) => {
   e.preventDefault();
+  if (performance.now() - ctxOpenedAt < LONGPRESS_DEDUPE_MS) return;
+  ctxOpenedAt = performance.now();
   openContextMenu(e.clientX, e.clientY);
 });
+
+addEventListener('pointerdown', (e) => {
+  cancelLongPress();
+  if (e.pointerType !== 'touch' || !e.isPrimary) return;
+  if (e.target.closest?.('#ctxMenu, button, a, input, select, textarea')) return;
+  const { clientX: x, clientY: y } = e;
+  longPress = {
+    x, y,
+    timer: setTimeout(() => {
+      longPress = null;
+      if (performance.now() - ctxOpenedAt < LONGPRESS_DEDUPE_MS) return;
+      ctxOpenedAt = performance.now();
+      openContextMenu(x, y);
+      // The lift after a long press must not click whatever is underneath.
+      const eat = (ev) => { ev.preventDefault(); ev.stopPropagation(); };
+      addEventListener('click', eat, { capture: true, once: true });
+      setTimeout(() => removeEventListener('click', eat, true), 600);
+    }, LONGPRESS_MS),
+  };
+}, true);
+addEventListener('pointermove', (e) => {
+  if (longPress && Math.hypot(e.clientX - longPress.x, e.clientY - longPress.y) > LONGPRESS_SLOP) {
+    cancelLongPress();
+  }
+}, true);
+for (const t of ['pointerup', 'pointercancel']) addEventListener(t, cancelLongPress, true);
 
 // SVG geometry is computed from measured pixel sizes, so a monitor change or
 // layout reflow has to redraw rather than just rescale.
