@@ -2051,10 +2051,19 @@ function currentCards() {
 
 const setCards = (cards) => patchConfig({ outputs: { [OUTPUT]: { cards } } });
 
+// Swap two list slots. Row-major order is the model (index = row * cols + col),
+// so delta +-1 is a column move at the same row and +-cols a row move in-column.
 function moveCard(cards, i, delta) {
   const next = [...cards];
   [next[i], next[i + delta]] = [next[i + delta], next[i]];
   return next;
+}
+
+// Column count and L/C/R tags for the current output's resolved layout.
+function cardColumns() {
+  const oc = currentOutputCfg();
+  const n = (LAYOUT_COLS[resolveLayout(oc.layout || 'auto')] || LAYOUT_COLS.narrow).length;
+  return { n, tags: n === 3 ? ['L', 'C', 'R'] : ['L', 'R'] };
 }
 
 function ctxButton(label, onClick, cls = '') {
@@ -2067,15 +2076,26 @@ function ctxButton(label, onClick, cls = '') {
 }
 
 function cardRow(id, i, cards) {
+  const { n, tags } = cardColumns();
+  const col = i % n;
   const row = document.createElement('div');
   row.className = 'ctx-menu-row';
   row.appendChild(ctxButton(`✓ ${CARD_LABEL[id]}`,
     () => setCards(cards.filter((c) => c !== id))));
-  const up = ctxButton('↑', () => setCards(moveCard(cards, i, -1)), 'ctx-mini');
-  up.disabled = i === 0;
-  const down = ctxButton('↓', () => setCards(moveCard(cards, i, 1)), 'ctx-mini');
-  down.disabled = i === cards.length - 1;
-  row.append(up, down);
+  const tag = document.createElement('span');
+  tag.className = 'ctx-mini-tag';
+  tag.textContent = tags[col];
+  tag.title = `Lands in the ${tags[col]} column`;
+  const btn = (label, delta, ok) => {
+    const b = ctxButton(label, () => setCards(moveCard(cards, i, delta)), 'ctx-mini');
+    b.disabled = !ok;
+    return b;
+  };
+  row.append(tag,
+    btn('←', -1, col > 0),
+    btn('→', 1, col < n - 1 && i + 1 < cards.length),
+    btn('↑', -n, i - n >= 0),
+    btn('↓', n, i + n < cards.length));
   return row;
 }
 

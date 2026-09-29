@@ -52,7 +52,10 @@ web/app.js          all rendering; pure function of last good state.
                     ids, CARDS in app.js) and are dealt round-robin across
                     the layout's columns; unset cards fall back to LAYOUTS
                     flattened row by row, which deals back to the same
-                    columns. The context menu (Profiles/Cards/Settings) is
+                    columns. Cards rows show an L/C/R
+                    tag (index % columns); ←/→ swap with the neighbour
+                    slot (same row, adjacent column), ↑/↓ with index±cols
+                    (same column) (#101). The context menu (Profiles/Cards/Settings) is
                     patchConfig()-driven: optimistic local merge, then POST
                     /api/config. Profiles live in data/config.local.json
                     under `profiles`; a null value deletes one. Likewise
