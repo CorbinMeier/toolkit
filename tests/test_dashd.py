@@ -1225,6 +1225,26 @@ class TestConfigPatch(unittest.TestCase):
             accepted, rejected = dashd.filter_patch(bad)
             self.assertEqual((accepted, rejected), ({}, ["outputs"]), bad)
 
+    def test_outputs_cards_null_is_a_reset_but_not_in_profiles(self):
+        reset = {"outputs": {"DELL": {"cards": None}}}
+        self.assertEqual(dashd.filter_patch(reset), (reset, []))
+        for bad in ({"outputs": {"DELL": {"layout": None}}},
+                    {"profiles": {"p": {"outputs": {"DELL": {"cards": None}}}}}):
+            accepted, rejected = dashd.filter_patch(bad)
+            self.assertEqual(accepted, {}, bad)
+            self.assertTrue(rejected, bad)
+
+    def test_reset_cards_removes_only_that_monitors_stored_list(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "config.json").write_text("{}")
+            userconf.apply_patch(root, {"outputs": {"A": {"cards": ["secLog"]},
+                                                    "B": {"cards": ["secSystem"]}}})
+            userconf.remove_local(root, ("outputs", "A", "cards"))
+            stored = userconf.load_local(root)
+            self.assertNotIn("cards", stored["outputs"]["A"])
+            self.assertEqual(stored["outputs"]["B"]["cards"], ["secSystem"])
+
     def test_profiles_save_and_delete_shapes(self):
         save = {"profiles": {"Profile 1": {"outputs": {"a": {"cards": ["secLog"]}}}}}
         self.assertEqual(dashd.filter_patch(save), (save, []))

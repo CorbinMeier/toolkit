@@ -2010,6 +2010,11 @@ function cardRow(id, i, cards) {
 function cardItems() {
   const cards = currentCards();
   const items = [{ head: `Cards · ${OUTPUT}` }];
+  // #98: only when this monitor has its own stored list to clear.
+  if (Array.isArray(state?.config?.outputs?.[OUTPUT]?.cards)) {
+    items.push({ label: 'Reset to default', keep: true,
+      action: () => patchConfig({ outputs: { [OUTPUT]: { cards: null } } }) });
+  }
   cards.forEach((id, i) => items.push({ build: () => cardRow(id, i, cards) }));
   for (const [id, label] of CARDS) {
     if (!cards.includes(id)) {
