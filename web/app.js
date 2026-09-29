@@ -2007,9 +2007,25 @@ function cardRow(id, i, cards) {
   return row;
 }
 
+// #97: another monitor's effective cards, laid out at its own detected size.
+function copyCardsFrom(row) {
+  const oc = state?.config?.outputs?.[row.key] || state?.config?.outputs?.default || {};
+  return setCards(outputCards(oc, resolveLayout(oc.layout || 'auto', row.width, row.height)));
+}
+
+function copyFromItems() {
+  const others = (state?.outputs_detected || []).filter((r) => r.key !== OUTPUT);
+  const items = [{ head: `Copy to ${OUTPUT} from` }];
+  for (const r of others) items.push({ label: r.key, action: () => copyCardsFrom(r) });
+  return items;
+}
+
 function cardItems() {
   const cards = currentCards();
   const items = [{ head: `Cards · ${OUTPUT}` }];
+  if ((state?.outputs_detected || []).some((r) => r.key !== OUTPUT)) {
+    items.push({ label: 'Copy from…', children: copyFromItems });
+  }
   cards.forEach((id, i) => items.push({ build: () => cardRow(id, i, cards) }));
   for (const [id, label] of CARDS) {
     if (!cards.includes(id)) {
