@@ -2064,6 +2064,7 @@ function profileRow(name, profile) {
     patchConfig({ outputs: profile.outputs });
   });
   btn.style.width = '100%';
+  const rename = ctxButton('✎', () => startRename(name), 'ctx-mini');
   let swallowClick = false;
   let showTimer = null;
   let deleteTimer = null;
@@ -2093,8 +2094,66 @@ function profileRow(name, profile) {
     }, HOLD_MS);
   });
   for (const t of ['pointerup', 'pointerleave', 'pointercancel']) btn.addEventListener(t, cancel);
-  wrap.appendChild(btn);
+  const row = document.createElement('div');
+  row.className = 'ctx-menu-row';
+  row.append(btn, rename);
+  wrap.appendChild(row);
   return wrap;
+}
+
+/* #95: the wallpaper has no keyboard focus, so a rename is typed on an
+ * on-screen letter picker (a menu level) and posted to /api/profile/rename,
+ * which validates the name and refuses collisions. */
+let renameDraft = null;
+const RENAME_KEYS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-.';
+
+function startRename(name) {
+  renameDraft = { old: name, text: name, error: '' };
+  menuCtx.stack.push(renameItems);
+  renderMenu();
+}
+
+async function commitRename() {
+  const { old, text } = renameDraft;
+  let res;
+  try {
+    res = await fetch('/api/profile/rename', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ from: old, to: text }),
+    });
+  } catch { res = null; }
+  if (res && res.ok) {
+    renameDraft = null;
+    menuCtx.stack.pop();
+    await refreshNow();
+  } else {
+    const body = res ? await res.json().catch(() => ({})) : {};
+    renameDraft.error = body.error || 'rename failed';
+  }
+  if (menuCtx) renderMenu();
+}
+
+function renameItems() {
+  const d = renameDraft;
+  const draw = () => { if (menuCtx) renderMenu(); };
+  return [
+    { head: `Rename · ${d.text}▏${d.error ? ` · ${d.error}` : ''}` },
+    { build: () => {
+      const grid = document.createElement('div');
+      grid.className = 'ctx-keys';
+      for (const ch of RENAME_KEYS) {
+        grid.appendChild(ctxButton(ch, () => {
+          if (d.text.length < 64) { d.text += ch; d.error = ''; draw(); }
+        }, 'ctx-mini'));
+      }
+      grid.appendChild(ctxButton('space', () => { d.text += ' '; d.error = ''; draw(); }, 'ctx-mini'));
+      grid.appendChild(ctxButton('⌫', () => { d.text = d.text.slice(0, -1); d.error = ''; draw(); }, 'ctx-mini'));
+      grid.appendChild(ctxButton('clear', () => { d.text = ''; d.error = ''; draw(); }, 'ctx-mini'));
+      return grid;
+    } },
+    { label: '✓ Save name', keep: true, action: commitRename },
+  ];
 }
 
 function profileItems() {
