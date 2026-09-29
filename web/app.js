@@ -1644,7 +1644,11 @@ function apply(s) {
 
   const disp = s.config.display || {};
   const outCfg = (s.config.outputs || {})[OUTPUT] || (s.config.outputs || {}).default || {};
-  document.body.classList.toggle('transparent', !!disp.transparent);
+  // #94: tint_opacity (0-1, the menu's slider) scales the whole tint layer;
+  // display.transparent stays as the one-key config revert meaning 0.
+  const opacity = disp.transparent ? 0 : (disp.tint_opacity ?? 1);
+  document.body.classList.toggle('transparent', opacity < 1);
+  $('suntint').style.opacity = opacity;
   const layout = resolveLayout(outCfg.layout || 'auto');
   document.documentElement.dataset.layout = layout;
   placePanels(layout, outputCards(outCfg, layout));
@@ -1895,24 +1899,47 @@ function locationItems() {
   });
 }
 
-// Transparent / Off / Subtle / Medium / Strong, active one checked (#88,
-// #94). Strengths compare by value rather than name so a hand-edited or
-// pre-#88 config (no tint_strength set at all) still lands on Medium via
-// sunTint()'s own default. Transparent (#94) is display.transparent: it
-// removes the tint entirely and lets the wallpaper photo show through;
-// every other choice turns it back off.
-function tintItems() {
+// Off / Subtle / Medium / Strong, active one checked (#88), plus an Opacity
+// slider (#94): 100% is the opaque surface, 0% removes the tint entirely so
+// the wallpaper photo shows through. Strengths compare by value rather than
+// name so a hand-edited or pre-#88 config (no tint_strength set at all)
+// still lands on Medium via sunTint()'s own default.
+function opacitySlider() {
   const disp = state?.config?.display || {};
-  const transparent = !!disp.transparent;
-  const current = disp.tint_strength ?? TINT_STRENGTHS.medium;
+  const start = disp.transparent ? 0 : (disp.tint_opacity ?? 1);
+  const row = document.createElement('div');
+  row.className = 'ctx-menu-row ctx-slider';
+  const label = document.createElement('span');
+  const input = document.createElement('input');
+  input.type = 'range';
+  input.min = '0';
+  input.max = '100';
+  input.step = '5';
+  input.value = String(Math.round(start * 100));
+  const show = () => { label.textContent = `Opacity ${input.value}%`; };
+  show();
+  // Live preview while dragging touches only the local copy; one POST on
+  // release. Re-rendering the menu mid-drag would destroy the slider.
+  input.addEventListener('input', () => {
+    show();
+    state.config.display.tint_opacity = Number(input.value) / 100;
+    state.config.display.transparent = false;
+    apply(state);
+  });
+  input.addEventListener('change', () => {
+    patchConfig({ display: { transparent: false, tint_opacity: Number(input.value) / 100 } });
+  });
+  row.append(label, input);
+  return row;
+}
+
+function tintItems() {
+  const current = state?.config?.display?.tint_strength ?? TINT_STRENGTHS.medium;
   return [
-    {
-      label: `Transparent${transparent ? ' ✓' : ''}`,
-      action: () => patchConfig({ display: { transparent: true } }),
-    },
+    { build: opacitySlider },
     ...Object.entries(TINT_STRENGTHS).map(([name, value]) => ({
-      label: `${name[0].toUpperCase()}${name.slice(1)}${!transparent && value === current ? ' ✓' : ''}`,
-      action: () => patchConfig({ display: { transparent: false, tint_strength: value } }),
+      label: `${name[0].toUpperCase()}${name.slice(1)}${value === current ? ' ✓' : ''}`,
+      action: () => patchConfig({ display: { tint_strength: value } }),
     })),
   ];
 }

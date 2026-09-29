@@ -268,8 +268,7 @@
      real, opaque background now -- but the rule stays as a one-key revert
      for anyone who flips the config flag back. */
   body.transparent{background:transparent}
-  /* #94: the Tint submenu's Transparent choice removes the tint entirely. */
-  body.transparent #suntint{display:none}
+  /* #94: the Tint submenu's Opacity slider sets #suntint's opacity inline. */
   body.transparent .panel{backdrop-filter:blur(18px) saturate(1.3)}
 
   /* Cyberpunk UIKit accent triad -- any element opts in with one of these
@@ -469,6 +468,8 @@
   .ctx-menu-row{display:flex;align-items:stretch}
   .ctx-menu-row .ctx-menu-item{flex:1}
   .ctx-menu-row .ctx-menu-item.ctx-mini{flex:none;padding:0.45em 0.55em}
+  .ctx-slider{flex-direction:column;padding:0.45em 0.7em;gap:0.3em;color:var(--color-faint)}
+  .ctx-slider input{width:100%;accent-color:var(--panel-accent, var(--color-accent))}
   .ctx-menu-item:disabled{opacity:0.3;cursor:default}
   /* Hold-to-delete (#94): the bar sits under the row and fills over the
      remaining hold time; releasing early removes it. */

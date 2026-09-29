@@ -1208,6 +1208,13 @@ class TestConfigPatch(unittest.TestCase):
         self.assertEqual(rejected, [])
         self.assertEqual(accepted, {"display": {"transparent": True}})
 
+    def test_tint_opacity_must_be_a_fraction(self):
+        ok = {"display": {"tint_opacity": 0.4, "transparent": False}}
+        self.assertEqual(dashd.filter_patch(ok), (ok, []))
+        for bad in (1.5, -0.1, "0.5", True):
+            accepted, rejected = dashd.filter_patch({"display": {"tint_opacity": bad}})
+            self.assertEqual((accepted, rejected), ({}, ["display.tint_opacity"]))
+
     def test_outputs_cards_accepted_and_validated(self):
         ok = {"outputs": {"DELL U2913WM": {"cards": ["secLog", "secSystem"]}}}
         self.assertEqual(dashd.filter_patch(ok), (ok, []))

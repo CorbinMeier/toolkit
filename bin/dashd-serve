@@ -124,9 +124,10 @@ def load_config() -> dict:
 # a partial patch, so this being leaf-key-whitelisted rather than
 # type-checked is consistent with how "display" already works.
 EDITABLE = {
-    # "transparent" (#94) is the Tint submenu's Transparent choice: the one
+    # "tint_opacity" (#94, 0-1) is the Tint submenu's Opacity slider: the one
     # place the surface stops being opaque, chosen live, never by default.
-    "display": {"theme", "tint_strength", "transparent"},
+    # "transparent" stays writable so the slider can clear that older flag.
+    "display": {"theme", "tint_strength", "tint_opacity", "transparent"},
     "location": {"name", "latitude", "longitude", "timezone"},
 }
 
@@ -189,6 +190,14 @@ def filter_patch(patch: dict) -> tuple[dict, list[str]]:
             continue
         for key, value in fields.items():
             if key not in EDITABLE[section]:
+                rejected.append(f"{section}.{key}")
+                continue
+            if key == "tint_opacity" and not (
+                    isinstance(value, (int, float)) and not isinstance(value, bool)
+                    and 0 <= value <= 1):
+                rejected.append(f"{section}.{key}")
+                continue
+            if key == "transparent" and not isinstance(value, bool):
                 rejected.append(f"{section}.{key}")
                 continue
             accepted.setdefault(section, {})[key] = value

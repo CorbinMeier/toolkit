@@ -93,9 +93,9 @@ Status: approved 2026-09-21
 - **Input region covers the whole surface** - 2026-08-27
   - Over: scoped per-widget click-through rects, and the JS-to-Python rect bridge they need
   - Why: user - "I don't use my desktop (nothing on my desktop)" (#36)
-- **Transparent is a live Tint choice, off by default (#94)** - 2026-09-28
+- **Tint opacity is a live slider (`display.tint_opacity`), 100% by default (#94)** - 2026-09-28
   - Over: nothing removed; narrows the entry below
-  - Why: user - "there should be a transparent tint which removes it completely"
+  - Why: user - "there should be a transparent tint which removes it completely", then "make it a slider"
 - **`display.transparent` = false by default; tint is a real time-of-day color, not "barely present"** - 2026-09-21
   - Over: RGBA/backdrop-blur over `cosmic-bg` (#89); slate-only "barely present" palette (#78/#88, retired by #90)
   - Why: user - "still transparent... shouldn't be" (#89); "doesn't feel like midnight" (#90) - panels stay readable via their own 88% opacity
