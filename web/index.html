@@ -456,6 +456,10 @@
      viewport) and sized to its content, never full-width. */
   .ctx-menu{position:fixed;z-index:50;display:flex;flex-direction:column;
     padding:0.3vmin;min-width:11rem}
+  /* A long list (Cards, Profiles) scrolls inside the viewport instead of
+     running off the bottom; positionMenu() clamps using the capped height. */
+  .ctx-menu{max-height:calc(100vh - 8px);overflow-y:auto;overscroll-behavior:contain;
+    scrollbar-width:thin}
   .ctx-menu-item{appearance:none;background:transparent;cursor:pointer;
     border:none;text-align:left;color:var(--color-faint);font:inherit;
     padding:0.45em 0.7em;transition:color .12s linear,background-color .12s linear}
@@ -480,7 +484,8 @@
   .ctx-missing{opacity:0.5;font-size:0.85em}
   /* Touch (#107): the menu never scrolls, so no gesture may hijack a press
      (a pan would pointercancel hold-to-delete); sliders keep horizontal pan. */
-  .ctx-menu{touch-action:none}
+  .ctx-menu{touch-action:pan-y}
+  .ctx-hold{touch-action:none}
   .ctx-slider input{touch-action:pan-x}
   @media (pointer: coarse){
     .ctx-menu{min-width:14rem}
