@@ -1228,7 +1228,8 @@ class TestConfigPatch(unittest.TestCase):
         self.assertEqual(dashd.filter_patch(ok), (ok, []))
         for bad in ({"outputs": {"X": {"cards": ["nope"]}}},
                     {"outputs": {"X": {"cards": ["secLog", "secLog"]}}},
-                    {"outputs": {"X": {"layout": "wide"}}},
+                    {"outputs": {"X": {"layout": "huge"}}},
+                    {"outputs": {"X": {"layout": None}}},
                     {"outputs": {"../x": {"cards": []}}}):
             accepted, rejected = dashd.filter_patch(bad)
             self.assertEqual((accepted, rejected), ({}, ["outputs"]), bad)
@@ -1252,6 +1253,16 @@ class TestConfigPatch(unittest.TestCase):
             stored = userconf.load_local(root)
             self.assertNotIn("cards", stored["outputs"]["A"])
             self.assertEqual(stored["outputs"]["B"]["cards"], ["secSystem"])
+
+    def test_outputs_layout_choices(self):
+        for layout in ("auto", "narrow", "wide"):
+            ok = {"outputs": {"X": {"layout": layout}}}
+            self.assertEqual(dashd.filter_patch(ok), (ok, []))
+        both = {"outputs": {"X": {"cards": ["secLog"], "layout": "wide"}}}
+        self.assertEqual(dashd.filter_patch(both), (both, []))
+        out = {"X": {"cards": [], "layout": "narrow"}}
+        prof = {"profiles": {"P": {"outputs": out}}}
+        self.assertEqual(dashd.filter_patch(prof), (prof, []))
 
     def test_profiles_save_and_delete_shapes(self):
         save = {"profiles": {"Profile 1": {"outputs": {"a": {"cards": ["secLog"]}}}}}
