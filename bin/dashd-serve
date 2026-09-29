@@ -135,6 +135,8 @@ EDITABLE = {
 # for the same reason EDITABLE is one: the ids end up as getElementById keys.
 CARD_IDS = ("secSystem", "secProjects", "secSessions", "secForecast",
             "musicSection", "secLog")
+# outputs.<name>.layout choices (#100); anything but wide/narrow resolves by aspect.
+LAYOUT_CHOICES = ("auto", "narrow", "wide")
 # Output and profile names are user/hardware strings that become JSON keys.
 _NAME_RE = re.compile(r"^[\w .\-]{1,64}$")
 
@@ -147,7 +149,9 @@ def _valid_cards(cards) -> bool:
 def _valid_outputs(outputs) -> bool:
     return (isinstance(outputs, dict)
             and all(_NAME_RE.match(k) and isinstance(v, dict)
-                    and set(v) <= {"cards"} and _valid_cards(v.get("cards", []))
+                    and set(v) <= {"cards", "layout"}
+                    and _valid_cards(v.get("cards", []))
+                    and v.get("layout", "auto") in LAYOUT_CHOICES
                     for k, v in outputs.items()))
 
 

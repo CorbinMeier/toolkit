@@ -2007,9 +2007,22 @@ function cardRow(id, i, cards) {
   return row;
 }
 
+// #100: per-monitor column layout. 'auto' resolves by aspect ratio.
+const LAYOUT_CHOICES = ['auto', 'narrow', 'wide'];
+
+function layoutItems() {
+  const current = LAYOUT_CHOICES.includes(currentOutputCfg().layout) ? currentOutputCfg().layout : 'auto';
+  return LAYOUT_CHOICES.map((l) => ({
+    label: `${l[0].toUpperCase()}${l.slice(1)}${l === current ? ' ✓' : ''}`,
+    action: () => patchConfig({ outputs: { [OUTPUT]: { layout: l } } }),
+  }));
+}
+
 function cardItems() {
   const cards = currentCards();
-  const items = [{ head: `Cards · ${OUTPUT}` }];
+  const cur = currentOutputCfg().layout;
+  const items = [{ head: `Cards · ${OUTPUT}` },
+    { label: `Layout: ${LAYOUT_CHOICES.includes(cur) ? cur : 'auto'}`, children: layoutItems }];
   cards.forEach((id, i) => items.push({ build: () => cardRow(id, i, cards) }));
   for (const [id, label] of CARDS) {
     if (!cards.includes(id)) {
@@ -2037,7 +2050,10 @@ function snapshotOutputs() {
   const snap = {};
   for (const r of rows) {
     const oc = cfgOutputs[r.key] || cfgOutputs.default || {};
-    snap[r.key] = { cards: outputCards(oc, resolveLayout(oc.layout || 'auto', r.width, r.height)) };
+    snap[r.key] = {
+      cards: outputCards(oc, resolveLayout(oc.layout || 'auto', r.width, r.height)),
+      layout: LAYOUT_CHOICES.includes(oc.layout) ? oc.layout : 'auto',
+    };
   }
   return snap;
 }
@@ -2046,7 +2062,8 @@ function profileActive(profile) {
   const snap = snapshotOutputs();
   const keys = Object.keys(profile.outputs || {});
   return keys.length > 0 && keys.every(
-    (k) => snap[k] && snap[k].cards.join() === profile.outputs[k].cards.join());
+    (k) => snap[k] && snap[k].cards.join() === (profile.outputs[k].cards || []).join()
+      && (!profile.outputs[k].layout || snap[k].layout === profile.outputs[k].layout));
 }
 
 function saveProfile() {
