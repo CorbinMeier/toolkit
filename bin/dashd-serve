@@ -127,9 +127,14 @@ EDITABLE = {
     # "tint_opacity" (#94, 0-1) is the Tint submenu's Opacity slider: the one
     # place the surface stops being opaque, chosen live, never by default.
     # "transparent" stays writable so the slider can clear that older flag.
-    "display": {"theme", "tint_strength", "tint_opacity", "transparent"},
+    # "safe_area_top"/"safe_area_bottom" (#105, px) are the Settings > Safe
+    # area sliders; global, not per-monitor.
+    "display": {"theme", "tint_strength", "tint_opacity", "transparent",
+                "safe_area_top", "safe_area_bottom"},
     "location": {"name", "latitude", "longitude", "timezone"},
 }
+
+SAFE_AREA_MAX = 160  # px; matches the Settings > Safe area sliders (#105)
 
 # Panel ids the "Cards" menu (#94) can place, in web/index.html. A whitelist
 # for the same reason EDITABLE is one: the ids end up as getElementById keys.
@@ -195,6 +200,11 @@ def filter_patch(patch: dict) -> tuple[dict, list[str]]:
             if key == "tint_opacity" and not (
                     isinstance(value, (int, float)) and not isinstance(value, bool)
                     and 0 <= value <= 1):
+                rejected.append(f"{section}.{key}")
+                continue
+            if key in ("safe_area_top", "safe_area_bottom") and not (
+                    isinstance(value, (int, float)) and not isinstance(value, bool)
+                    and 0 <= value <= SAFE_AREA_MAX):
                 rejected.append(f"{section}.{key}")
                 continue
             if key == "transparent" and not isinstance(value, bool):
