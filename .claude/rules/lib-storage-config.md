@@ -33,8 +33,8 @@ data/               weather.json cache, air_quality.json (#79) and
                     cache (#62), control_token.txt, config.local.json (this
                     machine's selections, #74), locations.json (selectable
                     locations for the context menu's Location submenu,
-                    #77 -- nothing in this repo writes it yet, hand-edit
-                    or a future helper populates it from /api/geocode).
+                    #77; written by POST /api/locations from the menu's
+                    Location > Search, #104, or by hand).
                     All gitignored -- but note .gitignore lists these
                     files INDIVIDUALLY, it does not ignore the directory,
                     so a new file here needs its own entry or it shows up

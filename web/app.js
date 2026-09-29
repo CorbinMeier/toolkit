@@ -1888,7 +1888,7 @@ function locationItems() {
   if (currentName && !known.has(currentName)) {
     known.set(currentName, { name: currentName });
   }
-  return [...known.values()].map((loc) => {
+  const saved = [...known.values()].map((loc) => {
     const checked = loc.name === currentName;
     const complete = loc.latitude != null && loc.longitude != null
       && loc.timezone != null;
@@ -1897,6 +1897,116 @@ function locationItems() {
       action: complete ? () => setLocation(loc) : () => {},
     };
   });
+  return [{ label: 'Search…', children: locationSearchItems }, ...saved];
+}
+
+/* ------------------------------------------------------- on-screen keyboard
+ * The wallpaper surface never takes keyboard focus (#36), so text entry is a
+ * button grid. Self-contained and reusable: returns an element and reports
+ * every edit through onChange(newValue); the caller owns the value and
+ * re-renders. Enter/submit calls onSubmit(value). (#104)
+ *   opts: { value, onChange, onSubmit, submitLabel = 'Search', max = 80 }
+ */
+function screenKeyboard(opts) {
+  const { value = '', onChange, onSubmit, submitLabel = 'Search', max = 80 } = opts;
+  const wrap = document.createElement('div');
+  wrap.className = 'ctx-kb';
+  const shown = document.createElement('div');
+  shown.className = 'ctx-kb-value';
+  shown.textContent = `${value}▏`;
+  wrap.appendChild(shown);
+  const key = (label, fn, cls = '') => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = `ctx-menu-item ctx-kb-key ${cls}`.trim();
+    b.textContent = label;
+    b.addEventListener('click', fn);
+    return b;
+  };
+  const rows = ['ABCDEFGHI', 'JKLMNOPQR', 'STUVWXYZ'];
+  for (const letters of rows) {
+    const row = document.createElement('div');
+    row.className = 'ctx-kb-row';
+    for (const ch of letters) {
+      row.appendChild(key(ch, () => {
+        if (value.length >= max) return;
+        // Capitalise at the start of the text and after a space.
+        const upper = value === '' || value.endsWith(' ');
+        onChange(value + (upper ? ch : ch.toLowerCase()));
+      }));
+    }
+    wrap.appendChild(row);
+  }
+  const last = document.createElement('div');
+  last.className = 'ctx-kb-row';
+  last.append(
+    key('Space', () => {
+      if (value !== '' && !value.endsWith(' ') && value.length < max) onChange(`${value} `);
+    }, 'ctx-kb-wide'),
+    key('⌫', () => onChange(value.slice(0, -1))),
+    key(submitLabel, () => onSubmit?.(value), 'ctx-kb-wide ctx-kb-go'),
+  );
+  wrap.appendChild(last);
+  return wrap;
+}
+
+// Location > Search… (#104): typed text, results and status live at module
+// level because the menu re-renders from scratch on every key.
+let locSearch = { q: '', results: null, status: '' };
+
+async function runLocationSearch(q) {
+  const query = q.trim();
+  if (!query) return;
+  locSearch.status = 'Searching…';
+  locSearch.results = null;
+  if (menuCtx) renderMenu();
+  try {
+    const r = await fetch(`/api/geocode?q=${encodeURIComponent(query)}&count=6`);
+    const j = await r.json();
+    if (!r.ok) throw new Error(j.error || r.status);
+    locSearch.results = j.results || [];
+    locSearch.status = locSearch.results.length ? '' : 'No matches';
+  } catch {
+    locSearch.results = null;
+    locSearch.status = 'Search failed';
+  }
+  if (menuCtx) renderMenu();
+}
+
+// A picked result is applied and remembered in data/locations.json so it is
+// in the Location list next time.
+async function pickSearchResult(r) {
+  const loc = {
+    name: [r.name, r.admin1, r.country].filter(Boolean).join(', '),
+    latitude: r.latitude, longitude: r.longitude, timezone: r.timezone,
+  };
+  try {
+    await fetch('/api/locations', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(loc),
+    });
+  } catch { /* still switch; it just won't be listed next time */ }
+  await setLocation(loc);
+}
+
+function locationSearchItems() {
+  const items = [{
+    build: () => screenKeyboard({
+      value: locSearch.q,
+      onChange: (v) => { locSearch.q = v; renderMenu(); },
+      onSubmit: (v) => runLocationSearch(v),
+    }),
+  }];
+  if (locSearch.status) items.push({ head: locSearch.status });
+  for (const r of locSearch.results || []) {
+    if (r.latitude == null || r.longitude == null || !r.timezone) continue;
+    items.push({
+      label: [r.name, r.admin1, r.country].filter(Boolean).join(', '),
+      action: () => pickSearchResult(r),
+    });
+  }
+  return items;
 }
 
 // Off / Subtle / Medium / Strong, active one checked (#88), plus an Opacity

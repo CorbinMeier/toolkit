@@ -1388,6 +1388,70 @@ class TestLoadLocations(unittest.TestCase):
         self.assertEqual(dashd.load_locations(), [])
 
 
+class TestSaveLocation(unittest.TestCase):
+    """#104: POST /api/locations validation and atomic persistence."""
+
+    GOOD = {"name": "Reno, Nevada, United States", "latitude": 39.5,
+            "longitude": -119.8, "timezone": "America/Los_Angeles"}
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self._orig = dashd.DATA
+        dashd.DATA = Path(self._tmp.name)
+
+    def tearDown(self):
+        dashd.DATA = self._orig
+        self._tmp.cleanup()
+
+    def test_valid_entry_is_kept_and_extras_dropped(self):
+        self.assertEqual(
+            dashd.clean_location_entry({**self.GOOD, "junk": 1}), self.GOOD)
+
+    def test_malformed_entries_are_rejected(self):
+        bad = [
+            [], "x", None,
+            {**self.GOOD, "name": ""},
+            {**self.GOOD, "name": "a<script>"},
+            {**self.GOOD, "name": "x" * 200},
+            {**self.GOOD, "name": 5},
+            {**self.GOOD, "latitude": 91},
+            {**self.GOOD, "longitude": -181},
+            {**self.GOOD, "latitude": True},
+            {**self.GOOD, "latitude": "39.5"},
+            {**self.GOOD, "latitude": float("nan")},
+            {**self.GOOD, "timezone": "../etc/passwd"},
+            {**self.GOOD, "timezone": "America/Los Angeles"},
+            {**self.GOOD, "timezone": None},
+        ]
+        for body in bad:
+            with self.subTest(body=body):
+                self.assertIsNone(dashd.clean_location_entry(body))
+
+    def test_missing_key_is_rejected(self):
+        body = dict(self.GOOD)
+        del body["timezone"]
+        self.assertIsNone(dashd.clean_location_entry(body))
+
+    def test_save_appends_and_round_trips_through_load(self):
+        dashd.save_location(self.GOOD)
+        self.assertEqual(dashd.load_locations(), [self.GOOD])
+        self.assertFalse((dashd.DATA / "locations.json.tmp").exists())
+
+    def test_save_same_name_replaces_rather_than_duplicates(self):
+        dashd.save_location(self.GOOD)
+        dashd.save_location({**self.GOOD, "latitude": 40.0})
+        rows = dashd.load_locations()
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0]["latitude"], 40.0)
+
+    def test_list_is_capped_dropping_the_oldest(self):
+        for i in range(dashd.LOCATIONS_MAX + 3):
+            dashd.save_location({**self.GOOD, "name": f"City {i}"})
+        rows = dashd.load_locations()
+        self.assertEqual(len(rows), dashd.LOCATIONS_MAX)
+        self.assertEqual(rows[-1]["name"], f"City {dashd.LOCATIONS_MAX + 2}")
+
+
 class TestWeatherCacheInvalidation(unittest.TestCase):
     """#77 acceptance criterion: a location change must invalidate
     data/weather.json immediately, not wait out the TTL, or the header

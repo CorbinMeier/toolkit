@@ -30,9 +30,10 @@ bin/dashd-serve     HTTP server; /api/state merges weather+sys+extra (and
                     itself, not just at the HTTP edge. load_locations()
                     reads data/locations.json the same source-agnostic way
                     as tasks.json (merged into /api/state as `locations`);
-                    nothing in this repo writes that file yet -- it's
-                    populated by hand or a future helper/control-surface
-                    write, /api/geocode only looks matches up. POST
+                    POST /api/locations (#104) validates and atomically
+                    appends a picked geocode result to it
+                    (clean_location_entry/save_location, capped at 50);
+                    /api/geocode only looks matches up. POST
                     /api/config's EDITABLE whitelist also covers `location`
                     now (#77, same shape as `display.theme`), and accepting
                     a location patch calls invalidate_weather_cache() to
