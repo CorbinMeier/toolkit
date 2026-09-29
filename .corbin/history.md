@@ -402,3 +402,10 @@ it: `git log -S'"transparent"' -- config.json` matches only the initial commit
 never happened or happened outside the repo, and the claim was lifted into the
 approved contract on 2026-09-21 before being caught the same day. Replaced by the
 `true` entry plus the time-of-day slate tint (#78).
+
+### `display.transparent` = false, opaque always (2026-09-21, narrowed 2026-09-28)
+
+- Narrowed by #94: the context menu's Tint submenu gained a **Transparent** choice
+  (user, 2026-09-28: "there should be a transparent tint which removes it completely").
+  Default stays opaque; every other tint level turns transparency back off. `dashd-host`
+  now always creates an RGBA surface with a clear view background so the page decides.

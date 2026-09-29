@@ -52,6 +52,24 @@ def monitor_name(mon: Gdk.Monitor, index: int) -> str:
     return model if model and model != "Unknown" else f"monitor-{index}"
 
 
+def monitor_keys(display: Gdk.Display) -> list[str]:
+    """One unique config key per connected monitor (#93).
+
+    Two identical panels report the same model, which would make them share
+    one `outputs.<key>` entry and one layout -- defeating per-monitor layouts.
+    The second and later of a model get a ` #2`, ` #3` suffix in GDK's
+    enumeration order; the first keeps the bare model so existing config
+    (e.g. "DELL U2913WM") is unaffected.
+    """
+    seen: dict[str, int] = {}
+    keys = []
+    for i in range(display.get_n_monitors()):
+        base = monitor_name(display.get_monitor(i), i)
+        seen[base] = seen.get(base, 0) + 1
+        keys.append(base if seen[base] == 1 else f"{base} #{seen[base]}")
+    return keys
+
+
 def wait_for_server(url: str, tries: int = 40) -> bool:
     """Poll the health endpoint so we don't load a blank page on a race."""
     for _ in range(tries):
@@ -83,10 +101,9 @@ class Host:
             {"output": name, "w": geo.width, "h": geo.height})
         return f"{self.base}/index.html?{q}"
 
-    def build(self, mon: Gdk.Monitor, index: int) -> Gtk.Window:
-        name = monitor_name(mon, index)
+    def build(self, mon: Gdk.Monitor, key: str) -> Gtk.Window:
+        name = key
         geo = mon.get_geometry()
-        transparent = bool(self.cfg["display"].get("transparent"))
         layer = self.cfg["display"].get("layer", "BOTTOM").upper()
         interactive = bool(self.cfg["display"].get("interactive", True))
 
@@ -117,13 +134,14 @@ class Host:
         # reach the wallpaper even if JS fails to load or a click races it.
         view.connect("context-menu", lambda *_a: True)
 
-        if transparent:
-            win.set_app_paintable(True)
-            if (rgba := win.get_screen().get_rgba_visual()):
-                win.set_visual(rgba)
-            view.set_background_color(Gdk.RGBA(0, 0, 0, 0))
-        else:
-            view.set_background_color(Gdk.RGBA(0.07, 0.08, 0.11, 1))
+        # Always an RGBA surface with a clear view background (#94): whether
+        # the wallpaper shows through is the page's call now (the Tint
+        # submenu's Transparent choice toggles it live), and an opaque page
+        # paints over the clear background exactly as before.
+        win.set_app_paintable(True)
+        if (rgba := win.get_screen().get_rgba_visual()):
+            win.set_visual(rgba)
+        view.set_background_color(Gdk.RGBA(0, 0, 0, 0))
 
         # Never take keyboard focus, interactive or not: clicking a control on
         # the dashboard must not pull focus away from the window you're in.
@@ -141,8 +159,7 @@ class Host:
             gdk_win.input_shape_combine_region(cairo.Region(), 0, 0)
 
         print(f"  + {name:22s} {geo.width}x{geo.height} @{geo.x},{geo.y} "
-              f"layer={layer} transparent={transparent} "
-              f"interactive={interactive}", flush=True)
+              f"layer={layer} interactive={interactive}", flush=True)
         return win
 
     def sync(self) -> None:
@@ -152,10 +169,31 @@ class Host:
             win.destroy()
         self.windows.clear()
         print(f"syncing {want} monitor(s):", flush=True)
+        keys = monitor_keys(self.display)
+        report = []
         for i in range(want):
             mon = self.display.get_monitor(i)
             if mon is not None:
-                self.windows[i] = self.build(mon, i)
+                self.windows[i] = self.build(mon, keys[i])
+                g = mon.get_geometry()
+                report.append({"key": keys[i], "width": g.width,
+                               "height": g.height, "x": g.x, "y": g.y,
+                               "scale": mon.get_scale_factor()})
+        self.report_outputs(report)
+
+    def report_outputs(self, report: list[dict]) -> None:
+        """Tell dashd-serve which monitors exist (#93) so the menu can lay
+        each one out separately. Best-effort: a down server just means the
+        menu falls back to the output it is running on."""
+        req = urllib.request.Request(
+            f"{self.base}/api/outputs",
+            data=json.dumps({"outputs": report}).encode(),
+            headers={"Content-Type": "application/json"}, method="POST")
+        try:
+            urllib.request.urlopen(req, timeout=2).close()
+        except OSError as exc:
+            print(f"  ! could not report outputs: {exc}", file=sys.stderr,
+                  flush=True)
 
     def reload(self) -> None:
         for win in self.windows.values():
@@ -170,10 +208,11 @@ def main() -> int:
 
     if "--list" in sys.argv:
         disp = Gdk.Display.get_default()
+        keys = monitor_keys(disp)
         for i in range(disp.get_n_monitors()):
             mon = disp.get_monitor(i)
             g = mon.get_geometry()
-            print(f"{monitor_name(mon, i)!r}  {g.width}x{g.height} "
+            print(f"{keys[i]!r}  {g.width}x{g.height} "
                   f"@{g.x},{g.y}  scale={mon.get_scale_factor()}")
         return 0
 

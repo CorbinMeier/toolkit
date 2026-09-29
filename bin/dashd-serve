@@ -124,9 +124,30 @@ def load_config() -> dict:
 # a partial patch, so this being leaf-key-whitelisted rather than
 # type-checked is consistent with how "display" already works.
 EDITABLE = {
-    "display": {"theme", "tint_strength"},
+    # "transparent" (#94) is the Tint submenu's Transparent choice: the one
+    # place the surface stops being opaque, chosen live, never by default.
+    "display": {"theme", "tint_strength", "transparent"},
     "location": {"name", "latitude", "longitude", "timezone"},
 }
+
+# Panel ids the "Cards" menu (#94) can place, in web/index.html. A whitelist
+# for the same reason EDITABLE is one: the ids end up as getElementById keys.
+CARD_IDS = ("secSystem", "secProjects", "secSessions", "secForecast",
+            "musicSection", "secLog")
+# Output and profile names are user/hardware strings that become JSON keys.
+_NAME_RE = re.compile(r"^[\w .\-]{1,64}$")
+
+
+def _valid_cards(cards) -> bool:
+    return (isinstance(cards, list) and len(set(cards)) == len(cards)
+            and all(c in CARD_IDS for c in cards))
+
+
+def _valid_outputs(outputs) -> bool:
+    return (isinstance(outputs, dict)
+            and all(_NAME_RE.match(k) and isinstance(v, dict)
+                    and set(v) <= {"cards"} and _valid_cards(v.get("cards", []))
+                    for k, v in outputs.items()))
 
 
 def filter_patch(patch: dict) -> tuple[dict, list[str]]:
@@ -144,6 +165,25 @@ def filter_patch(patch: dict) -> tuple[dict, list[str]]:
     if not isinstance(patch, dict):
         return accepted, ["<patch body>"]
     for section, fields in patch.items():
+        # Structured sections (#94) are validated whole, not leaf-by-leaf.
+        if section == "outputs":
+            if _valid_outputs(fields):
+                accepted["outputs"] = fields
+            else:
+                rejected.append("outputs")
+            continue
+        if section == "profiles":
+            # {name: {"outputs": {...}}} to save, {name: None} to delete.
+            ok = isinstance(fields, dict) and all(
+                _NAME_RE.match(k) and (v is None or (
+                    isinstance(v, dict) and set(v) == {"outputs"}
+                    and _valid_outputs(v["outputs"])))
+                for k, v in fields.items())
+            if ok:
+                accepted["profiles"] = fields
+            else:
+                rejected.append("profiles")
+            continue
         if section not in EDITABLE or not isinstance(fields, dict):
             rejected.append(section)
             continue
@@ -711,6 +751,32 @@ def load_locations() -> list[dict]:
     ]
 
 
+def load_outputs_detected() -> list[dict]:
+    """The monitors dashd-host last reported (#93), or [] before it has."""
+    path = DATA / "outputs_detected.json"
+    try:
+        loaded = json.loads(path.read_text())
+    except (json.JSONDecodeError, OSError):
+        return []
+    return loaded if isinstance(loaded, list) else []
+
+
+def clean_outputs_report(body) -> list[dict] | None:
+    """Validate dashd-host's POST /api/outputs body; None when malformed."""
+    rows = body.get("outputs") if isinstance(body, dict) else None
+    if not isinstance(rows, list):
+        return None
+    out = []
+    for r in rows:
+        if not (isinstance(r, dict) and isinstance(r.get("key"), str)
+                and _NAME_RE.match(r["key"])
+                and all(isinstance(r.get(k), int) and not isinstance(r.get(k), bool)
+                        for k in ("width", "height", "x", "y", "scale"))):
+            return None
+        out.append({k: r[k] for k in ("key", "width", "height", "x", "y", "scale")})
+    return out
+
+
 def _sniff_image_type(data: bytes) -> str | None:
     """Magic-byte fallback for a `file://` art_url with no extension --
     Chromium's MPRIS bridge hands out temp paths like
@@ -771,6 +837,7 @@ def build_state(cfg: dict) -> dict:
         "config": {"units": cfg["units"], "display": cfg["display"],
                    "location": cfg["location"]["name"],
                    "outputs": cfg.get("outputs", {}),
+                   "profiles": cfg.get("profiles", {}),
                    "poll": cfg["refresh"]["state_poll_seconds"],
                    # so the frontend's /api/history fetch window can track
                    # the server's actual retention instead of a hardcoded
@@ -794,6 +861,7 @@ def build_state(cfg: dict) -> dict:
         "logs": logsrc.read_log_lines(cfg),
         "extra": extra,
         "locations": load_locations(),
+        "outputs_detected": load_outputs_detected(),
     }
 
 
@@ -885,7 +953,31 @@ class Handler(SimpleHTTPRequestHandler):
         if route == "/api/config":
             self._config_patch()
             return
+        if route == "/api/outputs":
+            self._outputs_report()
+            return
         self._json({"error": "not found"}, 404)
+
+    def _outputs_report(self) -> None:
+        """dashd-host reports the connected monitors here on every sync (#93).
+        Loopback-only like every route on this server."""
+        try:
+            length = int(self.headers.get("Content-Length") or 0)
+            rows = clean_outputs_report(json.loads(self.rfile.read(length) or b"{}"))
+        except (ValueError, json.JSONDecodeError):
+            rows = None
+        if rows is None:
+            self._json({"error": "bad request body"}, 400)
+            return
+        path = DATA / "outputs_detected.json"
+        tmp = path.with_suffix(".json.tmp")
+        try:
+            tmp.write_text(json.dumps(rows, indent=2) + "\n")
+            tmp.replace(path)
+        except OSError as exc:
+            self._json({"error": repr(exc)}, 500)
+            return
+        self._json({"ok": True})
 
     def _music_command(self) -> None:
         try:
@@ -924,7 +1016,17 @@ class Handler(SimpleHTTPRequestHandler):
             try:
                 # Writes data/config.local.json only -- config.json is a
                 # tracked definitions file and is never written at runtime.
-                userconf.apply_patch(ROOT, accepted)
+                # A null profile is a delete: deep_merge would store the
+                # null, so those go through remove_local instead.
+                doomed = [n for n, v in accepted.get("profiles", {}).items()
+                          if v is None]
+                for name in doomed:
+                    del accepted["profiles"][name]
+                    userconf.remove_local(ROOT, ("profiles", name))
+                if accepted.get("profiles") == {}:
+                    del accepted["profiles"]
+                if accepted:
+                    userconf.apply_patch(ROOT, accepted)
             except OSError as exc:
                 self._json({"error": repr(exc)}, 500)
                 return

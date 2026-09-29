@@ -7,7 +7,11 @@ paths:
 # Host surface rules (`bin/dashd-host`, systemd units)
 
 ```
-bin/dashd-host      layer-shell surfaces; --list prints monitor names
+bin/dashd-host      layer-shell surfaces; --list prints monitor keys. Each sync
+                    POSTs the connected set to dashd-serve /api/outputs (#93)
+                    -> data/outputs_detected.json -> state.outputs_detected.
+                    Duplicate models get ' #2' suffixes so each has its own key.
+                    Surface is always RGBA/clear; the page decides opacity (#94)
 systemd/            the four user units (dashd-control's not yet enabled)
 ```
 

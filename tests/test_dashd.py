@@ -1168,6 +1168,19 @@ class TestCachedAptUpdates(unittest.TestCase):
         self.assertFalse(dashd._apt_refreshing)
 
 
+class TestUserconfRemove(unittest.TestCase):
+    def test_remove_local_deletes_only_the_named_key(self):
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d)
+            (root / "config.json").write_text("{}")
+            two = {"a": {"outputs": {}}, "b": {"outputs": {}}}
+            userconf.save_local(root, {"profiles": two})
+            userconf.remove_local(root, ("profiles", "a"))
+            self.assertEqual(list(userconf.load_local(root)["profiles"]), ["b"])
+            userconf.remove_local(root, ("profiles", "missing"))
+            userconf.remove_local(root, ("nope", "x"))
+
+
 class TestConfigPatch(unittest.TestCase):
     """POST /api/config (#66 -- the wallpaper's own context menu, theme
     switch). Whitelist, not sanitisation: same posture as dashd-control's
@@ -1186,9 +1199,40 @@ class TestConfigPatch(unittest.TestCase):
         self.assertEqual(accepted, {})
 
     def test_unknown_field_within_an_editable_section_is_rejected(self):
-        accepted, rejected = dashd.filter_patch({"display": {"transparent": True}})
-        self.assertEqual(rejected, ["display.transparent"])
+        accepted, rejected = dashd.filter_patch({"display": {"layer": "BACKGROUND"}})
+        self.assertEqual(rejected, ["display.layer"])
         self.assertEqual(accepted, {})
+
+    def test_transparent_is_editable_since_94(self):
+        accepted, rejected = dashd.filter_patch({"display": {"transparent": True}})
+        self.assertEqual(rejected, [])
+        self.assertEqual(accepted, {"display": {"transparent": True}})
+
+    def test_outputs_cards_accepted_and_validated(self):
+        ok = {"outputs": {"DELL U2913WM": {"cards": ["secLog", "secSystem"]}}}
+        self.assertEqual(dashd.filter_patch(ok), (ok, []))
+        for bad in ({"outputs": {"X": {"cards": ["nope"]}}},
+                    {"outputs": {"X": {"cards": ["secLog", "secLog"]}}},
+                    {"outputs": {"X": {"layout": "wide"}}},
+                    {"outputs": {"../x": {"cards": []}}}):
+            accepted, rejected = dashd.filter_patch(bad)
+            self.assertEqual((accepted, rejected), ({}, ["outputs"]), bad)
+
+    def test_profiles_save_and_delete_shapes(self):
+        save = {"profiles": {"Profile 1": {"outputs": {"a": {"cards": ["secLog"]}}}}}
+        self.assertEqual(dashd.filter_patch(save), (save, []))
+        gone = {"profiles": {"Profile 1": None}}
+        self.assertEqual(dashd.filter_patch(gone), (gone, []))
+        accepted, rejected = dashd.filter_patch({"profiles": {"p": {"outputs": 1}}})
+        self.assertEqual(rejected, ["profiles"])
+
+    def test_outputs_report_validation(self):
+        row = {"key": "DELL U2913WM", "width": 2560, "height": 1080,
+               "x": 1440, "y": 0, "scale": 1}
+        self.assertEqual(dashd.clean_outputs_report({"outputs": [row]}), [row])
+        for bad in ({**row, "width": "2560"}, {**row, "key": "a/b"}):
+            self.assertIsNone(dashd.clean_outputs_report({"outputs": [bad]}))
+        self.assertIsNone(dashd.clean_outputs_report([]))
 
     def test_non_dict_patch_body_is_rejected_wholesale(self):
         accepted, rejected = dashd.filter_patch(["not", "a", "dict"])

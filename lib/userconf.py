@@ -107,3 +107,19 @@ def apply_patch(root: Path, patch: dict) -> dict:
     merged = deep_merge(load_local(root), patch)
     save_local(root, merged)
     return load(root)
+
+
+def remove_local(root: Path, path: tuple[str, ...]) -> None:
+    """Delete one stored selection (e.g. a saved profile, #94).
+
+    Needed because `deep_merge` can only set a key, and a stored null is not
+    the same as no key. A path that isn't stored is a no-op.
+    """
+    stored = load_local(root)
+    node = stored
+    for key in path[:-1]:
+        node = node.get(key)
+        if not isinstance(node, dict):
+            return
+    if node.pop(path[-1], None) is not None:
+        save_local(root, stored)

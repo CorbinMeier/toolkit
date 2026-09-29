@@ -1580,30 +1580,62 @@ const LAYOUTS = {
 // ratio rather than a fixed pixel breakpoint -- the two real outputs here
 // are 1.6 (1440x900) and 2.37 (2560x1080), and >=2 is "has room for a
 // third column." An explicit 'wide'/'narrow' in config.json always wins.
-function resolveLayout(raw) {
+// w/h default to this window; the profile snapshot passes another monitor's.
+function resolveLayout(raw, w = innerWidth, h = innerHeight) {
   if (raw === 'wide' || raw === 'narrow') return raw;
-  return (innerWidth / Math.max(innerHeight, 1)) >= 2 ? 'wide' : 'narrow';
+  return (w / Math.max(h, 1)) >= 2 ? 'wide' : 'narrow';
 }
 
-let placedLayout = null;
-function placePanels(resolved) {
-  if (placedLayout === resolved) return; // idempotent -- apply() runs every poll
-  placedLayout = resolved;
-  const layout = LAYOUTS[resolved] || LAYOUTS.narrow;
+// The panels the Cards menu (#94) can place, in their default display order.
+const CARDS = [
+  ['secSystem', 'System'], ['secProjects', 'Projects'],
+  ['secSessions', 'Sessions'], ['secForecast', 'Forecast'],
+  ['musicSection', 'Music'], ['secLog', 'Log'],
+];
+const CARD_LABEL = Object.fromEntries(CARDS);
+const LAYOUT_COLS = {
+  narrow: ['colLeft', 'colRight'],
+  wide: ['colLeft', 'colCenter', 'colRight'],
+};
+
+// The enabled cards for an output: its explicit outputs.<name>.cards, else
+// LAYOUTS' hand-tuned placement flattened row by row -- which the
+// round-robin in placePanels() deals back into exactly those columns, so an
+// output with no `cards` looks the same as before #94.
+function outputCards(outCfg, layout) {
+  if (Array.isArray(outCfg.cards)) return outCfg.cards.filter((id) => CARD_LABEL[id]);
+  const cols = LAYOUT_COLS[layout].map((c) => LAYOUTS[layout][c]);
+  const out = [];
+  for (let r = 0; r < Math.max(...cols.map((c) => c.length)); r += 1) {
+    cols.forEach((c) => { if (c[r]) out.push(c[r]); });
+  }
+  return out;
+}
+
+let placedKey = null;
+function placePanels(resolved, cards) {
+  const key = `${resolved}|${cards.join()}`;
+  if (placedKey === key) return; // idempotent -- apply() runs every poll
+  placedKey = key;
+  const colIds = LAYOUT_COLS[resolved] || LAYOUT_COLS.narrow;
+  for (const [id] of CARDS) {
+    const sec = $(id);
+    if (sec) sec.style.display = cards.includes(id) ? '' : 'none';
+  }
+  // Deal enabled cards across the columns in order, so the list order is
+  // reading order and reordering in the menu moves a panel visibly.
+  cards.forEach((id, i) => {
+    const sec = $(id);
+    if (sec) $(colIds[i % colIds.length]).appendChild(sec);
+  });
   ['colLeft', 'colCenter', 'colRight'].forEach((colId) => {
     const col = $(colId);
-    if (!col) return;
-    (layout[colId] || []).forEach((secId) => {
-      const sec = $(secId);
-      if (sec) col.appendChild(sec);
-    });
     // index.html's [data-layout] rule is what actually removes #colCenter
     // from grid layout under 'narrow' (display:none there, so it claims no
     // track and #colLeft/#colRight land in #root's two explicit columns
     // instead of wrapping to a second row) -- this is a defensive second
-    // layer keyed off real content rather than the layout name, in case a
-    // future layout value ever leaves a column childless.
-    col.classList.toggle('hidden', col.children.length === 0);
+    // layer keyed off real content rather than the layout name.
+    if (col) col.classList.toggle('hidden', !Array.from(col.children).some((c) => c.style.display !== 'none'));
   });
 }
 
@@ -1615,7 +1647,7 @@ function apply(s) {
   document.body.classList.toggle('transparent', !!disp.transparent);
   const layout = resolveLayout(outCfg.layout || 'auto');
   document.documentElement.dataset.layout = layout;
-  placePanels(layout);
+  placePanels(layout, outputCards(outCfg, layout));
   // Theme toggle surface: a config.json field for now (issue #32) -- a
   // natural future home is the Control Backend (#30) once it exists, but
   // this doesn't block on that. data-theme on <html> drives the CSS
@@ -1781,53 +1813,62 @@ function wireControls() {
 }
 
 /* ----------------------------------------------------------- context menu
- * #66, first step of "configure from the interface itself" -- so this is a
- * data-driven item list, not two hardcoded buttons, even though there are
- * only two entries today. A future item (toggle a panel, reposition one)
- * is a new entry in menuItems(), not a new code path.
+ * #66, "configure from the interface itself"; restructured at #94 into
+ * Profiles / Cards / Settings. Data-driven: a new entry is an item in one
+ * of the *Items() functions below, not a new code path.
  *
  * Suppresses WebKit's own context-menu (Reload / Inspect Element / Open
  * Frame in New Window ...), which the surface would otherwise show now
  * that #36 gave it pointer reach -- see dashd-host's belt-and-braces
  * `context-menu` handler for the other half of that fix.
  */
-async function setTheme(theme) {
-  try {
-    await fetch('/api/config', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ display: { theme } }),
-    });
-  } catch { /* next poll re-syncs from whatever config.json actually holds */ }
-  setTimeout(refreshNow, 250);
+// Applies a config patch to the page's own copy of state.config first, so
+// the menu and layout react at once, then persists it (#94). Only sections
+// whose served shape equals their patch shape are mirrored: `location` is
+// served as just a name, so it waits for the refetch below instead.
+// Semantics match the server: arrays replace, null deletes a key.
+function mergeInto(dst, patch) {
+  for (const [k, v] of Object.entries(patch)) {
+    if (v === null) {
+      delete dst[k];
+    } else if (v && typeof v === 'object' && !Array.isArray(v)
+        && dst[k] && typeof dst[k] === 'object' && !Array.isArray(dst[k])) {
+      mergeInto(dst[k], v);
+    } else {
+      dst[k] = v;
+    }
+  }
 }
 
-async function setTintStrength(value) {
+async function patchConfig(patch) {
+  if (state) {
+    for (const section of ['display', 'outputs', 'profiles']) {
+      if (!patch[section]) continue;
+      state.config[section] = state.config[section] || {};
+      mergeInto(state.config[section], patch[section]);
+    }
+    apply(state);
+    if (menuCtx) renderMenu();
+  }
   try {
     await fetch('/api/config', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ display: { tint_strength: value } }),
+      body: JSON.stringify(patch),
     });
-  } catch { /* next poll re-syncs from whatever config.json actually holds */ }
-  setTimeout(refreshNow, 250);
+  } catch { /* next poll re-syncs from whatever the server actually holds */ }
+  await refreshNow();
+  if (menuCtx) renderMenu();
 }
 
-async function setLocation(loc) {
-  try {
-    await fetch('/api/config', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        location: {
-          name: loc.name, latitude: loc.latitude,
-          longitude: loc.longitude, timezone: loc.timezone,
-        },
-      }),
-    });
-  } catch { /* next poll re-syncs from whatever config actually holds */ }
-  setTimeout(refreshNow, 250);
-}
+const setTheme = (theme) => patchConfig({ display: { theme } });
+
+const setLocation = (loc) => patchConfig({
+  location: {
+    name: loc.name, latitude: loc.latitude,
+    longitude: loc.longitude, timezone: loc.timezone,
+  },
+});
 
 // data/locations.json entries plus whatever's currently configured (#77) --
 // deduped by name so the active selection doesn't show up twice when it's
@@ -1854,44 +1895,207 @@ function locationItems() {
   });
 }
 
-// Off/Subtle/Medium/Strong, active one checked (#88) -- the actual
-// calibration is the user's, settled live on their own wallpaper, not
-// guessed at in a headless render. Compares by value rather than name so a
-// hand-edited or pre-#88 config (no tint_strength set at all) still lands
-// on Medium via sunTint()'s own default rather than showing nothing checked.
+// Transparent / Off / Subtle / Medium / Strong, active one checked (#88,
+// #94). Strengths compare by value rather than name so a hand-edited or
+// pre-#88 config (no tint_strength set at all) still lands on Medium via
+// sunTint()'s own default. Transparent (#94) is display.transparent: it
+// removes the tint entirely and lets the wallpaper photo show through;
+// every other choice turns it back off.
 function tintItems() {
-  const current = state?.config?.display?.tint_strength ?? TINT_STRENGTHS.medium;
-  return Object.entries(TINT_STRENGTHS).map(([name, value]) => ({
-    label: `${name[0].toUpperCase()}${name.slice(1)}${value === current ? ' ✓' : ''}`,
-    action: () => setTintStrength(value),
+  const disp = state?.config?.display || {};
+  const transparent = !!disp.transparent;
+  const current = disp.tint_strength ?? TINT_STRENGTHS.medium;
+  return [
+    {
+      label: `Transparent${transparent ? ' ✓' : ''}`,
+      action: () => patchConfig({ display: { transparent: true } }),
+    },
+    ...Object.entries(TINT_STRENGTHS).map(([name, value]) => ({
+      label: `${name[0].toUpperCase()}${name.slice(1)}${!transparent && value === current ? ' ✓' : ''}`,
+      action: () => patchConfig({ display: { transparent: false, tint_strength: value } }),
+    })),
+  ];
+}
+
+function themeItems() {
+  const disp = state?.config.display || {};
+  const current = disp.theme || 'night_ops';
+  return (disp._theme_options || [current]).map((t) => ({
+    label: `${t.replace(/_/g, ' ')}${t === current ? ' ✓' : ''}`,
+    action: () => setTheme(t),
   }));
 }
 
-function menuItems() {
-  const disp = state?.config.display || {};
-  const themes = disp._theme_options || [disp.theme || 'night_ops'];
-  const current = disp.theme || 'night_ops';
-  const items = [
+function settingsItems() {
+  return [
+    { label: 'Location', children: locationItems },
+    { label: 'Tint', children: tintItems },
+    { label: 'Theme', children: themeItems },
     { label: 'Reload', action: () => location.reload() },
   ];
-  for (const t of themes) {
-    items.push({
-      label: `Theme: ${t.replace(/_/g, ' ')}${t === current ? ' ✓' : ''}`,
-      action: () => setTheme(t),
-    });
+}
+
+/* ------------------------------------------------------------------ cards
+ * #94: which panels this monitor shows, in what order. outputs.<name>.cards
+ * is the ordered list of enabled ids; enabling appends, so panels appear in
+ * the order they were enabled. Every menu edit writes the whole list.
+ */
+function currentOutputCfg() {
+  const o = state?.config?.outputs || {};
+  return o[OUTPUT] || o.default || {};
+}
+
+function currentCards() {
+  const oc = currentOutputCfg();
+  return outputCards(oc, resolveLayout(oc.layout || 'auto'));
+}
+
+const setCards = (cards) => patchConfig({ outputs: { [OUTPUT]: { cards } } });
+
+function moveCard(cards, i, delta) {
+  const next = [...cards];
+  [next[i], next[i + delta]] = [next[i + delta], next[i]];
+  return next;
+}
+
+function ctxButton(label, onClick, cls = '') {
+  const btn = document.createElement('button');
+  btn.type = 'button';
+  btn.className = `ctx-menu-item ${cls}`.trim();
+  btn.textContent = label;
+  btn.addEventListener('click', onClick);
+  return btn;
+}
+
+function cardRow(id, i, cards) {
+  const row = document.createElement('div');
+  row.className = 'ctx-menu-row';
+  row.appendChild(ctxButton(`✓ ${CARD_LABEL[id]}`,
+    () => setCards(cards.filter((c) => c !== id))));
+  const up = ctxButton('↑', () => setCards(moveCard(cards, i, -1)), 'ctx-mini');
+  up.disabled = i === 0;
+  const down = ctxButton('↓', () => setCards(moveCard(cards, i, 1)), 'ctx-mini');
+  down.disabled = i === cards.length - 1;
+  row.append(up, down);
+  return row;
+}
+
+function cardItems() {
+  const cards = currentCards();
+  const items = [{ head: `Cards · ${OUTPUT}` }];
+  cards.forEach((id, i) => items.push({ build: () => cardRow(id, i, cards) }));
+  for (const [id, label] of CARDS) {
+    if (!cards.includes(id)) {
+      items.push({ label: `○ ${label}`, keep: true, action: () => setCards([...cards, id]) });
+    }
   }
-  // Submenu, not two hardcoded entries -- data/locations.json can hold any
-  // number of saved cities, and menuItems() stays the single place a new
-  // item type gets added.
-  items.push({ label: 'Location', children: locationItems() });
-  items.push({ label: 'Tint', children: tintItems() });
   return items;
 }
 
+/* --------------------------------------------------------------- profiles
+ * #94: a profile is a saved snapshot of every detected monitor's cards.
+ * Click applies it; holding a row for HOLD_MS deletes it, with a progress
+ * bar under the row (shown after HOLD_SHOW_MS so a plain click never
+ * flashes one). The surface has no keyboard, so Save names them itself.
+ */
+const HOLD_MS = 3000;
+const HOLD_SHOW_MS = 250;
+
+function snapshotOutputs() {
+  const cfgOutputs = state?.config?.outputs || {};
+  const detected = state?.outputs_detected || [];
+  const rows = detected.length
+    ? detected
+    : [{ key: OUTPUT, width: innerWidth, height: innerHeight }];
+  const snap = {};
+  for (const r of rows) {
+    const oc = cfgOutputs[r.key] || cfgOutputs.default || {};
+    snap[r.key] = { cards: outputCards(oc, resolveLayout(oc.layout || 'auto', r.width, r.height)) };
+  }
+  return snap;
+}
+
+function profileActive(profile) {
+  const snap = snapshotOutputs();
+  const keys = Object.keys(profile.outputs || {});
+  return keys.length > 0 && keys.every(
+    (k) => snap[k] && snap[k].cards.join() === profile.outputs[k].cards.join());
+}
+
+function saveProfile() {
+  const profiles = state?.config?.profiles || {};
+  let n = 1;
+  while (`Profile ${n}` in profiles) n += 1;
+  return patchConfig({ profiles: { [`Profile ${n}`]: { outputs: snapshotOutputs() } } });
+}
+
+function profileRow(name, profile) {
+  const wrap = document.createElement('div');
+  wrap.className = 'ctx-hold';
+  const btn = ctxButton(`${profileActive(profile) ? '✓ ' : ''}${name}`, () => {
+    if (swallowClick) { swallowClick = false; return; }
+    patchConfig({ outputs: profile.outputs });
+  });
+  btn.style.width = '100%';
+  let swallowClick = false;
+  let showTimer = null;
+  let deleteTimer = null;
+  const cancel = () => {
+    clearTimeout(showTimer);
+    clearTimeout(deleteTimer);
+    wrap.querySelector('.ctx-hold-bar')?.remove();
+  };
+  btn.addEventListener('pointerdown', (e) => {
+    if (e.button !== 0) return;
+    swallowClick = false;
+    showTimer = setTimeout(() => {
+      // A hold long enough to show the bar is a delete attempt, not a click:
+      // letting go early must not apply the profile.
+      swallowClick = true;
+      const bar = document.createElement('div');
+      bar.className = 'ctx-hold-bar';
+      bar.style.setProperty('--hold-ms', `${HOLD_MS - HOLD_SHOW_MS}ms`);
+      const fill = document.createElement('i');
+      bar.appendChild(fill);
+      wrap.appendChild(bar);
+      requestAnimationFrame(() => requestAnimationFrame(() => { fill.style.width = '100%'; }));
+    }, HOLD_SHOW_MS);
+    deleteTimer = setTimeout(() => {
+      cancel();
+      patchConfig({ profiles: { [name]: null } });
+    }, HOLD_MS);
+  });
+  for (const t of ['pointerup', 'pointerleave', 'pointercancel']) btn.addEventListener(t, cancel);
+  wrap.appendChild(btn);
+  return wrap;
+}
+
+function profileItems() {
+  const profiles = state?.config?.profiles || {};
+  const items = [{ label: '+ Save current layout', keep: true, action: saveProfile }];
+  const names = Object.keys(profiles).sort();
+  if (!names.length) items.push({ head: 'No saved profiles' });
+  for (const name of names) items.push({ build: () => profileRow(name, profiles[name]) });
+  return items;
+}
+
+function rootItems() {
+  return [
+    { label: 'Profiles', children: profileItems },
+    { label: 'Cards', children: cardItems },
+    { label: 'Settings', children: settingsItems },
+  ];
+}
+
+// The open menu: { menu, x, y, stack } where each stack entry is a function
+// returning that level's items, re-run on every render so a level always
+// shows current state (a toggled card, a saved profile).
+let menuCtx = null;
 let ctxOutsideHandler = null;
 
 function closeContextMenu() {
   $('ctxMenu')?.remove();
+  menuCtx = null;
   if (ctxOutsideHandler) {
     removeEventListener('pointerdown', ctxOutsideHandler, true);
     ctxOutsideHandler = null;
@@ -1906,9 +2110,8 @@ function ctxMenuKeydown(e) {
 function positionMenu(menu, x, y) {
   // Clamp inside the viewport rather than letting the menu render off-screen
   // -- a right-click near the output's right/bottom edge is the common case
-  // on a wallpaper that spans the whole screen. Re-run on every level swap,
-  // not just at open time -- a submenu is rarely the same height as the
-  // root list.
+  // on a wallpaper that spans the whole screen. Re-run on every render, not
+  // just at open time -- a submenu is rarely the same height as the root.
   const rect = menu.getBoundingClientRect();
   const left = Math.min(x, innerWidth - rect.width - 4);
   const top = Math.min(y, innerHeight - rect.height - 4);
@@ -1916,35 +2119,38 @@ function positionMenu(menu, x, y) {
   menu.style.top = `${Math.max(4, top)}px`;
 }
 
-// Renders one level of the menu into the already-open panel -- a `children`
-// item (#77's Location submenu) swaps the panel's contents in place rather
-// than opening a second panel, with a "Back" entry returning to the root.
-// Generic on item shape (`children` vs `action`) so a future nested item
-// needs nothing here.
-function renderMenuLevel(menu, items, x, y, atRoot) {
+// Item shapes: { label, children } opens a level; { label, action } runs
+// and closes (or stays open with keep); { head } is a caption; { build }
+// returns a custom row element.
+function renderMenu() {
+  const { menu, x, y, stack } = menuCtx;
   menu.replaceChildren();
-  if (!atRoot) {
-    const back = document.createElement('button');
-    back.type = 'button';
-    back.className = 'ctx-menu-item';
-    back.textContent = '‹ Back';
-    back.addEventListener('click', () => renderMenuLevel(menu, menuItems(), x, y, true));
-    menu.appendChild(back);
+  if (stack.length > 1) {
+    menu.appendChild(ctxButton('‹ Back', () => { stack.pop(); renderMenu(); }));
   }
-  for (const item of items) {
-    const btn = document.createElement('button');
-    btn.type = 'button';
-    btn.className = 'ctx-menu-item';
-    btn.textContent = item.children ? `${item.label} ›` : item.label;
-    btn.addEventListener('click', () => {
-      if (item.children) {
-        renderMenuLevel(menu, item.children, x, y, false);
-      } else {
-        closeContextMenu();
-        item.action();
-      }
-    });
-    menu.appendChild(btn);
+  for (const item of stack[stack.length - 1]()) {
+    if (item.head) {
+      const h = document.createElement('div');
+      h.className = 'ctx-menu-head';
+      h.textContent = item.head;
+      menu.appendChild(h);
+    } else if (item.build) {
+      menu.appendChild(item.build());
+    } else if (item.children) {
+      menu.appendChild(ctxButton(`${item.label} ›`, () => {
+        stack.push(item.children);
+        renderMenu();
+      }));
+    } else {
+      menu.appendChild(ctxButton(item.label, () => {
+        if (item.keep) {
+          item.action();
+        } else {
+          closeContextMenu();
+          item.action();
+        }
+      }));
+    }
   }
   positionMenu(menu, x, y);
 }
@@ -1955,7 +2161,8 @@ function openContextMenu(x, y) {
   menu.id = 'ctxMenu';
   menu.className = 'panel accent-cyan ctx-menu';
   document.body.appendChild(menu);
-  renderMenuLevel(menu, menuItems(), x, y, true);
+  menuCtx = { menu, x, y, stack: [rootItems] };
+  renderMenu();
 
   // Any click outside, or Escape, dismisses -- capture phase so it fires
   // before the click that opened it (its own contextmenu listener already

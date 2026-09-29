@@ -55,7 +55,9 @@ Status: approved 2026-09-21
 - BOTTOM layer-shell: above `cosmic-bg`, below every normal window.
 - Pointer-interactive (`display.interactive`, default true); keyboard mode stays
   `NONE` so a click never steals focus (#36).
-- Right-click opens our own themed context menu: Reload + theme rows (#66).
+- Right-click opens our own themed context menu: Profiles / Cards / Settings (#66, #94).
+- Each monitor is detected by `dashd-host` (unique key per output, #93) and lays out
+  its own `outputs.<key>.cards`; profiles snapshot every monitor's cards (#94).
 #### System panel, left half [live]
 - CPU / MEM / BAT, Storage, Network as `.sys-grid` rows with three-tier step graphs
   for CPU and Memory (#12, #17, #57, #58, #59).
@@ -91,7 +93,10 @@ Status: approved 2026-09-21
 - **Input region covers the whole surface** - 2026-08-27
   - Over: scoped per-widget click-through rects, and the JS-to-Python rect bridge they need
   - Why: user - "I don't use my desktop (nothing on my desktop)" (#36)
-- **`display.transparent` = false; tint is a real time-of-day color, not "barely present"** - 2026-09-21
+- **Transparent is a live Tint choice, off by default (#94)** - 2026-09-28
+  - Over: nothing removed; narrows the entry below
+  - Why: user - "there should be a transparent tint which removes it completely"
+- **`display.transparent` = false by default; tint is a real time-of-day color, not "barely present"** - 2026-09-21
   - Over: RGBA/backdrop-blur over `cosmic-bg` (#89); slate-only "barely present" palette (#78/#88, retired by #90)
   - Why: user - "still transparent... shouldn't be" (#89); "doesn't feel like midnight" (#90) - panels stay readable via their own 88% opacity
   - Supersedes: "= true, with a time-of-day slate tint to come" (2026-09-21, #78)
