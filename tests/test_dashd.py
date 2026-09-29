@@ -1215,6 +1215,14 @@ class TestConfigPatch(unittest.TestCase):
             accepted, rejected = dashd.filter_patch({"display": {"tint_opacity": bad}})
             self.assertEqual((accepted, rejected), ({}, ["display.tint_opacity"]))
 
+    def test_safe_area_must_be_a_pixel_range(self):
+        ok = {"display": {"safe_area_top": 0, "safe_area_bottom": 160}}
+        self.assertEqual(dashd.filter_patch(ok), (ok, []))
+        for key in ("safe_area_top", "safe_area_bottom"):
+            for bad in (-1, 161, "48", True, None):
+                accepted, rejected = dashd.filter_patch({"display": {key: bad}})
+                self.assertEqual((accepted, rejected), ({}, [f"display.{key}"]))
+
     def test_outputs_cards_accepted_and_validated(self):
         ok = {"outputs": {"DELL U2913WM": {"cards": ["secLog", "secSystem"]}}}
         self.assertEqual(dashd.filter_patch(ok), (ok, []))

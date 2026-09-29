@@ -137,7 +137,8 @@ Status: approved 2026-09-21
 - TBD: #3 - `outputs.<name>.layout` reaches `data-layout` but no CSS keys off it, so
   both monitors render the same two-column grid.
 - TBD: `display.safe_area_top`/`safe_area_bottom` default to 48px, a guess at COSMIC's
-  panel height, never confirmed against this machine.
+  panel height, never confirmed against this machine. Now tunable live via Settings >
+  Safe area sliders (#105, 0-160px, global); the right value is still unconfirmed.
 - TBD: #36/#64/#65, #66, #71/#72 and #77 are merged but not eyeballed live.
 
 ## Conventions

@@ -1971,6 +1971,39 @@ function opacitySlider() {
   return row;
 }
 
+// Safe-area inset slider (#105): same live-preview-on-input, one-PATCH-on-
+// release shape as opacitySlider. Global, not per-monitor.
+function safeAreaSlider(name, key) {
+  const row = document.createElement('div');
+  row.className = 'ctx-menu-row ctx-slider';
+  const label = document.createElement('span');
+  const input = document.createElement('input');
+  input.type = 'range';
+  input.min = '0';
+  input.max = '160';
+  input.step = '4';
+  input.value = String(state?.config?.display?.[key] ?? 48);
+  const show = () => { label.textContent = `${name} ${input.value}px`; };
+  show();
+  input.addEventListener('input', () => {
+    show();
+    state.config.display[key] = Number(input.value);
+    apply(state);
+  });
+  input.addEventListener('change', () => {
+    patchConfig({ display: { [key]: Number(input.value) } });
+  });
+  row.append(label, input);
+  return row;
+}
+
+function safeAreaItems() {
+  return [
+    { build: () => safeAreaSlider('Top', 'safe_area_top') },
+    { build: () => safeAreaSlider('Bottom', 'safe_area_bottom') },
+  ];
+}
+
 function tintItems() {
   const current = state?.config?.display?.tint_strength ?? TINT_STRENGTHS.medium;
   return [
@@ -1996,6 +2029,7 @@ function settingsItems() {
     { label: 'Location', children: locationItems },
     { label: 'Tint', children: tintItems },
     { label: 'Theme', children: themeItems },
+    { label: 'Safe area', children: safeAreaItems },
     { label: 'Reload', action: () => location.reload() },
   ];
 }
