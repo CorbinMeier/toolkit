@@ -1952,10 +1952,11 @@ function locationItems() {
  * button grid. Self-contained and reusable: returns an element and reports
  * every edit through onChange(newValue); the caller owns the value and
  * re-renders. Enter/submit calls onSubmit(value). (#104)
- *   opts: { value, onChange, onSubmit, submitLabel = 'Search', max = 80 }
+ *   opts: { value, onChange, onSubmit, submitLabel = 'Search', max = 80,
+ *           extra = '' }   extra: one more row of literal keys (digits etc.)
  */
 function screenKeyboard(opts) {
-  const { value = '', onChange, onSubmit, submitLabel = 'Search', max = 80 } = opts;
+  const { value = '', onChange, onSubmit, submitLabel = 'Search', max = 80, extra = '' } = opts;
   const wrap = document.createElement('div');
   wrap.className = 'ctx-kb';
   const shown = document.createElement('div');
@@ -1971,13 +1972,14 @@ function screenKeyboard(opts) {
     return b;
   };
   const rows = ['ABCDEFGHI', 'JKLMNOPQR', 'STUVWXYZ'];
+  if (extra) rows.push(extra);
   for (const letters of rows) {
     const row = document.createElement('div');
     row.className = 'ctx-kb-row';
     for (const ch of letters) {
       row.appendChild(key(ch, () => {
         if (value.length >= max) return;
-        // Capitalise at the start of the text and after a space.
+        // Capitalise letters at the start of the text and after a space.
         const upper = value === '' || value.endsWith(' ');
         onChange(value + (upper ? ch : ch.toLowerCase()));
       }));
@@ -2448,7 +2450,6 @@ function profileRow(name, profile) {
  * on-screen letter picker (a menu level) and posted to /api/profile/rename,
  * which validates the name and refuses collisions. */
 let renameDraft = null;
-const RENAME_KEYS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-.';
 
 function startRename(name) {
   renameDraft = { old: name, text: name, error: '' };
@@ -2477,25 +2478,16 @@ async function commitRename() {
   if (menuCtx) renderMenu();
 }
 
+// Shares screenKeyboard() with Location search (#104).
 function renameItems() {
   const d = renameDraft;
-  const draw = () => { if (menuCtx) renderMenu(); };
+  const set = (text) => { d.text = text; d.error = ''; if (menuCtx) renderMenu(); };
   return [
-    { head: `Rename · ${d.text}▏${d.error ? ` · ${d.error}` : ''}` },
-    { build: () => {
-      const grid = document.createElement('div');
-      grid.className = 'ctx-keys';
-      for (const ch of RENAME_KEYS) {
-        grid.appendChild(ctxButton(ch, () => {
-          if (d.text.length < 64) { d.text += ch; d.error = ''; draw(); }
-        }, 'ctx-mini'));
-      }
-      grid.appendChild(ctxButton('space', () => { d.text += ' '; d.error = ''; draw(); }, 'ctx-mini'));
-      grid.appendChild(ctxButton('⌫', () => { d.text = d.text.slice(0, -1); d.error = ''; draw(); }, 'ctx-mini'));
-      grid.appendChild(ctxButton('clear', () => { d.text = ''; d.error = ''; draw(); }, 'ctx-mini'));
-      return grid;
-    } },
-    { label: '✓ Save name', keep: true, action: commitRename },
+    { head: `Rename ${d.old}${d.error ? ` · ${d.error}` : ''}` },
+    { build: () => screenKeyboard({
+      value: d.text, extra: '0123456789-.', max: 64, submitLabel: 'Save',
+      onChange: set, onSubmit: commitRename,
+    }) },
   ];
 }
 
