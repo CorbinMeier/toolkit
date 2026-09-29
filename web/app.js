@@ -2098,6 +2098,11 @@ function cardItems() {
   if ((state?.outputs_detected || []).some((r) => r.key !== OUTPUT)) {
     items.push({ label: 'Copy from…', children: copyFromItems });
   }
+  // #98: only when this monitor has its own stored list to clear.
+  if (Array.isArray(state?.config?.outputs?.[OUTPUT]?.cards)) {
+    items.push({ label: 'Reset to default', keep: true,
+      action: () => patchConfig({ outputs: { [OUTPUT]: { cards: null } } }) });
+  }
   cards.forEach((id, i) => items.push({ build: () => cardRow(id, i, cards) }));
   for (const [id, label] of CARDS) {
     if (!cards.includes(id)) {

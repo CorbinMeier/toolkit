@@ -149,10 +149,14 @@ def _valid_cards(cards) -> bool:
             and all(c in CARD_IDS for c in cards))
 
 
-def _valid_outputs(outputs) -> bool:
+def _valid_outputs(outputs, allow_reset: bool = False) -> bool:
+    """`allow_reset` lets `cards` be null: a delete of the stored list (#98),
+    valid only in a live patch, never inside a saved profile."""
     return (isinstance(outputs, dict)
             and all(_NAME_RE.match(k) and isinstance(v, dict)
-                    and set(v) <= {"cards"} and _valid_cards(v.get("cards", []))
+                    and set(v) <= {"cards"}
+                    and (_valid_cards(v.get("cards", []))
+                         or (allow_reset and "cards" in v and v["cards"] is None))
                     for k, v in outputs.items()))
 
 
@@ -173,7 +177,7 @@ def filter_patch(patch: dict) -> tuple[dict, list[str]]:
     for section, fields in patch.items():
         # Structured sections (#94) are validated whole, not leaf-by-leaf.
         if section == "outputs":
-            if _valid_outputs(fields):
+            if _valid_outputs(fields, allow_reset=True):
                 accepted["outputs"] = fields
             else:
                 rejected.append("outputs")
@@ -1044,6 +1048,16 @@ class Handler(SimpleHTTPRequestHandler):
                     userconf.remove_local(ROOT, ("profiles", name))
                 if accepted.get("profiles") == {}:
                     del accepted["profiles"]
+                # Same for `outputs.<key>.cards: null` (#98): reset that
+                # monitor to its built-in layout.
+                for key, fields in list(accepted.get("outputs", {}).items()):
+                    if fields.get("cards", 0) is None:
+                        del fields["cards"]
+                        userconf.remove_local(ROOT, ("outputs", key, "cards"))
+                    if not fields:
+                        del accepted["outputs"][key]
+                if accepted.get("outputs") == {}:
+                    del accepted["outputs"]
                 if accepted:
                     userconf.apply_patch(ROOT, accepted)
             except OSError as exc:
