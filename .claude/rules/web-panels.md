@@ -65,7 +65,9 @@ web/app.js          all rendering; pure function of last good state.
                     `outputs.<key>.cards: null` resets a monitor to its
                     LAYOUTS default (Cards > Reset to default, #98).
                     patchConfig records an inverse patch (20 deep, in-page,
-                    not location) for the root "Undo" row (#99)
+                    not location) for the root "Undo" row (#99). A profile may carry
+                    `when: day|night` (#102): scheduleProfiles() in apply() applies
+                    it once per sunrise/sunset change, first output only
 web/vendor/         Tailwind v4 browser build, vendored (no network at runtime)
 web/control/        standalone mobile control UI served by bin/dashd-control
                     (plain HTML/JS, deliberately not styled to DESIGN.md's
