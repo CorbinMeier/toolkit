@@ -2178,7 +2178,7 @@ function saveProfile() {
 
 function profileRow(name, profile) {
   const wrap = document.createElement('div');
-  wrap.className = 'ctx-hold';
+  wrap.className = 'ctx-hold ctx-menu-row';
   const btn = ctxButton(`${profileActive(profile) ? '✓ ' : ''}${name}`, () => {
     if (swallowClick) { swallowClick = false; return; }
     const missing = profileMissing(profile);
@@ -2186,7 +2186,6 @@ function profileRow(name, profile) {
       Object.entries(profile.outputs || {}).filter(([k]) => !missing.includes(k)));
     patchConfig({ outputs: outs });
   });
-  btn.style.width = '100%';
   const missingKeys = profileMissing(profile);
   if (missingKeys.length) {
     const note = document.createElement('span');
@@ -2195,6 +2194,11 @@ function profileRow(name, profile) {
     btn.title = `Not connected: ${missingKeys.join(', ')}`;
     btn.append(note);
   }
+  // #96: overwrite this profile with the current layout (same name, so no
+  // delete + recreate). Sits outside btn, so it never joins the hold-to-delete.
+  const upd = ctxButton('✎', () => patchConfig(
+    { profiles: { [name]: { outputs: snapshotOutputs() } } }), 'ctx-mini');
+  upd.title = 'Overwrite with current layout';
   let swallowClick = false;
   let showTimer = null;
   let deleteTimer = null;
@@ -2235,7 +2239,7 @@ function profileRow(name, profile) {
   for (const t of ['pointerup', 'pointerleave', 'pointercancel']) {
     btn.addEventListener(t, () => { downAt = null; cancel(); });
   }
-  wrap.appendChild(btn);
+  wrap.append(btn, upd);
   return wrap;
 }
 
