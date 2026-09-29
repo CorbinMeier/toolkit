@@ -486,6 +486,8 @@
   }
   /* Hold-to-delete (#94): the bar sits under the row and fills over the
      remaining hold time; releasing early removes it. */
+  .ctx-keys{display:grid;grid-template-columns:repeat(8,1fr);gap:0.15em}
+  .ctx-keys .ctx-mini{padding:0.4em 0.2em;text-align:center}
   .ctx-hold{position:relative}
   .ctx-hold-bar{position:absolute;left:0;right:0;bottom:0;height:0.25em;
     background:color-mix(in srgb, var(--color-crimson-panel) 25%, transparent)}

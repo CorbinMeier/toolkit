@@ -163,6 +163,23 @@ def _valid_outputs(outputs, allow_reset: bool = False) -> bool:
                     for k, v in outputs.items()))
 
 
+def rename_profile(profiles: dict, old, new) -> tuple[dict | None, str | None]:
+    """Validate a profile rename (#95). Returns (patch, None) -- one patch that
+    saves the snapshot under `new` and deletes `old` -- or (None, reason)."""
+    if not (isinstance(old, str) and isinstance(new, str)):
+        return None, "names must be strings"
+    new = new.strip()
+    if not _NAME_RE.match(new):
+        return None, "invalid name"
+    if old not in profiles:
+        return None, "no such profile"
+    if new == old:
+        return None, "name unchanged"
+    if new in profiles:
+        return None, "name already used"
+    return {"profiles": {new: profiles[old], old: None}}, None
+
+
 def filter_patch(patch: dict) -> tuple[dict, list[str]]:
     """Split `patch` into the part EDITABLE permits and the dotted keys it
     doesn't, so the caller can report a rejection instead of silently
@@ -982,6 +999,9 @@ class Handler(SimpleHTTPRequestHandler):
         if route == "/api/config":
             self._config_patch()
             return
+        if route == "/api/profile/rename":
+            self._profile_rename()
+            return
         if route == "/api/outputs":
             self._outputs_report()
             return
@@ -1025,6 +1045,31 @@ class Handler(SimpleHTTPRequestHandler):
             self._json({"ok": sysinfo.music_command(command)})
         except Exception as exc:  # noqa: BLE001 - never kill the server
             self._json({"error": repr(exc)}, 500)
+
+    def _profile_rename(self) -> None:
+        """Rename a saved profile in one validated step (#95): the wallpaper
+        has no keyboard, so the menu's letter picker posts {from, to}."""
+        try:
+            length = int(self.headers.get("Content-Length") or 0)
+            body = json.loads(self.rfile.read(length) or b"{}")
+            old, new = body["from"], body["to"]
+        except (ValueError, KeyError, TypeError, json.JSONDecodeError):
+            self._json({"error": "bad request body"}, 400)
+            return
+        with _lock:
+            patch, err = rename_profile(
+                userconf.load(ROOT).get("profiles", {}), old, new)
+            if err:
+                self._json({"error": err}, 409 if "used" in err else 400)
+                return
+            try:
+                added = {k: v for k, v in patch["profiles"].items() if v}
+                userconf.apply_patch(ROOT, {"profiles": added})
+                userconf.remove_local(ROOT, ("profiles", old))
+            except OSError as exc:
+                self._json({"error": repr(exc)}, 500)
+                return
+        self._json({"ok": True})
 
     def _config_patch(self) -> None:
         """Persist an EDITABLE-scoped config change (#66 -- the wallpaper's

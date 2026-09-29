@@ -1283,6 +1283,15 @@ class TestConfigPatch(unittest.TestCase):
         self.assertEqual(
             dashd.filter_patch({"profiles": {"p": {"when": "day"}}})[1], ["profiles"])
 
+    def test_rename_profile(self):
+        snap = {"outputs": {"a": {"cards": ["secLog"]}}}
+        profs = {"Old": snap, "Taken": snap}
+        patch, err = dashd.rename_profile(profs, "Old", " New ")
+        self.assertEqual((patch, err), ({"profiles": {"New": snap, "Old": None}}, None))
+        for old, new in (("Old", "Taken"), ("Old", "Old"), ("Nope", "X"),
+                         ("Old", "a/b"), ("Old", ""), ("Old", 5), (None, "X")):
+            self.assertIsNone(dashd.rename_profile(profs, old, new)[0], (old, new))
+
     def test_outputs_report_validation(self):
         row = {"key": "DELL U2913WM", "width": 2560, "height": 1080,
                "x": 1440, "y": 0, "scale": 1}

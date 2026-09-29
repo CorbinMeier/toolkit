@@ -68,6 +68,10 @@ web/app.js          all rendering; pure function of last good state.
                     not location) for the root "Undo" row (#99). A profile may carry
                     `when: day|night` (#102): scheduleProfiles() in apply() applies
                     it once per sunrise/sunset change, first output only
+                    Rename (#95): the row's pencil opens an on-screen letter
+                    picker (no keyboard on the wallpaper) posting to
+                    POST /api/profile/rename {from,to}; dashd-serve's
+                    rename_profile() refuses collisions and bad names
 web/vendor/         Tailwind v4 browser build, vendored (no network at runtime)
 web/control/        standalone mobile control UI served by bin/dashd-control
                     (plain HTML/JS, deliberately not styled to DESIGN.md's
