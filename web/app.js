@@ -2058,12 +2058,16 @@ function saveProfile() {
 
 function profileRow(name, profile) {
   const wrap = document.createElement('div');
-  wrap.className = 'ctx-hold';
+  wrap.className = 'ctx-hold ctx-menu-row';
   const btn = ctxButton(`${profileActive(profile) ? '✓ ' : ''}${name}`, () => {
     if (swallowClick) { swallowClick = false; return; }
     patchConfig({ outputs: profile.outputs });
   });
-  btn.style.width = '100%';
+  // #96: overwrite this profile with the current layout (same name, so no
+  // delete + recreate). Sits outside btn, so it never joins the hold-to-delete.
+  const upd = ctxButton('✎', () => patchConfig(
+    { profiles: { [name]: { outputs: snapshotOutputs() } } }), 'ctx-mini');
+  upd.title = 'Overwrite with current layout';
   let swallowClick = false;
   let showTimer = null;
   let deleteTimer = null;
@@ -2093,7 +2097,7 @@ function profileRow(name, profile) {
     }, HOLD_MS);
   });
   for (const t of ['pointerup', 'pointerleave', 'pointercancel']) btn.addEventListener(t, cancel);
-  wrap.appendChild(btn);
+  wrap.append(btn, upd);
   return wrap;
 }
 
