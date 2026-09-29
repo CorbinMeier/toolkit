@@ -300,7 +300,16 @@ const clockTime = (s) => {
   const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), sec = s % 60;
   return [h, m, sec].map((n) => String(n).padStart(2, '0')).join(':');
 };
-const hhmm = (iso) => (iso || '').slice(11, 16);
+// units.clock24 (#103) decides 24h "15:05" vs 12h "3:05 PM" everywhere a
+// time renders; unset counts as 24h, matching config.json's default.
+const clock24 = () => state?.config?.units?.clock24 !== false;
+const fmtHM = (h, m) => {
+  const mm = String(m).padStart(2, '0');
+  if (clock24()) return `${String(h).padStart(2, '0')}:${mm}`;
+  return `${h % 12 || 12}:${mm} ${h < 12 ? 'AM' : 'PM'}`;
+};
+// Input is Open-Meteo's local ISO string ("2026-09-28T15:05").
+const hhmm = (iso) => (iso ? fmtHM(Number(iso.slice(11, 13)), Number(iso.slice(14, 16))) : '');
 const POINTS = ['N', 'NNE', 'NE', 'ENE', 'E', 'ESE', 'SE', 'SSE',
   'S', 'SSW', 'SW', 'WSW', 'W', 'WNW', 'NW', 'NNW'];
 const compass = (deg) => POINTS[Math.round(deg / 22.5) % 16];
@@ -1016,12 +1025,11 @@ function renderProjects(p) {
 /* Local HH:MM from an epoch seconds value. The date is prefixed only when the
  * login did not happen today: a boot can span days (four-day uptimes are
  * normal on this machine), and a bare "20:37" on a row three days old reads as
- * this evening. Same 24-hour shape hhmm() produces for the weather times. */
+ * this evening. Same clock24-aware shape hhmm() produces for the weather times. */
 function sessClock(epoch) {
   if (!epoch) return '—';
   const d = new Date(epoch * 1000);
-  const hm = `${String(d.getHours()).padStart(2, '0')}:`
-    + `${String(d.getMinutes()).padStart(2, '0')}`;
+  const hm = fmtHM(d.getHours(), d.getMinutes());
   const today = new Date();
   const sameDay = d.getFullYear() === today.getFullYear()
     && d.getMonth() === today.getMonth() && d.getDate() === today.getDate();
@@ -1885,7 +1893,7 @@ const undoLast = () => patchConfig(undoStack.pop(), { undo: true });
 async function patchConfig(patch, { undo = false } = {}) {
   if (state) {
     if (!undo) recordUndo(patch);
-    for (const section of ['display', 'outputs', 'profiles']) {
+    for (const section of ['display', 'outputs', 'profiles', 'units']) {
       if (!patch[section]) continue;
       state.config[section] = state.config[section] || {};
       mergeInto(state.config[section], patch[section]);
@@ -2025,8 +2033,33 @@ function themeItems() {
   }));
 }
 
+// Settings > Units (#103): one submenu per unit, ✓ on the active choice.
+// Values are Open-Meteo's spellings (bin/dashd-serve UNIT_VALUES).
+function unitChoiceItems(key, choices) {
+  const current = state?.config?.units?.[key];
+  return choices.map(([value, label]) => ({
+    label: `${label}${value === current ? ' ✓' : ''}`,
+    action: () => patchConfig({ units: { [key]: value } }),
+  }));
+}
+const temperatureItems = () => unitChoiceItems('temperature',
+  [['fahrenheit', '°F'], ['celsius', '°C']]);
+const windItems = () => unitChoiceItems('wind',
+  [['mph', 'mph'], ['kmh', 'km/h'], ['ms', 'm/s'], ['kn', 'kn']]);
+const clockItems = () => unitChoiceItems('clock24',
+  [[false, '12-hour'], [true, '24-hour']]);
+
+function unitsItems() {
+  return [
+    { label: 'Temperature', children: temperatureItems },
+    { label: 'Wind', children: windItems },
+    { label: 'Clock', children: clockItems },
+  ];
+}
+
 function settingsItems() {
   return [
+    { label: 'Units', children: unitsItems },
     { label: 'Location', children: locationItems },
     { label: 'Tint', children: tintItems },
     { label: 'Theme', children: themeItems },

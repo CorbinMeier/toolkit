@@ -59,7 +59,7 @@ All of it lives in `config.json`.
 
 - `location` — pinned to Chico, CA. Change via
   `https://geocoding-api.open-meteo.com/v1/search?name=<city>`.
-- `units` — `fahrenheit`/`celsius`, `mph`/`kmh`, `clock24`.
+- `units` — `fahrenheit`/`celsius`, `mph`/`kmh`/`ms`/`kn`, `inch`/`mm`, `clock24` (12/24-hour, applies to every time shown). Also switchable live from the right-click menu, Settings > Units. `weather_alerts.temp_high_f` stays in fahrenheit; it is converted when units are celsius.
 - `display.transparent` — `true` lets your `cosmic-bg` photo wallpaper show
   through behind the panels, which keep their blur. `false` (default) gives
   the page its own gradient background.

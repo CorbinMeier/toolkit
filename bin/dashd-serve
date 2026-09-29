@@ -132,9 +132,21 @@ EDITABLE = {
     "display": {"theme", "tint_strength", "tint_opacity", "transparent",
                 "safe_area_top", "safe_area_bottom"},
     "location": {"name", "latitude", "longitude", "timezone"},
+    # "units" (#103): each key is checked against UNIT_VALUES below.
+    "units": {"temperature", "wind", "precipitation", "clock24"},
 }
 
 SAFE_AREA_MAX = 160  # px; matches the Settings > Safe area sliders (#105)
+# Per-key value whitelist for EDITABLE["units"] (#103) -- Open-Meteo's own
+# accepted spellings, since these go straight into the forecast query.
+UNIT_VALUES = {
+    "temperature": ("fahrenheit", "celsius"),
+    "wind": ("mph", "kmh", "ms", "kn"),
+    "precipitation": ("inch", "mm"),
+}
+# Changing any of these changes the numbers Open-Meteo returns, so the
+# cached observations are in the wrong unit until refetched.
+FETCHED_UNIT_KEYS = ("temperature", "wind", "precipitation")
 
 # Panel ids the "Cards" menu (#94) can place, in web/index.html. A whitelist
 # for the same reason EDITABLE is one: the ids end up as getElementById keys.
@@ -232,6 +244,11 @@ def filter_patch(patch: dict) -> tuple[dict, list[str]]:
             if key in ("safe_area_top", "safe_area_bottom") and not (
                     isinstance(value, (int, float)) and not isinstance(value, bool)
                     and 0 <= value <= SAFE_AREA_MAX):
+                rejected.append(f"{section}.{key}")
+                continue
+            if section == "units" and (
+                    (key == "clock24" and not isinstance(value, bool))
+                    or (key in UNIT_VALUES and value not in UNIT_VALUES[key])):
                 rejected.append(f"{section}.{key}")
                 continue
             if key == "transparent" and not isinstance(value, bool):
@@ -404,6 +421,12 @@ def weather_alert(w: dict, cfg: dict) -> dict:
     """
     alerts_cfg = cfg.get("weather_alerts", {})
     temp_high = alerts_cfg.get("temp_high_f")
+    # The threshold is written in fahrenheit but weather.temp is in
+    # units.temperature (#103): convert so a celsius config still alerts at
+    # the same real temperature.
+    if (temp_high is not None
+            and cfg.get("units", {}).get("temperature") == "celsius"):
+        temp_high = (temp_high - 32) * 5 / 9
     rain_pct = alerts_cfg.get("rain_pct")
     temp, high, precip = w.get("temp"), w.get("high"), w.get("precip_prob")
     desc = w.get("desc", "")
@@ -1114,7 +1137,10 @@ class Handler(SimpleHTTPRequestHandler):
             except OSError as exc:
                 self._json({"error": repr(exc)}, 500)
                 return
-        if "location" in accepted:
+        if "location" in accepted or any(
+                k in FETCHED_UNIT_KEYS for k in accepted.get("units", {})):
+            # (#103: unit changes need the same refetch, or the header shows
+            # old-unit numbers under the new unit label.)
             # #77 acceptance criterion: a location change must not wait out
             # weather_seconds' TTL, or the header names the new city over
             # the old city's cached observations. Deleting the cache file
