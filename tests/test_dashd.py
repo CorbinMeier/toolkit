@@ -1233,6 +1233,17 @@ class TestConfigPatch(unittest.TestCase):
         accepted, rejected = dashd.filter_patch({"profiles": {"p": {"outputs": 1}}})
         self.assertEqual(rejected, ["profiles"])
 
+    def test_profiles_when_schedule(self):
+        out = {"a": {"cards": ["secLog"]}}
+        for when in ("day", "night", None):
+            ok = {"profiles": {"p": {"outputs": out, "when": when}}}
+            self.assertEqual(dashd.filter_patch(ok), (ok, []), when)
+        for when in ("noon", 1, ""):
+            bad = {"profiles": {"p": {"outputs": out, "when": when}}}
+            self.assertEqual(dashd.filter_patch(bad)[1], ["profiles"], when)
+        self.assertEqual(
+            dashd.filter_patch({"profiles": {"p": {"when": "day"}}})[1], ["profiles"])
+
     def test_outputs_report_validation(self):
         row = {"key": "DELL U2913WM", "width": 2560, "height": 1080,
                "x": 1440, "y": 0, "scale": 1}

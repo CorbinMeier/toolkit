@@ -1668,6 +1668,7 @@ function apply(s) {
   root.setProperty('--tint-bottom', tint.bottom);
 
   pushRing(s.sys);
+  scheduleProfiles(s);
   renderWeather(s.weather, s.config.location);
   renderAirQuality(s.air_quality);
   renderNwsAlerts(s.nws_alerts);
@@ -2042,6 +2043,44 @@ function snapshotOutputs() {
   return snap;
 }
 
+/* #102: a profile may carry when: 'day' | 'night'. Day is sunrise..sunset
+ * from state.weather.sun (the same anchors as the tint; tintNow() honours
+ * ?forcetime). The profile is applied once per period change, by the first
+ * detected output only so N monitors post once; the last-applied period is
+ * kept in localStorage so a reload or manual edit is not fought. */
+const PERIOD_KEY = 'dashd.profilePeriod';
+function currentPeriod(sun) {
+  const { sunrise, sunset } = tintAnchors(sun);
+  const m = minutesOf(tintNow());
+  return m >= sunrise && m < sunset ? 'day' : 'night';
+}
+
+function scheduleProfiles(s) {
+  const detected = s.outputs_detected || [];
+  if (detected.length && detected[0].key !== OUTPUT) return;
+  const period = currentPeriod(s.weather && s.weather.sun);
+  let last = null;
+  try { last = localStorage.getItem(PERIOD_KEY); } catch { /* no storage */ }
+  if (last === period) return;
+  try { localStorage.setItem(PERIOD_KEY, period); } catch { /* no storage */ }
+  if (last === null) return; // first run: record the period, don't override the layout
+  const profiles = s.config.profiles || {};
+  const name = Object.keys(profiles).sort().find((n) => profiles[n].when === period);
+  if (name) patchConfig({ outputs: profiles[name].outputs });
+}
+
+function profileWhenButton(name, profile) {
+  const order = [null, 'day', 'night'];
+  const cur = profile.when || null;
+  const glyph = { day: '☀', night: '☾' };
+  const btn = ctxButton(glyph[cur] || '○', () => {
+    const next = order[(order.indexOf(cur) + 1) % order.length];
+    patchConfig({ profiles: { [name]: { outputs: profile.outputs, when: next } } });
+  }, 'ctx-when');
+  btn.title = `When: ${cur || 'none'} (click to change)`;
+  return btn;
+}
+
 function profileActive(profile) {
   const snap = snapshotOutputs();
   const keys = Object.keys(profile.outputs || {});
@@ -2064,6 +2103,8 @@ function profileRow(name, profile) {
     patchConfig({ outputs: profile.outputs });
   });
   btn.style.width = '100%';
+  const rowEl = document.createElement('div');
+  rowEl.style.display = 'flex';
   let swallowClick = false;
   let showTimer = null;
   let deleteTimer = null;
@@ -2093,7 +2134,10 @@ function profileRow(name, profile) {
     }, HOLD_MS);
   });
   for (const t of ['pointerup', 'pointerleave', 'pointercancel']) btn.addEventListener(t, cancel);
-  wrap.appendChild(btn);
+  btn.style.flex = '1';
+  rowEl.appendChild(btn);
+  rowEl.appendChild(profileWhenButton(name, profile));
+  wrap.appendChild(rowEl);
   return wrap;
 }
 

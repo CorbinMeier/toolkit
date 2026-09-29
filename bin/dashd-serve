@@ -174,10 +174,13 @@ def filter_patch(patch: dict) -> tuple[dict, list[str]]:
                 rejected.append("outputs")
             continue
         if section == "profiles":
-            # {name: {"outputs": {...}}} to save, {name: None} to delete.
+            # {name: {"outputs": {...}, "when"?: "day"|"night"|null}} (#102) to save,
+            # {name: None} to delete.
             ok = isinstance(fields, dict) and all(
                 _NAME_RE.match(k) and (v is None or (
-                    isinstance(v, dict) and set(v) == {"outputs"}
+                    isinstance(v, dict) and "outputs" in v
+                    and set(v) <= {"outputs", "when"}
+                    and v.get("when") in (None, "day", "night")
                     and _valid_outputs(v["outputs"])))
                 for k, v in fields.items())
             if ok:

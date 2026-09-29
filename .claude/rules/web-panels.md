@@ -55,7 +55,9 @@ web/app.js          all rendering; pure function of last good state.
                     columns. The context menu (Profiles/Cards/Settings) is
                     patchConfig()-driven: optimistic local merge, then POST
                     /api/config. Profiles live in data/config.local.json
-                    under `profiles`; a null value deletes one
+                    under `profiles`; a null value deletes one. A profile may carry
+                    `when: day|night` (#102): scheduleProfiles() in apply() applies
+                    it once per sunrise/sunset change, first output only
 web/vendor/         Tailwind v4 browser build, vendored (no network at runtime)
 web/control/        standalone mobile control UI served by bin/dashd-control
                     (plain HTML/JS, deliberately not styled to DESIGN.md's
