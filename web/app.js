@@ -2042,9 +2042,16 @@ function snapshotOutputs() {
   return snap;
 }
 
+function profileMissing(profile) {
+  const detected = (state?.outputs_detected || []).map((r) => r.key);
+  if (!detected.length) return [];
+  return Object.keys(profile.outputs || {}).filter((k) => !detected.includes(k));
+}
+
 function profileActive(profile) {
   const snap = snapshotOutputs();
-  const keys = Object.keys(profile.outputs || {});
+  const missing = profileMissing(profile);
+  const keys = Object.keys(profile.outputs || {}).filter((k) => !missing.includes(k));
   return keys.length > 0 && keys.every(
     (k) => snap[k] && snap[k].cards.join() === profile.outputs[k].cards.join());
 }
@@ -2061,9 +2068,20 @@ function profileRow(name, profile) {
   wrap.className = 'ctx-hold';
   const btn = ctxButton(`${profileActive(profile) ? '✓ ' : ''}${name}`, () => {
     if (swallowClick) { swallowClick = false; return; }
-    patchConfig({ outputs: profile.outputs });
+    const missing = profileMissing(profile);
+    const outs = Object.fromEntries(
+      Object.entries(profile.outputs || {}).filter(([k]) => !missing.includes(k)));
+    patchConfig({ outputs: outs });
   });
   btn.style.width = '100%';
+  const missingKeys = profileMissing(profile);
+  if (missingKeys.length) {
+    const note = document.createElement('span');
+    note.className = 'ctx-missing';
+    note.textContent = ` (${missingKeys.length} missing)`;
+    btn.title = `Not connected: ${missingKeys.join(', ')}`;
+    btn.append(note);
+  }
   let swallowClick = false;
   let showTimer = null;
   let deleteTimer = null;
