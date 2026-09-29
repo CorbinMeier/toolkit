@@ -84,3 +84,10 @@ render loop.
 - `pkill -f dashd-serve` **kills the shell running it**, because the pattern
   matches that shell's own command line. Resolve PIDs with `pgrep` and skip
   `$$`, or use `systemctl --user stop`.
+- Touch menu (#107, unverified on hardware): `view.connect("context-menu", ... True)`
+  swallows the native menu, and whether WebKitGTK still delivers a DOM `contextmenu`
+  on a touch long-press is unknown. `web/app.js` therefore has a pointer-events
+  long-press fallback (touch, 500ms, 10px slop, deduped 1s against `contextmenu`).
+  `@media (pointer: coarse)` gives menu rows a 44px minimum; `.ctx-menu` is
+  `touch-action:none` (sliders `pan-x`) so scroll gestures can't cancel or trigger
+  hold-to-delete. If the menu doesn't open on touch, check `pointer: coarse` matches.
