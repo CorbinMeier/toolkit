@@ -29,9 +29,9 @@ Serves web/ as static files and a merged /api/state document:
     locations selectable {name, latitude, longitude, timezone} entries from
               data/locations.json, read the same source-agnostic way as
               extra.json/tasks.json (#77) -- missing file just means the
-              configured location is the only choice. Populated by GET
-              /api/geocode (a helper script or the control surface writes
-              the file; the wallpaper itself only reads it), consumed by
+              configured location is the only choice. Written by POST
+              /api/locations (the menu's Location > Search picks, #104;
+              looked up via GET /api/geocode), consumed by
               the context menu's Location submenu
 
 This process only ever *reads* data/metrics.db (the /api/history route,
@@ -377,6 +377,9 @@ def fetch_weather(cfg: dict) -> dict:
 # match; only the length cap and character set are the boundary.
 GEOCODE_QUERY_RE = re.compile(r"^[\w][\w .,'-]{0,79}$")
 GEOCODE_MAX_COUNT = 10
+# A saved location's display name (#104): "City, Region, Country" as built
+# by the picker -- same character set as a query, but longer.
+GEOCODE_NAME_RE = re.compile(r"^[\w][\w .,'-]{0,119}$")
 
 
 def geocode(query: str, count: int = 8) -> list[dict]:
@@ -820,6 +823,48 @@ def load_locations() -> list[dict]:
     ]
 
 
+LOCATION_TZ_RE = re.compile(r"^[A-Za-z0-9_+\-]+(/[A-Za-z0-9_+\-]+){0,2}$")
+LOCATIONS_MAX = 50
+
+
+def clean_location_entry(body) -> dict | None:
+    """Validate a POST /api/locations body (#104); None when malformed.
+    Whitelist shape, same posture as clean_outputs_report: a display name,
+    in-range finite coordinates (bools are not numbers) and an IANA-style
+    timezone, nothing else is kept."""
+    if not isinstance(body, dict):
+        return None
+    name, tz = body.get("name"), body.get("timezone")
+    lat, lon = body.get("latitude"), body.get("longitude")
+    if not isinstance(name, str) or not GEOCODE_NAME_RE.match(name):
+        return None
+    if not isinstance(tz, str) or not LOCATION_TZ_RE.match(tz) or len(tz) > 64:
+        return None
+    for v, lim in ((lat, 90), (lon, 180)):
+        if isinstance(v, bool) or not isinstance(v, (int, float)):
+            return None
+        if not math.isfinite(v) or abs(v) > lim:
+            return None
+    return {"name": name.strip(), "latitude": lat, "longitude": lon,
+            "timezone": tz}
+
+
+def save_location(entry: dict) -> list[dict]:
+    """Append `entry` to data/locations.json atomically (tmp + replace),
+    replacing any saved entry of the same name; capped at LOCATIONS_MAX
+    (oldest dropped). Returns the saved list. Caller holds no lock; this
+    takes `_lock` so two picks can't interleave read-modify-write."""
+    with _lock:
+        rows = [r for r in load_locations() if r["name"] != entry["name"]]
+        rows.append(entry)
+        rows = rows[-LOCATIONS_MAX:]
+        path = DATA / "locations.json"
+        tmp = path.with_suffix(".json.tmp")
+        tmp.write_text(json.dumps(rows, indent=2) + "\n")
+        tmp.replace(path)
+    return rows
+
+
 def load_outputs_detected() -> list[dict]:
     """The monitors dashd-host last reported (#93), or [] before it has."""
     path = DATA / "outputs_detected.json"
@@ -1028,7 +1073,28 @@ class Handler(SimpleHTTPRequestHandler):
         if route == "/api/outputs":
             self._outputs_report()
             return
+        if route == "/api/locations":
+            self._location_save()
+            return
         self._json({"error": "not found"}, 404)
+
+    def _location_save(self) -> None:
+        """Remember a geocoded pick in data/locations.json (#104) so it
+        shows in the Location submenu next time."""
+        try:
+            length = int(self.headers.get("Content-Length") or 0)
+            entry = clean_location_entry(json.loads(self.rfile.read(length) or b"{}"))
+        except (ValueError, json.JSONDecodeError):
+            entry = None
+        if entry is None:
+            self._json({"error": "bad request body"}, 400)
+            return
+        try:
+            save_location(entry)
+        except OSError as exc:
+            self._json({"error": repr(exc)}, 500)
+            return
+        self._json({"ok": True})
 
     def _outputs_report(self) -> None:
         """dashd-host reports the connected monitors here on every sync (#93).
