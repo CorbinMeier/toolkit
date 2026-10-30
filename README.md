@@ -37,8 +37,15 @@ Everything here is published, and git history is permanent. A secret pushed once
 - **Before every push**, scan what you are about to publish, for example `git diff --cached` plus `git grep -n -i -E 'key|token|secret|password'`.
 - **If a secret does get committed:** revoke or rotate it first, then remove it from history. Deleting the file in a later commit does not help.
 
+## Licence: MIT
+This repo is released under the [MIT licence](LICENSE), © 2026 Corbin Meier.
+- **You may** use, copy, modify, merge, publish, distribute, sublicense and sell it, including in commercial work.
+- **You must** keep the copyright notice and the licence text in every copy or substantial portion. That notice is the credit.
+- **No warranty.** It is provided "as is"; the author is not liable for damage. Several tools replace or shadow system services, so read each tool's **Outside this repo** section first.
+- **It covers only this repo's own code.** The upstream projects in [`PREREQUISITES.md`](PREREQUISITES.md) keep their own licences (VoiceStudio is AGPL-3.0, for example), and `archive/desktop-dashboard` includes a vendored Tailwind build under its own MIT licence. Model weights have their own terms.
+- Source files carry `SPDX-License-Identifier: MIT` headers.
+
 ## Honest caveats
 - **Built for one machine.** Paths, the COSMIC 1.11.0 libcosmic pin, the 150% display scale and the `input` group are all this laptop. Expect to adjust.
 - **`CLAUDE.md` files are agent instructions**, not user docs. They describe how I work with Claude Code on each project.
 - **Large downloads are not here.** `apt/local-ai/bootstrap.sh` fetches binaries and models; Parakeet's models have no recorded source yet.
-- **Licence: MIT** (see `LICENSE`). Copy it freely; keep the copyright notice, which is the credit.
