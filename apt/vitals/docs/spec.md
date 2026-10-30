@@ -598,7 +598,7 @@ meaning for a one-shot). A failed section is `{"error": "…"}` instead of its o
 | `app.rs` | `App`: config, sampled data, graph rings, UI state, the one place an `Action` changes anything, `tick` |
 | `frame.rs` | a rendered buffer as plain text or ANSI (for `--once` and the tests) |
 | `sample/{cpu,mem,disk,net,hwmon}.rs` | kept-open readers, byte parsers, Δ computation; each takes a `Root { proc, sys }` so tests point it at fixtures |
-| `claude/server.rs` | usage-server `/api/usage` client (own thread, 500 ms timeouts, at most once a minute); feed reading, pace math and reset/stale words come from the `claude-usage-core` path crate (`../claude-usage-core`), shared with the applet |
+| `claude/server.rs` | usage-server `/api/usage` client (own thread, 500 ms timeouts, at most once a minute); feed reading, pace math and reset/stale words come from the `claude-usage-core` path crate (`../../libs/claude-usage-core`), shared with the applet |
 | `claude/mod.rs` | `merge` (newest source wins, models from the usage server), `ClaudeView` (prepared strings, pace figures and the readout `rows`, refreshed on data or each minute), `ClaudeSource` (feed mtime every 5 s, usage-server channel) |
 | `tokens/{scan,index,store}.rs` | transcript line filter and parser, dedupe and buckets, the on-disk index; runs on the indexer thread |
 | `tokens/{mod,indexer,view}.rs` | shared types and messages; the indexer thread (`Indexer::spawn`, `Engine`); the UI-side `TokenView` that applies messages and answers window queries |
@@ -677,7 +677,7 @@ Usage-server reading on 2026-10-28, used as a fixture:
 
 1. **Name:** `vitals`.
 2. **Shared code:** `pace.rs`, the feed reader and writer, and the reset and stale words move from the
-   applet into the path crate `../claude-usage-core`. The applet
+   applet into the path crate `../../libs/claude-usage-core`. The applet
    and vitals both depend on it by path.
 3. **Disk:** measures both fullness (space used per mount) and busyness (I/O busy %). Both are shown; there
    is no setting to choose between them.

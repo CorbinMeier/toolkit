@@ -15,7 +15,7 @@ path = "src/main.rs"
 
 [dependencies]
 chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
-claude-usage-core = { version = "0.1.0", path = "../claude-usage-core" }
+claude-usage-core = { version = "0.1.0", path = "../../libs/claude-usage-core" }
 libc = "0.2"
 memchr = "2"
 ratatui = { version = "0.30.2", default-features = false, features = ["crossterm"] }

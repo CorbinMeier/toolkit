@@ -2,7 +2,7 @@
 btop-style terminal dashboard: CPU, memory, disk, network timelines, Claude Code token usage over time,
 and the Claude usage row. Binary `vitals`, Rust + ratatui + crossterm, Linux only.
 Full spec: `docs/spec.md` (binding; change it in the same commit as any behavior change).
-Siblings: `../claude-usage-core` (shared Claude usage crate), `../cosmic-applet-claude-usage` (writes the feed).
+Siblings: `../../libs/claude-usage-core` (shared Claude usage crate), `../../cosmic/applet-claude-usage` (writes the feed).
 
 ## Build / verify
 `scripts/check.sh` (fmt, clippy -D warnings, tests, release build, size check; last line `CHECK PASS`).
@@ -19,7 +19,7 @@ UI snapshots: `INSTA_UPDATE=always cargo test --test ui` accepts new ones (tests
 - Out of scope: process list, GPU, battery, remote hosts, persisted system history, non-Linux.
 
 ## Decisions
-- 2026-10-28 (Corbin): name `vitals`; Claude code shared via path crate `../claude-usage-core`; disk shows
+- 2026-10-28 (Corbin): name `vitals`; Claude code shared via path crate `../../libs/claude-usage-core`; disk shows
   both fullness (space per mount) and busy %; no GPU; default theme `default` (btop style);
   Claude row and Tokens panel use Claude orange `#D97757`; token usage over time is panel 6.
 - System numbers use conventional /proc definitions.

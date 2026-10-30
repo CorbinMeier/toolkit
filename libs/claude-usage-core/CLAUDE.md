@@ -1,6 +1,6 @@
 # claude-usage-core
 Rust lib shared by the COSMIC claude-usage applet and `vitals`: Claude plan-usage reading types, pace math, status-line feed, words.
-Dependents (path `../claude-usage-core`): `../cosmic-applet-claude-usage` (with `usage-text`) and `../vitals` (without).
+Dependents (path `../../libs/claude-usage-core`): `../../cosmic/applet-claude-usage` (with `usage-text`) and `../../apt/vitals` (without).
 
 ## Build / verify
 `scripts/check.sh` (fmt, clippy -D warnings and tests with and without `usage-text`, release build; last line `CHECK PASS`). @scripts/README.md

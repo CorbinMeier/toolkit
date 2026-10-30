@@ -7,6 +7,6 @@ Rust library shared by `cosmic-applet-claude-usage` and `vitals`: Claude plan-us
 
 ## Outside this repo
 - **Installs nothing.** No binary, no desktop entry, no config. It exists only to be depended on.
-- **Consumers find it by relative path** (`path = "../claude-usage-core"`): `cosmic-applet-claude-usage` (with `usage-text`) and `vitals` (without). Keep all three as siblings or those builds break.
+- **Consumers find it by relative path** (`path = "../../libs/claude-usage-core"`): `cosmic-applet-claude-usage` (with `usage-text`) and `vitals` (without). Keep all three as siblings or those builds break.
 - `usage-text` is off by default because it pulls `regex` and `chrono-tz`; `vitals` never needs them.
 - Part of the `cosmic/` folder (`../README.md`), though nothing in it is COSMIC-specific.

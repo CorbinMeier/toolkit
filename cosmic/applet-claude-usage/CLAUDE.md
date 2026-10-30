@@ -1,7 +1,7 @@
 # cosmic-applet-claude-usage
 COSMIC panel applet showing Claude plan usage as two vertical bars with a pace marker.
 App ID `net.corbinmeier.CosmicAppletClaudeUsage`, binary `cosmic-applet-claude-usage`.
-Sibling projects: `../cosmic-applet-timer` (skeleton this copies), `../cosmic-notification-center`.
+Sibling projects: `../applet-timer` (skeleton this copies), `../notification-center`.
 
 ## Build / verify
 `scripts/check.sh` (fmt, clippy -D warnings, tests, release build; last line `CHECK PASS`).
@@ -42,7 +42,7 @@ Sibling projects: `../cosmic-applet-timer` (skeleton this copies), `../cosmic-no
   every 15 min, never two runs at once; newest reading wins. A failed run, or `result` text matching
   `/rate.?limited/i`, keeps the last good reading and marks it stale.
 - libcosmic pinned by `rev` `430f3d48a97d8779f9c1985473912e594ccca1ae` (cosmic-applets 328d142, COSMIC
-  1.11.0). Re-pin on COSMIC upgrades per `../cosmic-applet-timer/CLAUDE.md`.
+  1.11.0). Re-pin on COSMIC upgrades per `../applet-timer/CLAUDE.md`.
 - Never edit the user's panel config; the applet is added by hand in Settings > Desktop > Panel > Applets.
 - Tests and dev runs never open windows on the live desktop: run with `env -u WAYLAND_DISPLAY -u DISPLAY`.
 
@@ -52,7 +52,7 @@ Sibling projects: `../cosmic-applet-timer` (skeleton this copies), `../cosmic-no
 - Daily bar is destructive when the week percent is >= `HOT_PERCENT` (95), not the daily number: the week is the real lockout and no week bar remains; passing a day's share is routine.
 - Hover text uses `applet.applet_tooltip` (libcosmic wayland tooltip, same call as cosmic-applets
   panel-button/app-list at 328d142), `src/app.rs` `view`. It takes a `'static` string, so the text is rebuilt each view.
-- Shared code lives in `../claude-usage-core` (path dependency, feature `usage-text`; also used by `../vitals`): `reading` (`Limit`, `Reading`, `HOT_PERCENT`), `pace` (ported from `pace.ts`, plus `day_part`/`daily_percent` day-part math), `feed` (`--statusline` writer, feed file reader), `words` (stale line), `readout` (hover text: `text`/`lines`), `parse` (ported from `parse.ts`). Edit those there, not here; their tests live there.
+- Shared code lives in `../../libs/claude-usage-core` (path dependency, feature `usage-text`; also used by `../../apt/vitals`): `reading` (`Limit`, `Reading`, `HOT_PERCENT`), `pace` (ported from `pace.ts`, plus `day_part`/`daily_percent` day-part math), `feed` (`--statusline` writer, feed file reader), `words` (stale line), `readout` (hover text: `text`/`lines`), `parse` (ported from `parse.ts`). Edit those there, not here; their tests live there.
 - Module map (this crate): `poller.rs` (run
   `claude`, `Status` keeps last good reading, `Schedule` = no overlap, 15 min), `bars.rs` (canvas, bottom-anchored fill, horizontal marker line; right bar = daily), `app.rs` (60 s tick: read feed, else maybe `/usage`).
   Bar height = panel icon size, width icon/3, gap icon/6 (`BAR_WIDTH_DIV`, `BAR_GAP_DIV`).
