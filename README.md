@@ -30,6 +30,13 @@ Each tool's README has an **Outside this repo** section. Read it before installi
 
 Upstream projects (llama.cpp, OpenCode, libcosmic and others) are **prerequisites you get from their own repos**, not copies: see [`PREREQUISITES.md`](PREREQUISITES.md).
 
+## This repo is public: never commit secrets
+Everything here is published, and git history is permanent. A secret pushed once must be treated as leaked, even if deleted in the next commit.
+- **Never commit:** API keys, tokens, passwords, bearer-token files, TLS keys (`*.key`, `ca.key`), `.env*` files, and personal config such as `~/.config/*` copies. Tools in this repo read secrets from files in your home folder (for example the notification center's `actions.token`, or `vitals`' web `key`); those files stay out of the repo.
+- **Config files in the repo are examples** with placeholders only (`*.example`, `examples/`). Put real values in `~/.config` or an untracked file.
+- **Before every push**, scan what you are about to publish, for example `git diff --cached` plus `git grep -n -i -E 'key|token|secret|password'`.
+- **If a secret does get committed:** revoke or rotate it first, then remove it from history. Deleting the file in a later commit does not help.
+
 ## Honest caveats
 - **Built for one machine.** Paths, the COSMIC 1.11.0 libcosmic pin, the 150% display scale and the `input` group are all this laptop. Expect to adjust.
 - **`CLAUDE.md` files are agent instructions**, not user docs. They describe how I work with Claude Code on each project.
