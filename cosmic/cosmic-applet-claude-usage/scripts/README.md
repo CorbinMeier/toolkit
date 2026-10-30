@@ -1,0 +1,3 @@
+- `check.sh`: fmt check, clippy (-D warnings), tests, release build; ends with `CHECK PASS`.
+- `install.sh`: release build, install binary to `~/.local/bin` and the desktop file to `~/.local/share/applications`.
+- `uninstall.sh`: remove both installed files.

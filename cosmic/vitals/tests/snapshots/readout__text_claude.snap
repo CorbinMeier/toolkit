@@ -1,0 +1,10 @@
+---
+source: tests/readout.rs
+expression: "text::render(&d)"
+---
+Claude
+session         3.0%  resets 9:59 AM (in 4h 0m)  20% of the window gone
+week           99.0%  resets Sat 5:59 AM (in 2d 0h)  71% of the window gone
+day            93.0%  day 6 of 7
+Week (Fable)    0.0%  resets Sat 5:59 AM
+session resets 9:59 AM · week resets Sat 5:59 AM · feed, 2m ago

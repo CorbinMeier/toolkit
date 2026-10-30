@@ -1,0 +1,16 @@
+[package]
+name = "cosmic-applet-timer"
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+description = "Single countdown timer applet for the COSMIC panel"
+
+[dependencies]
+notify-rust = { version = "4", default-features = false, features = ["z"] }
+
+# Pinned to the libcosmic rev in cosmic-applets 328d142 (COSMIC 1.11.0) Cargo.lock.
+[dependencies.libcosmic]
+git = "https://github.com/pop-os/libcosmic.git"
+rev = "430f3d48a97d8779f9c1985473912e594ccca1ae"
+default-features = false
+features = ["applet", "applet-token", "multi-window", "tokio", "wayland", "winit"]

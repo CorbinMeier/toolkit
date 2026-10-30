@@ -1,0 +1,56 @@
+# notifyd config. [sound], [shade] and the [toasts] timeouts apply on save. The [toasts] anchor,
+# margin, [history] and [windows] need a restart:
+#   @REPO@/bin/notifyd --restart
+
+[toasts]
+# one of: top-left top-right bottom-left bottom-right top-center bottom-center
+anchor = "top-right"
+# pixels between the toast stack and the screen edge
+margin = 12
+# Default toast lifetime per urgency: milliseconds (> 0) or "never". Applies to notifications
+# that arrive after you save. A rule's `timeout` overrides these.
+# timeout_low = 5000
+# timeout_normal = 10000
+# timeout_critical = "never"
+# true: an app's own timeout (> 0) wins over the defaults above. 0 always means never.
+# respect_app_timeout = true
+# The toast stack holds while the pointer is over it; after the pointer leaves, toasts that
+# ran out wait this many ms before closing.
+# hover_leave_grace_ms = 1000
+# Safety net: if the pointer has been "over" the toasts this long with no movement and no leave
+# was reported, release the hold. 0 turns it off.
+# hover_max_hold_ms = 120000
+
+[shade]
+# The dashboard shade the panel bell opens. All four apply on save.
+# one of: top-left top-right bottom-left bottom-right top-center bottom-center
+# anchor = "top-right"
+# pixels between the shade and the screen edge
+# margin = 8
+# shade width in pixels (240-1000)
+# width = 420
+# opening the shade closes every toast on screen (sticky ones too); they stay in the shade
+# clear_toasts_on_open = true
+
+[history]
+# Delete history older than this many days (checked at startup, then daily).
+# Leave commented out to keep history forever.
+# retention_days = 90
+
+[sound]
+# Default sound for notifications that have none: a file path (mp3/wav/ogg/flac) or a sound
+# theme name. Leave commented out for the system default (message-new-instant).
+# default = "~/Music/sounds/default.mp3"
+# Master volume, 0-100, applied on top of any per-rule volume.
+master_volume = 100
+
+[windows]
+# Prewarm: a few seconds after startup the center and the shade are built hidden (two idle web
+# processes) so the first open is quick. Nothing is shown. Needs a restart.
+# prewarm = true
+
+[images]
+# Image previews: a thumbnail and "Copy image" / "Copy path" buttons on toasts, the shade and the
+# center when a notification carries an image: an image-path hint, or a body that is just the
+# path of an image file (screenshot tools). Applies on save.
+# preview = true

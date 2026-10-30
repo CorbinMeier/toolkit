@@ -1,0 +1,8 @@
+---
+source: tests/readout.rs
+expression: "text::render(&d)"
+---
+CPU
+all     0.0%
+cpu0    0.0%
+load 0.00 0.00 0.00 · 1 threads

@@ -1,0 +1,10 @@
+---
+source: tests/readout.rs
+expression: "text::render(&d)"
+---
+Memory
+used         12.6G   41.3%
+cache         7.5G   24.7%
+available    17.9G   58.7%
+swap            0B    0.0%
+12.6G / 30.5G · cache 7.5G · available 17.9G · swap 0B / 8.0G

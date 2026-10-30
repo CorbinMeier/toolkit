@@ -1,0 +1,24 @@
+---
+source: tests/ui.rs
+expression: "screen_text(&mut r.app, 44, 20)"
+---
+[1][2][3][4][5]  [▤ bars] [⣿ graphs] [⚙] [?]
+┌─vitals help──────────────────────────────┐
+│  CPU   Memory   Disk   Network   Tokens  │
+│  Claude   Controls                       │
+│                                          │
+│   is used. The bar fills from the left;  │
+│   the bar line marks how much of the     │
+│   window has passed (the pace). The      │
+│   numbers are used / expected, then the  │
+│   reset time with the time left.         │
+│   source  the applet's feed file, else   │
+│           the usage server at            │
+│           127.0.0.1:4317; never claude   │
+│           itself                         │
+│   unit    percent of the limit           │
+│   scale   full means the limit is used   │
+│           up; orange turns red when used │
+│ ←→ tab · ↑↓ PgUp PgDn scroll · Esc c9/55 │
+└──────────────────────────────────────────┘
+Claude ▕██▊░░░░░░░░░░░░░░░░░░░░░░▏ 11% / 88%

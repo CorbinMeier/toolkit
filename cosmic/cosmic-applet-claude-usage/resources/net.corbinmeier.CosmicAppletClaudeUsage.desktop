@@ -1,0 +1,14 @@
+[Desktop Entry]
+Name=Claude Usage
+Comment=Claude plan usage as two stacked bars
+Type=Application
+Exec=@BIN@
+Terminal=false
+Categories=COSMIC;
+Keywords=COSMIC;Applet;Claude;Usage;
+Icon=utilities-system-monitor-symbolic
+NoDisplay=true
+X-CosmicApplet=true
+X-CosmicShrinkable=true
+X-HostWaylandDisplay=true
+X-CosmicHoverPopup=Auto

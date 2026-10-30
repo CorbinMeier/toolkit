@@ -1,0 +1,297 @@
+/* Toast hooks (stable; theme.css / style.css may target them):
+     .toast[data-app][data-urgency][data-category] + .tag-<name> + rule classes
+       .toast-icon .toast-content .toast-app .toast-summary .toast-body .toast-close
+       .toast-actions > .toast-action        the app's own actions
+       .toast-buttons > .toast-button        rule buttons (the rule's label, as written);
+                                             [data-kind="run"|"builtin"] [data-builtin="snooze"|...]
+                                             [data-minutes] (snooze only). The row is absent when
+                                             the rule has none or the daemon has nothing wired.
+   Reply actions (sender-defined; all three pages, built by reply.js; absent when the notification
+     has none or the daemon has nothing wired): div.nc-reply[data-host]
+     [data-state="idle|busy|sent|refused|error|disabled|answered|confirm"] with, in order:
+       .nc-reply-choices > button.nc-reply-choice[data-choice]   the sender's quick answers
+       .nc-reply-compose > textarea.nc-reply-text  +  .nc-reply-compose-row > .nc-reply-count(.over)
+                                                   + button.nc-reply-send   (Enter sends, Shift+Enter
+                                                   is a newline)
+       .nc-reply-confirm > .nc-reply-confirm-text, button.nc-reply-confirm-yes/-no   (when the daemon
+                                                   asks "Confirm sending to <host>?")
+       .nc-reply-status[data-kind="busy|sent|refused|error|disabled|answered"]   ("Sent ✓",
+                                                   "Refused: <reason>", "Answered: yes · 14:02 (200)")
+       .nc-reply-host                              the small "→ host" label
+   Image previews (all three pages, built by image.js; absent when the notification has no image
+     or `[images] preview = false`): div.nc-image[data-host="toast|shade|center"] with, in order:
+       img.nc-image-preview                    the picture (center: [data-open], click opens the file
+                                               in the default viewer)
+       .nc-image-actions > button.nc-image-button[data-kind="copy|path"]  "Copy image" / "Copy path";
+                                               [data-state="done|failed"] for ~1.5 s ("Copied" / "Failed")
+     Center list rows also get span.nc-image-thumb > img.nc-image-thumb-img.
+     Sizes: --nc-image-toast-height, --nc-image-shade-height, --nc-image-detail-height (max height
+     of the preview), --nc-image-list-size (square thumbnail), --nc-image-radius.
+   Letter avatar (no icon resolved; all three pages): span.nc-avatar[data-app] in the icon box,
+     showing the app's first letter on a circle; its hue is set inline as --nc-avatar-hue (0-359,
+     a stable hash of the app name), saturation/lightness/text from --nc-avatar-saturation,
+     --nc-avatar-lightness and --nc-avatar-fg. Restyle with `.nc-avatar { ... }` or per app with
+     `.nc-avatar[data-app="CI"] { background: ... }`.
+   Default preset: neutral dark. Every visual is a --nc-* custom property; layers after this
+   (theme.css, style.css, the injected <style id="user">) override them. */
+:root {
+  --nc-bg: #1f2125;
+  --nc-fg: #e8eaed;
+  --nc-fg-muted: #9aa0a6;
+  --nc-accent: #8ab4f8;
+  --nc-border-color: #3a3d44;
+  --nc-border-width: 1px;
+  --nc-radius: 12px;
+  --nc-shadow: 0 6px 20px rgba(0, 0, 0, 0.45);
+  --nc-opacity: 0.97;
+  --nc-width: 380px;
+  --nc-gap: 10px;
+  --nc-padding: 12px;
+  --nc-shadow-room: 20px; /* transparent margin inside the surface so shadows are not clipped */
+  --nc-font-family: "Inter", "Noto Sans", system-ui, sans-serif;
+  --nc-font-size: 14px;
+  --nc-icon-size: 40px;
+  --nc-mark-bg: rgba(138, 180, 248, 0.25);
+  --nc-mark-fg: inherit;
+  --nc-button-bg: rgba(255, 255, 255, 0.08);
+  --nc-button-bg-hover: rgba(255, 255, 255, 0.16);
+  --nc-avatar-saturation: 45%;
+  --nc-avatar-lightness: 42%;
+  --nc-avatar-fg: #ffffff;
+  --nc-image-toast-height: 140px;
+  --nc-image-shade-height: 96px;
+  --nc-image-detail-height: 360px;
+  --nc-image-list-size: 36px;
+  --nc-image-radius: 6px;
+
+  --nc-urgency-low: #6b7280;
+  --nc-urgency-normal: #8ab4f8;
+  --nc-urgency-critical: #f28b82;
+  --nc-urgency-critical-bg: #2b1f21;
+
+  --nc-anim-duration: 220ms;
+  --nc-enter-animation: nc-enter var(--nc-anim-duration) ease-out both;
+  --nc-exit-animation: nc-exit var(--nc-anim-duration) ease-in both;
+}
+
+@keyframes nc-enter {
+  from { opacity: 0; transform: translateX(24px); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes nc-exit {
+  from { opacity: 1; transform: none; }
+  to { opacity: 0; transform: translateX(24px); }
+}
+
+html, body {
+  margin: 0;
+  background: transparent;
+  overflow: hidden;
+  font-family: var(--nc-font-family);
+  font-size: var(--nc-font-size);
+  color: var(--nc-fg);
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.stack {
+  box-sizing: content-box;
+  width: var(--nc-width);
+  padding: var(--nc-shadow-room);
+  display: flex;
+  flex-direction: column;
+  gap: var(--nc-gap);
+}
+
+.toast {
+  --nc-urgency: var(--nc-urgency-normal);
+  position: relative;
+  display: flex;
+  gap: 12px;
+  box-sizing: border-box;
+  width: var(--nc-width);
+  padding: var(--nc-padding);
+  padding-right: calc(var(--nc-padding) + 18px);
+  background: var(--nc-bg);
+  color: var(--nc-fg);
+  opacity: var(--nc-opacity);
+  border: var(--nc-border-width) solid var(--nc-border-color);
+  border-left: 3px solid var(--nc-urgency);
+  border-radius: var(--nc-radius);
+  box-shadow: var(--nc-shadow);
+  animation: var(--nc-enter-animation);
+  cursor: pointer;
+}
+.toast.replaced { animation: none; }
+.toast.leaving { animation: var(--nc-exit-animation); pointer-events: none; }
+
+.toast[data-urgency="low"] { --nc-urgency: var(--nc-urgency-low); }
+.toast[data-urgency="critical"] {
+  --nc-urgency: var(--nc-urgency-critical);
+  background: var(--nc-urgency-critical-bg);
+}
+
+.toast-icon { flex: none; width: var(--nc-icon-size); height: var(--nc-icon-size); }
+.toast-icon img { width: 100%; height: 100%; object-fit: contain; }
+.toast-icon .nc-avatar { font-size: calc(var(--nc-icon-size) * 0.5); }
+.nc-avatar {
+  box-sizing: border-box;
+  width: 100%;
+  height: 100%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: hsl(var(--nc-avatar-hue, 210) var(--nc-avatar-saturation) var(--nc-avatar-lightness));
+  color: var(--nc-avatar-fg);
+  font-weight: 600;
+  line-height: 1;
+  overflow: hidden;
+  user-select: none;
+}
+
+.toast-content { flex: 1; min-width: 0; }
+.toast-app {
+  font-size: 0.8em;
+  color: var(--nc-fg-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.toast-summary { font-weight: 600; margin-top: 2px; overflow-wrap: anywhere; }
+.toast-body {
+  margin-top: 4px;
+  color: var(--nc-fg);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  max-height: 9em;
+  overflow: hidden;
+}
+.toast-body:empty { display: none; }
+.toast-body a { color: var(--nc-accent); text-decoration: underline; cursor: pointer; }
+mark { background: var(--nc-mark-bg); color: var(--nc-mark-fg); border-radius: 3px; }
+
+.toast-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.toast-action {
+  font: inherit;
+  color: var(--nc-accent);
+  background: var(--nc-button-bg);
+  border: 0;
+  border-radius: calc(var(--nc-radius) / 2);
+  padding: 4px 10px;
+  cursor: pointer;
+}
+.toast-action:hover { background: var(--nc-button-bg-hover); }
+
+.toast-buttons { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.toast-button {
+  font: inherit;
+  font-size: 0.93em;
+  color: var(--nc-fg);
+  background: var(--nc-button-bg);
+  border: 1px solid var(--nc-border-color);
+  border-radius: calc(var(--nc-radius) / 2);
+  padding: 3px 10px;
+  cursor: pointer;
+}
+.toast-button[data-kind="run"] { color: var(--nc-accent); }
+.toast-button:hover { background: var(--nc-button-bg-hover); }
+
+.toast-close {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  font: inherit;
+  line-height: 1;
+  color: var(--nc-fg-muted);
+  background: transparent;
+  border: 0;
+  border-radius: 50%;
+  cursor: pointer;
+}
+.toast-close:hover { background: var(--nc-button-bg-hover); color: var(--nc-fg); }
+
+/* ---- reply actions (all three pages; see the hooks list at the top) ---- */
+.nc-reply { margin-top: 8px; display: flex; flex-direction: column; gap: 6px; cursor: default; }
+.nc-reply[hidden], .nc-reply [hidden] { display: none; }
+.nc-reply-choices { display: flex; flex-wrap: wrap; gap: 6px; }
+.nc-reply-choice, .nc-reply-send, .nc-reply-confirm button {
+  font: inherit;
+  font-size: 0.93em;
+  color: var(--nc-accent);
+  background: var(--nc-button-bg);
+  border: 1px solid var(--nc-border-color);
+  border-radius: calc(var(--nc-radius) / 2);
+  padding: 3px 10px;
+  cursor: pointer;
+}
+.nc-reply-choice:hover:not(:disabled), .nc-reply-send:hover:not(:disabled),
+.nc-reply-confirm button:hover { background: var(--nc-button-bg-hover); }
+.nc-reply-choice:disabled, .nc-reply-send:disabled { opacity: 0.5; cursor: default; }
+.nc-reply-compose { display: flex; flex-direction: column; gap: 4px; }
+.nc-reply-text {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 3.2em;
+  max-height: 8em;
+  resize: none;
+  font: inherit;
+  color: var(--nc-fg);
+  background: var(--nc-button-bg);
+  border: 1px solid var(--nc-border-color);
+  border-radius: calc(var(--nc-radius) / 2);
+  padding: 4px 8px;
+  user-select: text;
+  -webkit-user-select: text;
+}
+.nc-reply-text:focus { outline: none; border-color: var(--nc-accent); }
+.nc-reply-text:disabled { opacity: 0.5; }
+.nc-reply-compose-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.nc-reply-count { font-size: 0.8em; color: var(--nc-fg-muted); }
+.nc-reply-count.over { color: var(--nc-urgency-critical); }
+.nc-reply-confirm { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.nc-reply-confirm-text { flex: 1 1 100%; overflow-wrap: anywhere; }
+.nc-reply-status { font-size: 0.9em; color: var(--nc-fg-muted); overflow-wrap: anywhere; }
+.nc-reply-status[data-kind="sent"], .nc-reply-status[data-kind="answered"] { color: var(--nc-accent); }
+.nc-reply-status[data-kind="refused"], .nc-reply-status[data-kind="error"] { color: var(--nc-urgency-critical); }
+.nc-reply-host { font-size: 0.78em; color: var(--nc-fg-muted); overflow-wrap: anywhere; }
+
+/* ---- image previews (all three pages; see the hooks list at the top) ---- */
+.nc-image { margin-top: 8px; cursor: default; }
+.nc-image-preview {
+  display: block;
+  max-width: 100%;
+  width: auto;
+  height: auto;
+  max-height: var(--nc-image-toast-height);
+  object-fit: contain;
+  border-radius: var(--nc-image-radius);
+  background: var(--nc-button-bg);
+}
+.nc-image[data-host="shade"] .nc-image-preview { max-height: var(--nc-image-shade-height); }
+.nc-image[data-host="center"] .nc-image-preview { max-height: var(--nc-image-detail-height); }
+.nc-image-preview[data-open] { cursor: zoom-in; }
+.nc-image-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+.nc-image-button {
+  font: inherit;
+  font-size: 0.93em;
+  color: var(--nc-fg);
+  background: var(--nc-button-bg);
+  border: 1px solid var(--nc-border-color);
+  border-radius: calc(var(--nc-radius) / 2);
+  padding: 3px 10px;
+  cursor: pointer;
+}
+.nc-image-button:hover { background: var(--nc-button-bg-hover); }
+.nc-image-button[data-state="done"] { color: var(--nc-accent); }
+.nc-image-button[data-state="failed"] { color: var(--nc-urgency-critical); }
+.nc-image-thumb { flex: none; display: inline-flex; }
+.nc-image-thumb-img {
+  width: var(--nc-image-list-size);
+  height: var(--nc-image-list-size);
+  object-fit: cover;
+  border-radius: var(--nc-image-radius);
+  background: var(--nc-button-bg);
+}

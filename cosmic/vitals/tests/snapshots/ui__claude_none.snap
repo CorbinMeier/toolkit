@@ -1,0 +1,8 @@
+---
+source: tests/ui.rs
+expression: text
+---
+┌ Claude ───────────────────────────────────────────────────────────no reading─┐
+│no reading — feed and usage server unavailable                                │
+│                                                                              │
+└──────────────────────────────────────────────────────────────────────────────┘

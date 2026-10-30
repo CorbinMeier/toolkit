@@ -1,0 +1,4 @@
+- `check.sh`: fmt check, clippy (-D warnings), tests, release build, the web page smoke test (`node web/test/smoke.mjs`: app.js against a fake DOM and `web/test/fixture.json`; skipped when node is missing), binary size check; ends with `CHECK PASS`.
+- `bench.sh`: warms the token index, runs vitals in a pty for 60 s at 200x50 and checks CPU, steady RSS, first-frame time and binary size against spec §8 (`BENCH PASS`/`BENCH FAIL`; over a minute, so not part of `check.sh`).
+- `install.sh`: release build, install the binary to the user-local bin dir (`$HOME/.local/bin`). `--service` also installs and enables the `vitals-web.service` user unit (`vitals --serve`, spec §14).
+- `uninstall.sh`: remove the installed binary, and the `vitals-web.service` unit if it is there.

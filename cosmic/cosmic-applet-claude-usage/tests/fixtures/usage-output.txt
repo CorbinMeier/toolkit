@@ -1,0 +1,12 @@
+You are currently using your subscription to power your Claude Code usage
+
+Current session: 65% used · resets Oct 20, 7:19pm (America/Los_Angeles)
+Current week (all models): 75% used · resets Oct 22, 5:59am (America/Los_Angeles)
+Current week (Fable): 0% used · resets Oct 22, 6am (America/Los_Angeles)
+
+What's contributing to your limits usage?
+Approximate, based on local sessions on this machine — does not include other devices or claude.ai. Behaviors are independent characteristics, not a breakdown.
+
+Last 24h · 3266 requests · 15 sessions
+  99% of your usage came from subagent-heavy sessions
+  Top skills: /corbin:email-to-issue 1%, /corbin:merge-worktree 1%

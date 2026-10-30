@@ -1,0 +1,7 @@
+---
+source: tests/readout.rs
+expression: "text::render(&d)"
+---
+Claude
+session   11.0%  resets 6:00 AM (in 1m)
+session resets 6:00 AM · server, 3h ago · Stale - last read 2:59 AM

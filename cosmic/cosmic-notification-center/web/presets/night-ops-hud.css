@@ -1,0 +1,23 @@
+/* Night Ops HUD preset: copy into theme.css, or pick it in the panel. */
+:root {
+  --nc-bg: #171b23;
+  --nc-fg: #eef2f8;
+  --nc-fg-muted: #8e9bb0;
+  --nc-accent: #2be4ea;
+  --nc-border-color: #1f6a6e;
+  --nc-mark-bg: rgba(254, 211, 63, 0.22);
+  --nc-mark-fg: #fed33f;
+  --nc-button-bg: rgba(43, 228, 234, 0.08);
+  --nc-button-bg-hover: rgba(43, 228, 234, 0.2);
+  --nc-urgency-low: #5b6577;
+  --nc-urgency-normal: #2be4ea;
+  --nc-urgency-critical: #e8615a;
+  --nc-urgency-critical-bg: #2a1618;
+  --nc-font-family: "Fira Mono", ui-monospace, monospace;
+  --nc-font-size: 13px;
+  --nc-border-width: 2px;
+  --nc-radius: 0px;
+  --nc-shadow: 0 0 12px rgba(43, 228, 234, 0.16);
+  --nc-opacity: 0.96;
+  --nc-anim-duration: 160ms;
+}

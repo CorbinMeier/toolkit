@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+# Launcher: runs the daemon on system python with the repo root on PYTHONPATH.
+# The PlatformIO venv can sit ahead of python3 on PATH, so the interpreter is absolute.
+set -eu
+root="$(dirname "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")")"
+export PYTHONPATH="$root${PYTHONPATH:+:$PYTHONPATH}"
+exec /usr/bin/python3 -m notifyd "$@"

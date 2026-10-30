@@ -1,0 +1,34 @@
+---
+source: tests/ui.rs
+expression: "screen_text(&mut r.app, 60, 30)"
+---
+vitals [1][2][3][4][5][6]  12:00 [▤ bars] [⣿ graphs] [⚙] [?]
+┌ CPU ──────────┌─Settings─────────────────────────────────┐
+│all ░░░░░░░░░░░│ [x] CPU     [x] braille [x] bars ▲ ▼     │
+│0   ░░░░░░░░░  │     [x] summary rows − 2 +               │
+│3   ░░░░░░░░░  │ [x] Memory  [x] braille [x] bars ▲ ▼     │
+│6   ░░░░░░░░░  │     [x] summary rows − 2 +               │
+│9   ░░░░░░░░░  │ [x] Disk    [x] braille [x] bars ▲ ▼     │
+│12  ░░░░░░░░░  │     [x] summary rows − 2 +               │
+│15  ░░░░░░░░░  │ [x] Network [x] braille [x] bars ▲ ▼     │
+└───────────────│     [x] summary rows − 2 +               │
+┌ Memory ───────│ [x] Tokens  [x] braille [x] bars ▲ ▼     │
+│used  █████████│     [x] summary rows − 2 +               │
+└───────────────│ [x] Claude  [ ] braille [x] bars ▲ ▼     │
+┌ Disk ─────────│     [x] summary rows − 2 +               │
+│/       ███████│ [x] All     [-] braille [x] bars         │
+└───────────────│     [x] summary                          │
+┌ Network ──────│                                          │
+│all            │ interval − 1s +  style braille ▸         │
+└───────────────│ theme default ▸  layout auto ▸           │
+┌ Tokens  [io] ─│ Network [x] per interface  counted in al │
+│input    ██████│ [ ] lo               [x] enx3c8cf8ff16ee │
+│output   ██████│ [x] wlo1             [ ] br-41db708344eb │
+│cache wr ██████│ [ ] br-759f3fa54c08  [ ] br-f2576b7039cf │
+│cache rd ██████│ [ ] br-049e8afca287  [ ] br-27d1e48900ed │
+└───────────────│ [ ] br-6606a81034a8  [ ] docker0         │
+┌ Claude ───────│ [ ] br-a277b5b456b8  [ ] br-c695d9d71f4a │
+│5 Hour █▋░░░░░░│ [ ] br-ce77fa2be79a  [ ] br-dd4b5817d24e │
+└───────────────│ [ ] br-03429ff456af  [ ] veth5382c7e     │
+                │ [ ] vethbdea49c      [ ] veth6110b70     │
+                └──────────────────────────────────────────┘

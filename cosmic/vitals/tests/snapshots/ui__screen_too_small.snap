@@ -1,0 +1,5 @@
+---
+source: tests/ui.rs
+expression: "screen_text(&mut r.app, 39, 11)"
+---
+terminal too small (40×12 min)

@@ -1,0 +1,9 @@
+---
+source: tests/readout.rs
+expression: "text::render(&d)"
+---
+Disk
+/           72.0%  342.7G / 475.9G
+/boot/efi   44.3%  452.0M / 1020.0M
+nvme0n1    busy   3.2%  read 1.2M/s  write 1.6M/s
+read 1.2M/s · write 1.6M/s · busy 3.2% · NVMe 43°C · / free 109.0G

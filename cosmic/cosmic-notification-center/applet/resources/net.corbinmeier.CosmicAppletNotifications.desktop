@@ -1,0 +1,13 @@
+[Desktop Entry]
+Name=Notification Center
+Comment=Notification bell with unread badge and Do Not Disturb
+Type=Application
+Exec=@BIN@
+Terminal=false
+Categories=COSMIC;
+Keywords=COSMIC;Applet;Notification;Notifications;
+Icon=net.corbinmeier.NotificationCenter-symbolic
+NoDisplay=true
+X-CosmicApplet=true
+X-CosmicShrinkable=true
+X-HostWaylandDisplay=true

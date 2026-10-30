@@ -1,0 +1,11 @@
+---
+source: tests/readout.rs
+expression: "text::render(&d)"
+---
+CPU
+all    41.2%
+cpu0   62.0%
+cpu1   18.1%
+cpu2    5.0%
+cpu3  100.0%
+3.1GHz · 68°C · load 6.65 7.57 12.06 · 4 threads

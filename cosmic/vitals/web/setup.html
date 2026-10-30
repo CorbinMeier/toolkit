@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="color-scheme" content="dark">
+<title>vitals setup</title>
+<style>
+  :root { --bg:#10131a; --card:#1a1f2b; --fg:#d8dce6; --muted:#8a90a0; --line:#2a3140; --accent:#56b6c2; --claude:#D97757; }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--fg); font:16px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif; }
+  main { max-width: 40rem; margin: 0 auto; padding: 24px 16px 48px; }
+  h1 { margin:0 0 4px; font-size:1.6rem; }
+  h2 { font-size:1.05rem; margin:28px 0 8px; color:var(--accent); }
+  p { margin:8px 0; color:var(--fg); }
+  .muted { color:var(--muted); }
+  .note { background:#3a2a22; border:1px solid var(--claude); border-radius:10px; padding:10px 14px; }
+  .note:empty { display:none; }
+  .btn { display:inline-block; min-height:48px; padding:12px 20px; border-radius:10px; font-weight:600; text-decoration:none; margin:6px 8px 6px 0; }
+  .primary { background:var(--claude); color:#10131a; }
+  .secondary { background:var(--card); color:var(--fg); border:1px solid var(--line); }
+  code { background:var(--card); padding:2px 6px; border-radius:6px; word-break:break-all; }
+  ol { padding-left: 1.3rem; } li { margin: 4px 0; }
+  .fp { display:block; padding:10px 12px; margin-top:6px; font:13px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace; }
+</style>
+</head>
+<body>
+<main>
+  <h1>vitals</h1>
+  <p class="muted">This is the setup page for the vitals dashboard. It is the only page served without HTTPS.</p>
+  <p class="note">{{NOTE}}</p>
+
+  <h2>1. Trust the certificate</h2>
+  <p>The dashboard is served over HTTPS with this laptop's own local certificate authority. Install that certificate once on this device so the browser trusts it, and the page can be installed as an app and keep the screen awake.</p>
+  <p><a class="btn primary" href="/certificate.crt">Download certificate</a></p>
+  <p class="muted">Check it is the right one: the certificate's SHA-256 fingerprint is</p>
+  <code class="fp">{{FINGERPRINT}}</code>
+
+  <h2>Android</h2>
+  <ol>
+    <li>Download the certificate above.</li>
+    <li>Settings, Security, Encryption &amp; credentials, Install a certificate, CA certificate.</li>
+    <li>Choose the downloaded file (<code>vitals-certificate.crt</code>) and confirm.</li>
+  </ol>
+
+  <h2>iPad and iPhone</h2>
+  <ol>
+    <li>Download the certificate above and allow the profile download.</li>
+    <li>Settings, Profile Downloaded, Install.</li>
+    <li>Settings, General, About, Certificate Trust Settings: switch on full trust for it.</li>
+  </ol>
+
+  <h2>2. Open the dashboard</h2>
+  <p>Open the address that <code>vitals --serve</code> prints, or use the button below. There is no password: the dashboard is read-only and answers only devices on your own network.</p>
+  <p><a class="btn secondary" href="{{HTTPS_URL}}">Open dashboard (HTTPS)</a></p>
+</main>
+</body>
+</html>

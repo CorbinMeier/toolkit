@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'self' 'unsafe-inline'; script-src 'self'; img-src file: nc-image:">
+<title>Notification shade</title>
+<link rel="stylesheet" href="default.css">
+<link rel="stylesheet" href="shade.css">
+</head>
+<body>
+<div class="shade" id="shade">
+  <header class="shade-bar">
+    <div class="shade-bar-row">
+      <button class="shade-dnd" id="dnd" type="button" role="switch" aria-checked="false">
+        <span class="shade-switch" aria-hidden="true"></span>
+        <span class="shade-dnd-label">Do not disturb</span>
+      </button>
+      <span class="shade-unread" id="unread"></span>
+      <span class="shade-spacer"></span>
+      <button class="btn" id="btn-clear" type="button">Clear all</button>
+    </div>
+    <div class="shade-bar-row">
+      <button class="shade-link" id="btn-center" type="button">Open notification center &#8599;</button>
+    </div>
+    <div class="shade-confirm" id="confirm" hidden>
+      <span id="confirm-text"></span>
+      <button class="btn btn-danger" id="confirm-yes" type="button">Dismiss all</button>
+      <button class="btn" id="confirm-no" type="button">Cancel</button>
+    </div>
+  </header>
+  <div class="shade-scroll" id="scroll">
+    <div class="shade-groups" id="groups"></div>
+    <div class="shade-empty" id="empty" hidden>No notifications</div>
+  </div>
+</div>
+<script src="avatar.js"></script>
+<script src="reply.js"></script>
+<script src="image.js"></script>
+<script src="paint.js"></script>
+<script src="shade.js"></script>
+</body>
+</html>

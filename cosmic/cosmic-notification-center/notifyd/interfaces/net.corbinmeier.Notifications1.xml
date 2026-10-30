@@ -1,0 +1,70 @@
+<!DOCTYPE node PUBLIC "-//freedesktop//DTD D-BUS Object Introspection 1.0//EN"
+ "http://www.freedesktop.org/standards/dbus/1.0/introspect.dtd">
+<!-- Control interface. Bus name net.corbinmeier.Notifications1,
+     object path /net/corbinmeier/Notifications1.
+     GetHistory returns a JSON array of objects: the to_web() keys plus
+     read_at, closed_at, close_reason, state, received_at.
+     PressButton(id, button_id) is what a toast/shade/center button press does; an unknown id or
+     button is ignored.
+     ReplyChoice / ReplyText(id, choice | text) -> JSON {status: "sent" | "pending_confirm" |
+     "refused", token?, reason?}: sender-defined reply actions (docs/reply-actions.md). With a
+     confirm endpoint the bus only gets pending_confirm; confirming is for the UI hosts.
+     UnseenCount: shade-visible notifications received since the shade or center was last opened
+     (the seen watermark); MarkSeen sets the watermark to now. Opening the shade or center does too. GetRuns returns the run log of one notification as a JSON array. -->
+<node>
+  <interface name="net.corbinmeier.Notifications1">
+    <method name="ToggleCenter"/>
+    <method name="ShowCenter"/>
+    <method name="ToggleShade"/>
+    <method name="ShowShade"/>
+    <method name="ShowNotification">
+      <arg direction="in" name="id" type="u"/>
+    </method>
+    <method name="MarkRead">
+      <arg direction="in" name="ids" type="au"/>
+    </method>
+    <method name="Dismiss">
+      <arg direction="in" name="id" type="u"/>
+    </method>
+    <method name="Delete">
+      <arg direction="in" name="ids" type="au"/>
+    </method>
+    <method name="ClearHistory"/>
+    <method name="GetHistory">
+      <arg direction="in" name="query" type="s"/>
+      <arg direction="in" name="offset" type="u"/>
+      <arg direction="in" name="limit" type="u"/>
+      <arg direction="out" name="json" type="s"/>
+    </method>
+    <method name="PressButton">
+      <arg direction="in" name="id" type="u"/>
+      <arg direction="in" name="button_id" type="s"/>
+    </method>
+    <method name="ReplyChoice">
+      <arg direction="in" name="id" type="u"/>
+      <arg direction="in" name="choice" type="s"/>
+      <arg direction="out" name="json" type="s"/>
+    </method>
+    <method name="ReplyText">
+      <arg direction="in" name="id" type="u"/>
+      <arg direction="in" name="text" type="s"/>
+      <arg direction="out" name="json" type="s"/>
+    </method>
+    <method name="MarkSeen"/>
+    <method name="GetRuns">
+      <arg direction="in" name="id" type="u"/>
+      <arg direction="out" name="json" type="s"/>
+    </method>
+    <property name="UnreadCount" type="u" access="read"/>
+    <property name="UnseenCount" type="u" access="read"/>
+    <property name="DoNotDisturb" type="b" access="readwrite"/>
+    <signal name="NotificationAdded">
+      <arg name="id" type="u"/>
+      <arg name="json" type="s"/>
+    </signal>
+    <signal name="RulesReloaded">
+      <arg name="ok" type="b"/>
+      <arg name="error" type="s"/>
+    </signal>
+  </interface>
+</node>

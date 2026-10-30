@@ -1,0 +1,13 @@
+sysfs /sys sysfs rw,nosuid,nodev,noexec,relatime 0 0
+proc /proc proc rw,nosuid,nodev,noexec,relatime 0 0
+udev /dev devtmpfs rw,nosuid,relatime 0 0
+tmpfs /run tmpfs rw,nosuid,nodev,noexec,relatime 0 0
+/dev/nvme0n1p3 / ext4 rw,relatime,errors=remount-ro 0 0
+/dev/nvme0n1p3 /var/snap/bind ext4 rw,relatime 0 0
+/dev/nvme0n1p2 /recovery vfat rw,relatime 0 0
+/dev/nvme0n1p1 /boot/efi vfat rw,relatime 0 0
+/dev/loop3 /snap/core/1 squashfs ro,nodev,relatime 0 0
+overlay /var/lib/docker/overlay2/x/merged overlay rw,relatime 0 0
+portal /run/user/1000/doc fuse.portal rw,nosuid,nodev,relatime 0 0
+/dev/sdb1 /mnt/with\040space ext4 rw,relatime 0 0
+server:/export /mnt/nfs nfs4 rw,relatime 0 0

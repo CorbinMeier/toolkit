@@ -1,0 +1,10 @@
+[Unit]
+Description=Parakeet dictation daemon
+
+[Service]
+ExecStart=%h/local-ai/parakeet/venv/bin/python %h/local-ai/parakeet/daemon.py
+WorkingDirectory=%h/local-ai/parakeet
+Restart=on-failure
+
+[Install]
+WantedBy=default.target

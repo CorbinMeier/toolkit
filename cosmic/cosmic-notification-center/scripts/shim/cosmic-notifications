@@ -1,0 +1,75 @@
+#!/bin/bash
+# Not `env bash`: via env, /proc/<pid>/comm becomes `bash` and `killall cosmic-notifications` cannot find the shim.
+# notifyd-shim: cosmic-notification-center (install.sh renders @REPO@; uninstall.sh keys on this line)
+#
+# FRAGILE BY DESIGN: cosmic-session starts the notification daemon by the BARE name
+# `cosmic-notifications` and the session PATH begins with ~/.local/bin, so this file shadows
+# /usr/bin/cosmic-notifications. If a COSMIC update changes that to an absolute path, the stock
+# daemon silently returns. Re-check after COSMIC updates.
+#
+# This script must NEVER exit on its own and NEVER exit 0: cosmic-session (launch-pad) treats an
+# exit status of 0 as a clean exit and respawns neither the daemon nor the panel, but it restarts
+# both after a child that died BY SIGNAL (which is how the stock daemon dies on `killall`).
+# It restart-loops bin/notifyd and ignores DAEMON_NOTIFICATIONS_FD. On TERM/INT it forwards TERM
+# to the daemon, reaps it, then removes its trap and re-raises the same signal on itself.
+#
+# Safety valve: if ~/.config/net.corbinmeier.notifications/disable exists, the stock daemon
+# is exec'd instead.
+#
+# The NOTIFYD_* overrides exist for tests only (tests/test_integration.py).
+set -u
+repo='@REPO@'
+notifyd="${NOTIFYD_BIN:-$repo/bin/notifyd}"
+stock="${NOTIFYD_STOCK:-/usr/bin/cosmic-notifications}"
+disable="$HOME/.config/net.corbinmeier.notifications/disable"
+backoff_min="${NOTIFYD_BACKOFF_MIN:-1}"
+backoff_max="${NOTIFYD_BACKOFF_MAX:-30}"
+reset_after="${NOTIFYD_RESET_AFTER:-60}"
+
+child=0
+stop=0
+on_term() {
+	stop=TERM
+	if [ "$child" -gt 0 ]; then kill -TERM "$child" 2>/dev/null; fi
+}
+on_int() {
+	stop=INT
+	if [ "$child" -gt 0 ]; then kill -TERM "$child" 2>/dev/null; fi
+}
+trap on_term TERM
+trap on_int INT
+
+# Die by the signal we received (never exit 0), so cosmic-session respawns daemon + panel.
+die_by_signal() {
+	trap - TERM INT
+	kill -"$stop" $$
+	exit 1 # not reached; kill -TERM/INT on ourselves is fatal with the trap removed
+}
+
+log() { echo "notifyd-shim: $*" >&2; }
+
+backoff="$backoff_min"
+while :; do
+	if [ -e "$disable" ]; then
+		log "$disable exists; using stock daemon"
+		exec "$stock" "$@"
+	fi
+	started=$SECONDS
+	"$notifyd" "$@" &
+	child=$!
+	wait "$child"
+	rc=$?
+	# A trapped signal interrupts `wait`; reap the child before leaving.
+	while kill -0 "$child" 2>/dev/null; do wait "$child" 2>/dev/null; rc=$?; done
+	child=0
+	[ "$stop" != 0 ] && die_by_signal
+	if [ $((SECONDS - started)) -ge "$reset_after" ]; then backoff="$backoff_min"; fi
+	log "notifyd exited ($rc); restarting in ${backoff}s"
+	sleep "$backoff" &
+	child=$!
+	wait "$child" 2>/dev/null
+	kill "$child" 2>/dev/null
+	child=0
+	[ "$stop" != 0 ] && die_by_signal
+	backoff=$(awk -v b="$backoff" -v m="$backoff_max" 'BEGIN { b *= 2; if (b > m) b = m; print b }')
+done

@@ -1,0 +1,1 @@
+- `check.sh`: fmt check, clippy and tests with and without `usage-text`, release build; ends with `CHECK PASS`.

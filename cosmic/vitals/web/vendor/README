@@ -1,0 +1,4 @@
+uPlot 1.6.32 (MIT, Copyright (c) 2022 Leon Sorokin), https://github.com/leeoniya/uPlot
+Source: npm tarball `npm pack uplot@1.6.32` (2026-10-29), files dist/uPlot.iife.min.js and dist/uPlot.min.css.
+Each file is the unmodified dist file with one license comment line added at the top. LICENSE: uplot.LICENSE.
+To upgrade: repeat the pack, replace the two files, update this note and the version in spec section 14.

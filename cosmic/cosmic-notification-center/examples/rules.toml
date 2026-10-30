@@ -1,0 +1,61 @@
+# Example rules for cosmic-notification-center. Copy to
+# ~/.config/net.corbinmeier.notifications/rules.toml and edit.
+# Reference: docs/rules.md. Rules run top to bottom; every matching rule applies.
+
+# 1. Give the Example App its own sound.
+#    Test: notify-send --app-name="Example App" "Example" "Something happened"
+[[rule]]
+name = "example sound"
+app = "Example App"                   # exact, case-insensitive
+sound = "~/Music/sounds/example.mp3"         # a path to .mp3/.wav/.ogg/.flac is played as-is;
+                                         # leave out for the system default sound
+
+# 2. Anything saying URGENT stays on screen and glows red.
+#    Pair with this CSS in style.css:  mark.urgent { color: #ff3b3b; font-weight: 700; background: none; }
+[[rule]]
+name = "URGENT stays and glows red"
+summary = '(?i)\bURGENT\b'               # regex, searched in the summary
+body = '(?i)\bURGENT\b'                  # regex, searched in the body
+match_mode = "any"                       # summary OR body (default "all" needs both)
+highlight = { pattern = '(?i)\bURGENT\b', class = "urgent" }   # wraps matches in <mark class="urgent">
+timeout = "never"                        # do not auto-dismiss
+
+# 3. Drop noise. Blocked notifications are not shown and silent, but still recorded.
+#    Replace the regex with what you want to mute.
+[[rule]]
+name = "mute noise"
+body = 'regex-to-block'
+block = true
+
+# --- scripts and buttons (commented out; remove the leading "# " to enable) ---
+# Notification data reaches a command ONLY through NC_* environment variables (NC_ID, NC_APP,
+# NC_SUMMARY, NC_BODY, NC_URGENCY, NC_CATEGORY, NC_TAGS, NC_HINTS_JSON, NC_RULE, NC_BUTTON).
+# Never paste notification text into the command itself. See docs/rules.md.
+
+# 4. Log every Example App notification to ~/app.log. The script text is fixed; the data is
+#    read from the environment inside it, so it can never be run as code.
+# [[rule]]
+# name = "log example"
+# app = "Example App"
+# run = ["sh", "-c", "printf '%s\\t%s\\n' \"$NC_SUMMARY\" \"$NC_BODY\" >> ~/app.log"]
+# run_when = "arrive"       # "shown" = only when a toast is displayed
+# cooldown = 0              # seconds between runs of this rule
+# run_timeout = 30          # seconds, 1-3600
+
+# 5. An "Open" button on example-app notifications: opens the x-nc-url hint the app attached.
+# [[rule]]
+# name = "example open button"
+# app = "Example App"
+# hint_present = ["x-nc-url"]
+# [[rule.buttons]]
+# label = "Open"
+# run = ["sh", "-c", "xdg-open \"$(python3 -c 'import json,os; print(json.loads(os.environ[\"NC_HINTS_JSON\"])[\"x-nc-url\"])')\""]
+
+# 6. A "Snooze 15 min" button on everything.
+# [[rule]]
+# name = "snooze button"
+# [[rule.buttons]]
+# label = "Snooze 15 min"
+# builtin = "snooze"
+# minutes = 15
+# --- end scripts and buttons ---

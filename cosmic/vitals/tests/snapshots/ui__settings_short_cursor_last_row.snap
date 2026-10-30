@@ -1,0 +1,18 @@
+---
+source: tests/ui.rs
+expression: "screen_text(&mut r.app, 60, 14)"
+---
+vitals [1][2][3][4][5][6]  12:00 [▤ bars] [⣿ graphs] [⚙] [?]
+┌ CPU ──────────┌─Settings─────────────────────────────────┐
+│all ░░░░░░░░░░░│     [x] summary rows − 2 +               │
+└───────────────│ [x] Disk    [x] braille [x] bars ▲ ▼     │
+┌ Memory ───────│     [x] summary rows − 2 +               │
+│used  █████████│ [x] Network [x] braille [x] bars ▲ ▼     │
+└───────────────│     [x] summary rows − 2 +               │
+┌ Disk ─────────│ [x] Tokens  [x] braille [x] bars ▲ ▼     │
+│/       ███████│     [x] summary rows − 2 +               │
+└───────────────│ [x] Claude  [ ] braille [x] bars ▲ ▼     │
+Net ▕░░░░░░░░░░░│     [x] summary rows − 2 +               │
+Tokens ▕█████░░░│ [x] All     [-] braille [x] bars         │
+Claude ▕████▍░░░│     [x] summary                          │
+                └──────────────────────────────────────────┘

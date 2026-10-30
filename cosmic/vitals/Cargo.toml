@@ -1,0 +1,36 @@
+[package]
+name = "vitals"
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+description = "A lightweight btop-style terminal dashboard: CPU, memory, disk, network and Claude Code token usage"
+
+[lib]
+name = "vitals"
+path = "src/lib.rs"
+
+[[bin]]
+name = "vitals"
+path = "src/main.rs"
+
+[dependencies]
+chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
+claude-usage-core = { version = "0.1.0", path = "../claude-usage-core" }
+libc = "0.2"
+memchr = "2"
+ratatui = { version = "0.30.2", default-features = false, features = ["crossterm"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+ring = "0.17"
+rustls = { version = "0.23", default-features = false, features = ["ring", "std"] }
+toml = { version = "1.1.8", default-features = false, features = ["parse", "display", "serde"] }
+
+[profile.release]
+lto = "fat"
+codegen-units = 1
+panic = "abort"
+strip = true
+opt-level = 3
+
+[dev-dependencies]
+insta = "1.49.0"

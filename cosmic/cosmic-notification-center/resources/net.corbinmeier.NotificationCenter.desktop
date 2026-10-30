@@ -1,0 +1,18 @@
+# notifyd-launcher: cosmic-notification-center
+[Desktop Entry]
+Type=Application
+Name=Notification Center
+GenericName=Notifications
+Comment=Browse, search and manage your notification history
+Exec=@REPO@/bin/notifyd --show-center
+Icon=net.corbinmeier.NotificationCenter
+Terminal=false
+Categories=Utility;
+Keywords=notifications;notification;history;alerts;inbox;dnd;
+StartupNotify=false
+StartupWMClass=net.corbinmeier.NotificationCenter
+Actions=Shade;
+
+[Desktop Action Shade]
+Name=Notification Shade
+Exec=@REPO@/bin/notifyd --toggle-shade

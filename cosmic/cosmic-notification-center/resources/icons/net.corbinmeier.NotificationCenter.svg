@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- notifyd-launcher: cosmic-notification-center -->
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128">
+  <defs>
+    <linearGradient id="tile" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#2a2d33"/>
+      <stop offset="1" stop-color="#1a1c20"/>
+    </linearGradient>
+  </defs>
+  <rect x="4" y="4" width="120" height="120" rx="28" fill="url(#tile)" stroke="#3a3d44" stroke-width="3"/>
+  <circle cx="62" cy="27" r="6" fill="#8ab4f8"/>
+  <path fill="#8ab4f8" d="M62 31C42 31 34 46 34 63V80L24 91V97H100V91L90 80V63C90 46 82 31 62 31Z"/>
+  <path fill="#8ab4f8" d="M50 102H74C74 109 69 114 62 114C55 114 50 109 50 102Z"/>
+  <circle cx="95" cy="35" r="20" fill="#1f2125"/>
+  <circle cx="95" cy="35" r="15" fill="#f28b82"/>
+</svg>

@@ -1,0 +1,71 @@
+# --- my notification rules ---
+# Hand written; the Rules panel must leave all of this alone.
+
+# Example gets its own sound.
+[[rule]]
+name = "example sound"
+app = "Example App"        # exact, case-insensitive
+sound = "~/Music/example.mp3"     # my file
+volume = 70
+
+# CI failures: loud, with buttons and a logger.
+# (the second comment line stays attached)
+[[rule]]
+name = "ci failed"
+app_regex = '(?i)^(jenkins|ci)'     # raw regex
+urgency = ["normal", "critical"]
+category = "build"
+timeout = "never"
+class = ["failed", "loud"]
+tags = ["ci"]
+highlight = [
+  { pattern = '(?i)\bfail(ed|ure)?\b', class = "urgent" },   # red
+  { pattern = '\d+ errors?', class = "count" },
+]
+run = ["sh", "-c", "printf '%s\\n' \"$NC_SUMMARY\" >> ~/ci.log"]
+run_when = "shown"
+cooldown = 30
+run_timeout = 10
+# a note between the keys and the tables
+[rule.hint]
+"x-status" = '^fail'     # status hint
+"x-job" = 'nightly|release'
+
+# open the build page
+[[rule.buttons]]
+label = "Open"
+run = ["xdg-open", "https://ci.example.org"]
+
+[[rule.buttons]]
+label = "Snooze"        # keep
+builtin = "snooze"
+minutes = 15
+close = true
+
+[[rule.buttons]]
+label = "Copy"
+builtin = "copy-body"
+
+# ----- section: quiet ones -----
+
+# (commented-out rule kept for later)
+# [[rule]]
+# name = "later"
+# app = "Later"
+
+# Mute chat noise, but only at night. Unicode: café ✓ "quotes" \ back
+[[rule]]
+name = "mute noise ☾"
+body = "chat \\ noise \"quoted\""
+match_mode = "any"
+summary = 'nightly'
+store_only = true
+enabled = false
+set_urgency = "low"
+dnd_bypass = false
+stop = true
+
+[[rule]]
+name = "last, no trailing newline"
+hint_present = ["x-nc-url", "x-other"]
+icon = "~/icons/a.png"

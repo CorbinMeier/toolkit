@@ -1,0 +1,12 @@
+---
+source: tests/readout.rs
+expression: "text::render(&d)"
+---
+Tokens
+input        41/min
+output       15.0K/min
+cache write  121.0K/min
+cache read   2.2M/min
+opus          24.8%  9.1M
+sonnet        75.2%  27.6M
+today in 741 · out 239.0K · cache 36.5M · 2.3M/min · indexing… 38%

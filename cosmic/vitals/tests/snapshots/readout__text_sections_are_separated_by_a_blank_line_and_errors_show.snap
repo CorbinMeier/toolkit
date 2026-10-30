@@ -1,0 +1,13 @@
+---
+source: tests/readout.rs
+expression: "text::render(&d)"
+---
+CPU
+error  cannot read /proc/stat: No such file or directory (os error 2)
+
+Memory
+used          512B   50.0%
+cache           0B    0.0%
+available     512B   50.0%
+swap            0B    0.0%
+512B / 1.0K · cache 0B · available 512B · swap 0B / 0B

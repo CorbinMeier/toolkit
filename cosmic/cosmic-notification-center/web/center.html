@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'self' 'unsafe-inline'; script-src 'self'; img-src file: nc-image:">
+<title>Notifications</title>
+<link rel="stylesheet" href="default.css">
+<link rel="stylesheet" href="center.css">
+<link rel="stylesheet" href="settings.css">
+</head>
+<body>
+<div class="center" id="center">
+
+  <!-- List view -->
+  <section class="center-view center-list-view" id="view-list">
+    <header class="center-bar">
+      <input class="center-search" id="search" type="search" placeholder="Search  ( / )" autocomplete="off" spellcheck="false">
+      <select class="center-filter" id="f-app" aria-label="App"><option value="">All apps</option></select>
+      <select class="center-filter" id="f-state" aria-label="State">
+        <option value="">Any state</option>
+        <option value="shown">Shown</option>
+        <option value="blocked">Blocked</option>
+        <option value="dnd">Do not disturb</option>
+        <option value="store_only">Store only</option>
+      </select>
+      <label class="center-check"><input type="checkbox" id="f-unread"> Unread only</label>
+      <span class="center-spacer"></span>
+      <button class="btn" id="btn-read-all" type="button">Mark all read</button>
+      <button class="btn btn-icon" id="btn-settings" type="button" title="Settings" aria-label="Settings">&#9881;</button>
+      <div class="center-menu-wrap">
+        <button class="btn btn-icon" id="btn-more-menu" type="button" title="More" aria-label="More" aria-haspopup="true" aria-expanded="false">&#8943;</button>
+        <div class="center-menu" id="more-menu" hidden>
+          <label class="center-menu-row"><span>Tag</span>
+            <select class="center-filter" id="f-tag" aria-label="Tag"><option value="">Any tag</option></select>
+          </label>
+          <label class="center-menu-row"><span>Group by</span>
+            <select class="center-filter center-group-by" id="f-group" aria-label="Group by">
+              <option value="day">Day &rsaquo; App</option>
+              <option value="app">App only</option>
+            </select>
+          </label>
+          <button class="btn center-toggle-all" id="btn-toggle-all" type="button">Collapse all</button>
+          <button class="btn btn-danger" id="btn-clear" type="button">Clear history</button>
+        </div>
+      </div>
+    </header>
+    <div class="center-confirm" id="confirm-clear" hidden>
+      <span>Delete the whole history? This cannot be undone.</span>
+      <button class="btn btn-danger" id="confirm-clear-yes" type="button">Delete everything</button>
+      <button class="btn" id="confirm-clear-no" type="button">Cancel</button>
+    </div>
+    <div class="center-scroll" id="list-scroll">
+      <div class="center-groups" id="groups"></div>
+      <div class="center-empty" id="list-empty" hidden>No notifications match.</div>
+      <div class="center-more" id="more" hidden><button class="btn" id="btn-more" type="button">Load more</button></div>
+    </div>
+    <footer class="center-status" id="list-status"></footer>
+  </section>
+
+  <!-- Settings view: #/settings/<appearance|behavior|sounds|rules|advanced> (built by settings.js and rules.js) -->
+  <section class="center-view center-settings-view" id="view-settings" hidden></section>
+
+  <!-- Details view: #/n/<id> -->
+  <section class="center-view center-detail-view" id="view-detail" hidden>
+    <header class="center-bar">
+      <button class="btn" id="btn-back" type="button">&larr; Back</button>
+      <span class="center-title">Notification</span>
+      <span class="center-spacer"></span>
+      <button class="btn" id="d-mark-read" type="button" hidden>Mark read</button>
+      <button class="btn" id="d-dismiss" type="button" hidden>Dismiss</button>
+      <button class="btn btn-danger" id="d-delete" type="button">Delete</button>
+    </header>
+    <div class="center-scroll">
+      <article class="detail" id="detail">
+        <div class="detail-notfound" id="d-notfound" hidden>Notification not found. It may have been deleted.</div>
+        <div id="d-content">
+          <div class="detail-head" id="d-head"></div>
+          <div class="detail-body" id="d-body"></div>
+          <div class="detail-image" id="d-image" hidden></div>
+          <div class="detail-tools" id="d-tools"></div>
+          <section class="detail-section detail-actions" id="d-actions-sec" hidden>
+            <h3>Actions</h3>
+            <div class="detail-buttons-row" id="d-actions"></div>
+            <div class="detail-note" id="d-actions-note"></div>
+          </section>
+          <section class="detail-section detail-buttons" id="d-buttons-sec">
+            <h3>Buttons</h3>
+            <div class="detail-buttons-row" id="d-buttons"></div>
+            <p class="detail-empty" id="d-buttons-empty">No rule buttons.</p>
+          </section>
+          <section class="detail-section detail-reply" id="d-reply-sec" hidden>
+            <h3>Reply</h3>
+            <div id="d-reply"></div>
+          </section>
+          <section class="detail-section detail-meta">
+            <h3>Details</h3>
+            <table class="kv" id="d-meta"></table>
+          </section>
+          <section class="detail-section detail-hints">
+            <h3>Hints</h3>
+            <table class="kv" id="d-hints"></table>
+          </section>
+          <section class="detail-section detail-runlog" id="d-runlog-sec">
+            <h3>Run log</h3>
+            <div class="nc-runlog-wrap" id="d-runlog"></div>
+            <p class="detail-empty" id="d-runlog-empty">No runs recorded.</p>
+            <div class="nc-runlog-tools"><button class="nc-runlog-refresh" id="d-runlog-refresh" type="button">Refresh</button></div>
+          </section>
+        </div>
+      </article>
+    </div>
+  </section>
+
+  <div class="center-flash" id="flash" hidden></div>
+</div>
+<script src="avatar.js"></script>
+<script src="reply.js"></script>
+<script src="image.js"></script>
+<script src="paint.js"></script>
+<script src="center.js"></script>
+<script src="settings.js"></script>
+<script src="rules.js"></script>
+</body>
+</html>

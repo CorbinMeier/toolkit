@@ -1,0 +1,20 @@
+---
+source: tests/ui.rs
+expression: "screen_text(&mut r.app, 100, 16)"
+---
+vitals [1 cpu] [2 mem] [3 disk] [4 net] [5 tokens] [6 claude]   1s 12:00 [▤ bars] [⣿ graphs] [⚙] [?]
+┌ CP┌─vitals help──────────────────────────────────────────────────────────────────────────────┐5%─┐
+│all│  CPU   Memory   Disk   Network   Tokens   Claude   Controls                              │75%│
+└───│                                                                                          │───┘
+┌ Di│   expected, then the reset time with the time left.                                      │/s─┐
+│/  │   source  the applet's feed file, else the usage server at 127.0.0.1:4317; never claude  │   │
+└───│           itself                                                                         │───┘
+┌ To│   unit    percent of the limit                                                           │in─┐
+│inp│   scale   full means the limit is used up; orange turns red when used is above expected, │min│
+│out│           or from 95%                                                                    │min│
+│cac│ Daily                                                                                    │min│
+│cac│   How much of today's share of the week allowance is used, against how much of the day   │min│
+└───│   has passed.                                                                            │───┘
+┌ Cl│ ←→ tab · ↑↓ PgUp PgDn scroll · Esc closes                                           9/40 │1%─┐
+│5 H└──────────────────────────────────────────────────────────────────────────────────────────┘   │
+└──────────────────────────────────────────────────────────────────────────────────────────────────┘

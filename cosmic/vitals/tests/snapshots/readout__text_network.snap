@@ -1,0 +1,9 @@
+---
+source: tests/readout.rs
+expression: "text::render(&d)"
+---
+Network
+all                  down 1.6M/s  up 12.0K/s
+[x] wlo1             down 1.6M/s  up 12.0K/s
+[ ] enx3c8cf8ff16ee  down 0B/s  up 0B/s
+down 1.6M/s · up 12.0K/s · since boot: down 50.2M up 6.7M · wlo1

@@ -1,0 +1,9 @@
+[Unit]
+Description=Parakeet dictation hotkey (double-tap Right Alt)
+
+[Service]
+ExecStart=%h/local-ai/parakeet/venv/bin/python %h/local-ai/parakeet/hotkey.py
+Restart=on-failure
+
+[Install]
+WantedBy=default.target

@@ -1,0 +1,11 @@
+[Unit]
+Description=Parakeet dictation tray icon
+After=graphical-session.target
+
+[Service]
+Environment=GI_TYPELIB_PATH=/usr/lib/x86_64-linux-gnu/girepository-1.0
+ExecStart=/usr/bin/python3 %h/local-ai/parakeet/tray.py
+Restart=on-failure
+
+[Install]
+WantedBy=graphical-session.target

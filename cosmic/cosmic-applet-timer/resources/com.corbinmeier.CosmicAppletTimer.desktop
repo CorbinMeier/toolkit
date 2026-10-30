@@ -1,0 +1,14 @@
+[Desktop Entry]
+Name=Timer
+Comment=Single countdown timer
+Type=Application
+Exec=@BIN@
+Terminal=false
+Categories=COSMIC;
+Keywords=COSMIC;Applet;Timer;Countdown;
+Icon=clock-symbolic
+NoDisplay=true
+X-CosmicApplet=true
+X-CosmicShrinkable=true
+X-HostWaylandDisplay=true
+X-CosmicHoverPopup=Auto

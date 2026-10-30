@@ -1,0 +1,368 @@
+/* Dashboard shade. Loaded after default.css; every look comes from --nc-* variables.
+
+   CSS hooks (stable; style.css and theme.css may target them):
+     .shade                                   root card (width = --nc-shade-width, set by Python)
+       .shade-bar                             top bar: DND switch, unread count, Clear all, open center
+         .shade-dnd[aria-checked] / .on       the Do-not-disturb switch
+         .shade-confirm                       the in-page "Clear all" confirmation
+       .shade-group[data-app]                 one app; also [data-urgency] (newest item), [data-category]
+         .expanded                            the group is open; .has-unread when it has unread items
+         .shade-group-head                    clickable header: icon, name, .shade-badge (count),
+                                              .shade-time, .shade-chevron, .shade-peek (newest summary
+                                              and a 2-line body, shown while collapsed)
+         .shade-group-icon / .shade-item-icon  app icon, or a .nc-avatar[data-app] letter circle
+                                              when none resolves (--nc-avatar-* in default.css)
+         .shade-group-tools                   Mark read / Dismiss all / .shade-gear
+         .shade-settings                      the inline per-app settings card (toggles, sound, volume)
+         .shade-item[data-urgency][data-state]  one notification; also [data-category], .tag-<name>,
+                                              rule classes, .unread, .expired
+           .shade-item-summary, .shade-item-body, .shade-time, .shade-close, .shade-actions,
+           .shade-action, mark.<rule class>
+           .shade-buttons > .shade-button       rule buttons (the rule's label as written),
+                                              [data-kind="run"|"builtin"] [data-builtin] [data-minutes];
+                                              also in the collapsed group's peek (.shade-peek-buttons)
+           .nc-image (image preview + Copy buttons, in an expanded item; hooks and the
+             --nc-image-* sizes in default.css)
+           .nc-reply (the sender's reply actions, in an expanded item; hooks in default.css)
+       .shade-empty                           "No notifications"
+   Extra variables (all optional, defaults below): --nc-shade-width, --nc-shade-gap,
+   --nc-shade-surface, --nc-shade-surface-hover, --nc-shade-divider, --nc-shade-unread,
+   --nc-shade-badge-bg, --nc-shade-badge-fg, --nc-shade-anim-duration, --nc-danger. */
+
+:root {
+  --nc-shade-width: 420px;
+  --nc-shade-gap: 8px;
+  --nc-shade-surface: rgba(255, 255, 255, 0.05);
+  --nc-shade-surface-hover: rgba(255, 255, 255, 0.09);
+  --nc-shade-divider: var(--nc-border-color);
+  --nc-shade-unread: var(--nc-accent);
+  --nc-shade-badge-bg: var(--nc-button-bg-hover);
+  --nc-shade-badge-fg: var(--nc-fg);
+  --nc-shade-anim-duration: 180ms;
+  --nc-danger: var(--nc-urgency-critical);
+  --shade-max-h: 600px; /* set by Python: about 80% of the monitor */
+}
+
+body { padding: var(--nc-shadow-room); box-sizing: border-box; }
+
+.shade {
+  width: var(--nc-shade-width);
+  max-height: var(--shade-max-h);
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  background: var(--nc-bg);
+  color: var(--nc-fg);
+  opacity: var(--nc-opacity);
+  border: var(--nc-border-width) solid var(--nc-border-color);
+  border-radius: var(--nc-radius);
+  box-shadow: var(--nc-shadow);
+  overflow: hidden;
+}
+
+button { font: inherit; color: inherit; }
+.btn {
+  color: var(--nc-fg);
+  background: var(--nc-button-bg);
+  border: 0;
+  border-radius: calc(var(--nc-radius) / 2);
+  padding: 4px 10px;
+  cursor: pointer;
+}
+.btn:hover:not(:disabled) { background: var(--nc-button-bg-hover); }
+.btn:disabled { opacity: 0.45; cursor: default; }
+.btn-small { padding: 2px 8px; font-size: 0.85em; color: var(--nc-fg-muted); }
+.btn-small:hover:not(:disabled) { color: var(--nc-fg); }
+.btn-danger { color: var(--nc-danger); }
+.btn-primary { color: var(--nc-accent); }
+
+/* ---- top bar ---- */
+.shade-bar {
+  flex: none;
+  padding: var(--nc-padding);
+  border-bottom: 1px solid var(--nc-shade-divider);
+}
+.shade-bar-row { display: flex; align-items: center; gap: 10px; }
+.shade-bar-row + .shade-bar-row { margin-top: 6px; }
+.shade-spacer { flex: 1; }
+.shade-unread { color: var(--nc-fg-muted); font-size: 0.9em; }
+
+.shade-dnd {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0;
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+}
+.shade-switch {
+  position: relative;
+  width: 34px;
+  height: 18px;
+  border-radius: 9px;
+  background: var(--nc-button-bg-hover);
+  transition: background var(--nc-shade-anim-duration);
+}
+.shade-switch::after {
+  content: "";
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--nc-fg);
+  transition: transform var(--nc-shade-anim-duration);
+}
+.shade-dnd.on .shade-switch { background: var(--nc-accent); }
+.shade-dnd.on .shade-switch::after { transform: translateX(16px); background: var(--nc-bg); }
+
+.shade-link {
+  padding: 0;
+  background: transparent;
+  border: 0;
+  color: var(--nc-accent);
+  font-size: 0.9em;
+  cursor: pointer;
+}
+.shade-link:hover { text-decoration: underline; }
+
+.shade-confirm {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+  padding: 8px;
+  border-radius: calc(var(--nc-radius) / 2);
+  background: var(--nc-shade-surface);
+}
+.shade-confirm[hidden] { display: none; }
+.shade-confirm span { flex: 1; }
+
+/* ---- list ---- */
+.shade-scroll { flex: 1 1 auto; min-height: 0; overflow-y: auto; overflow-x: hidden; }
+.shade-groups { display: flex; flex-direction: column; gap: var(--nc-shade-gap); padding: var(--nc-shade-gap); }
+.shade-empty { padding: 28px 16px; text-align: center; color: var(--nc-fg-muted); }
+.shade-empty[hidden] { display: none; }
+
+.shade-group {
+  --nc-urgency: var(--nc-urgency-normal);
+  background: var(--nc-shade-surface);
+  border-left: 3px solid var(--nc-urgency);
+  border-radius: calc(var(--nc-radius) * 0.75);
+  overflow: hidden;
+}
+.shade-group[data-urgency="low"] { --nc-urgency: var(--nc-urgency-low); }
+.shade-group[data-urgency="critical"] { --nc-urgency: var(--nc-urgency-critical); }
+
+.shade-group-head {
+  display: flex;
+  gap: 10px;
+  padding: var(--nc-padding);
+  cursor: pointer;
+}
+.shade-group-head:hover { background: var(--nc-shade-surface-hover); }
+.shade-group-head:focus-visible { outline: 2px solid var(--nc-accent); outline-offset: -2px; }
+.shade-group-icon { flex: none; width: 28px; height: 28px; }
+.shade-group-icon img { width: 100%; height: 100%; object-fit: contain; }
+.shade-group-icon .nc-avatar { font-size: 14px; }
+.shade-item-icon { flex: none; width: 18px; height: 18px; align-self: center; display: inline-flex; }
+.shade-item-icon img { width: 100%; height: 100%; object-fit: contain; }
+.shade-item-icon .nc-avatar { font-size: 10px; }
+.shade-group-main { flex: 1; min-width: 0; }
+.shade-group-top { display: flex; align-items: center; gap: 8px; }
+.shade-group-name {
+  font-weight: 600;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.shade-group.has-unread .shade-group-name::before {
+  content: "";
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  margin-right: 6px;
+  border-radius: 50%;
+  background: var(--nc-shade-unread);
+  vertical-align: middle;
+}
+.shade-badge {
+  flex: none;
+  min-width: 18px;
+  padding: 0 6px;
+  box-sizing: border-box;
+  text-align: center;
+  font-size: 0.8em;
+  line-height: 18px;
+  border-radius: 9px;
+  background: var(--nc-shade-badge-bg);
+  color: var(--nc-shade-badge-fg);
+}
+.shade-time { flex: none; font-size: 0.8em; color: var(--nc-fg-muted); }
+.shade-chevron {
+  flex: none;
+  width: 14px;
+  text-align: center;
+  color: var(--nc-fg-muted);
+  transition: transform var(--nc-shade-anim-duration);
+}
+.shade-group.expanded .shade-chevron { transform: rotate(90deg); }
+
+/* The newest summary and a 2-line body show while the group is collapsed. */
+.shade-peek { margin-top: 4px; transition: opacity var(--nc-shade-anim-duration); }
+.shade-peek-summary { overflow-wrap: anywhere; }
+.shade-peek-body {
+  margin-top: 2px;
+  color: var(--nc-fg-muted);
+  overflow-wrap: anywhere;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.shade-peek-body:empty { display: none; }
+.shade-group.expanded .shade-peek { display: none; }
+
+.shade-group-tools { display: flex; gap: 6px; margin-top: 8px; }
+.shade-gear { margin-left: auto; }
+
+/* ---- items: grid rows animate 0fr -> 1fr ---- */
+.shade-items-wrap {
+  display: grid;
+  grid-template-rows: 0fr;
+  visibility: hidden;
+  transition: grid-template-rows var(--nc-shade-anim-duration) ease,
+    visibility 0s linear var(--nc-shade-anim-duration);
+}
+.shade-group.expanded .shade-items-wrap {
+  grid-template-rows: 1fr;
+  visibility: visible;
+  transition: grid-template-rows var(--nc-shade-anim-duration) ease, visibility 0s;
+}
+.shade-items { min-height: 0; overflow: hidden; }
+
+.shade-item {
+  --nc-urgency: var(--nc-urgency-normal);
+  position: relative;
+  padding: 10px var(--nc-padding) 10px calc(var(--nc-padding) + 38px);
+  border-top: 1px solid var(--nc-shade-divider);
+  cursor: pointer;
+}
+.shade-item:hover { background: var(--nc-shade-surface-hover); }
+.shade-item[data-urgency="low"] { --nc-urgency: var(--nc-urgency-low); }
+.shade-item[data-urgency="critical"] {
+  --nc-urgency: var(--nc-urgency-critical);
+  background: var(--nc-urgency-critical-bg);
+}
+.shade-item.unread .shade-item-summary { font-weight: 600; }
+.shade-item.expired .shade-time::after { content: " \00b7  expired"; }
+.shade-item-head { display: flex; align-items: baseline; gap: 8px; padding-right: 2px; }
+.shade-item-summary { flex: 1; min-width: 0; font-weight: 500; overflow-wrap: anywhere; }
+.shade-item-body {
+  margin-top: 3px;
+  color: var(--nc-fg-muted);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.shade-item-body:empty { display: none; }
+.shade-item-body a { color: var(--nc-accent); text-decoration: underline; cursor: pointer; }
+mark { background: var(--nc-mark-bg); color: var(--nc-mark-fg); border-radius: 3px; }
+
+.shade-close {
+  flex: none;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  line-height: 1;
+  color: var(--nc-fg-muted);
+  background: transparent;
+  border: 0;
+  border-radius: 50%;
+  cursor: pointer;
+  align-self: center;
+}
+.shade-close:hover { background: var(--nc-button-bg-hover); color: var(--nc-fg); }
+
+.shade-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.shade-action {
+  color: var(--nc-accent);
+  background: var(--nc-button-bg);
+  border: 0;
+  border-radius: calc(var(--nc-radius) / 2);
+  padding: 3px 10px;
+  cursor: pointer;
+}
+.shade-action:hover { background: var(--nc-button-bg-hover); }
+.shade-action.failed { color: var(--nc-danger); text-decoration: line-through; }
+
+.shade-buttons { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.shade-button {
+  font: inherit;
+  font-size: 0.93em;
+  color: var(--nc-fg);
+  background: var(--nc-button-bg);
+  border: 1px solid var(--nc-border-color);
+  border-radius: calc(var(--nc-radius) / 2);
+  padding: 2px 9px;
+  cursor: pointer;
+}
+.shade-button[data-kind="run"] { color: var(--nc-accent); }
+.shade-button:hover { background: var(--nc-button-bg-hover); }
+
+/* ---- per-app settings card ---- */
+.shade-settings {
+  padding: var(--nc-padding);
+  border-top: 1px solid var(--nc-shade-divider);
+  background: var(--nc-shade-surface);
+  cursor: default;
+}
+.shade-settings-title { font-weight: 600; margin-bottom: 8px; }
+.shade-settings-loading { color: var(--nc-fg-muted); }
+.shade-toggle {
+  display: grid;
+  grid-template-columns: auto auto 1fr;
+  align-items: center;
+  gap: 8px;
+  padding: 3px 0;
+  cursor: pointer;
+}
+.shade-toggle-hint { color: var(--nc-fg-muted); font-size: 0.85em; text-align: right; }
+.shade-field { display: block; margin-top: 8px; }
+.shade-field-name { display: block; margin-bottom: 4px; color: var(--nc-fg-muted); font-size: 0.9em; }
+.shade-input {
+  width: 100%;
+  box-sizing: border-box;
+  font: inherit;
+  color: var(--nc-fg);
+  background: var(--nc-button-bg);
+  border: var(--nc-border-width) solid var(--nc-border-color);
+  border-radius: calc(var(--nc-radius) / 2);
+  padding: 5px 8px;
+  user-select: text;
+  -webkit-user-select: text;
+}
+.shade-input:focus { outline: 2px solid var(--nc-accent); outline-offset: -1px; }
+.shade-volume { display: grid; grid-template-columns: auto 1fr 3.5em; align-items: center; gap: 8px; }
+.shade-volume .shade-field-name { margin: 0; }
+.shade-icon-line { display: flex; align-items: center; gap: 8px; }
+.shade-icon-line .shade-input { flex: 1; min-width: 0; width: auto; }
+.shade-icon-preview { flex: none; width: 28px; height: 28px; display: inline-flex; }
+.shade-icon-preview img { width: 100%; height: 100%; object-fit: contain; }
+.shade-icon-preview .nc-avatar { font-size: 14px; }
+.shade-icon-error { margin-top: 4px; color: var(--nc-danger); font-size: 0.9em; }
+.shade-volume input[type="range"] { min-width: 0; accent-color: var(--nc-accent); }
+.shade-volume-value { text-align: right; color: var(--nc-fg-muted); font-size: 0.9em; }
+.shade-error { margin-top: 8px; color: var(--nc-danger); }
+.shade-error[hidden] { display: none; }
+.shade-settings-foot { display: flex; gap: 8px; margin-top: 10px; }
+input[type="checkbox"] { accent-color: var(--nc-accent); }
+
+@media (prefers-reduced-motion: reduce) {
+  .shade *, .shade-items-wrap {
+    transition: none !important;
+    animation: none !important;
+  }
+}

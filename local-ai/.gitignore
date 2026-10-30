@@ -1,0 +1,13 @@
+# Rebuilt or re-downloaded by bootstrap.sh: never commit
+bin/
+models/
+images/
+repos/
+data/
+config/opencode/node_modules/
+# Parakeet: venv and ONNX models are large downloads, not source
+parakeet/venv/
+parakeet/model/
+parakeet/model-v2/
+__pycache__/
+*.pyc

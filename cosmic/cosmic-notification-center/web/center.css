@@ -1,0 +1,521 @@
+/* Notification center. Loaded after default.css, so every look comes from the same --nc-*
+   custom properties; theme.css / style.css (injected as <style id="user">) override either.
+
+   Stable hooks (everything lives under the .center root):
+     .center                      root; .center-view (.center-list-view / .center-detail-view)
+     .center-bar                  toolbar: .center-search .center-filter .center-check .btn
+     .center-confirm              the in-page "clear history" confirm
+     .center-groups > .day > .app-group > .row      (Day > App; .center-groups.by-app: "App only")
+       .day[data-day]  .day-title   .app-group[data-app]  .app-title .app-name .app-count
+     Collapsible sections (a day and an app group are both sections; `.collapsed` hides the body):
+       .center-day[data-day][data-kind="day"]            a day; .center-day.collapsed
+       .center-group[data-app][data-kind="group"|"app"]  an app group ("app" = App only mode);
+                                                          .center-group.collapsed
+       .center-head                    the clickable header ([role=button], [aria-expanded],
+                                       .selected for the keyboard cursor); holds
+         .center-chev                  the chevron (turns 90 degrees when open)
+         day header:  .day-label .day-count .day-unread
+         group header: .group-icon .app-name .app-count .group-unread
+                       .group-summary .group-time   (newest summary and time: collapsed only)
+       .center-body > .center-inner    the rows' box; the open/close animation runs on it
+     .nc-avatar[data-app]         the letter avatar shown in .group-icon / .row-icon / .detail-icon
+                                  when no icon resolves (colors: --nc-avatar-* in default.css)
+     Toolbar:
+       .center-group-by                the "Group by: Day > App | App only" select
+       .center-toggle-all              the "Collapse all" / "Expand all" button
+                                       ([data-mode="collapse"|"expand"] = what a click does)
+     .row                         one notification; also carries
+                                    [data-app] [data-urgency] [data-state] [data-category]
+                                    .tag-<name> + rule classes, .unread, .selected
+       .row-icon .row-main .row-head .row-app .row-summary .row-preview
+       .row-meta .row-badges .badge(.badge-unread/-critical/-state/-blocked/-dnd/-store_only)
+       .row-time .row-actions .row-btn(.row-read/.row-delete)
+     .detail                      the details page; same data-* / .tag-* / .unread hooks as .row
+       .detail-head .detail-icon .detail-app .detail-summary .detail-line .detail-time
+       .detail-body (links are <a>, highlights <mark class="...">)  .detail-tools .btn-link
+       .detail-section(.detail-actions/.detail-buttons/.detail-meta/.detail-hints/.detail-runlog)
+       table.kv  .chips .chip  .detail-note  .detail-empty  .detail-notfound
+     .detail-image > .nc-image   the large preview and its Copy buttons (hooks and --nc-image-*
+                                  size variables in default.css); rows get .nc-image-thumb
+     .detail-reply > #d-reply > .nc-reply   the sender's reply actions (hooks in default.css)
+     .nc-button                   a rule button in .detail-buttons-row (the rule's label as written);
+                                  [data-kind="run"|"builtin"] [data-builtin] [data-minutes]
+     .nc-runlog-wrap > table.nc-runlog   the run log, newest first
+       tr.nc-run[data-state="ok|failed|signal|timeout|skipped|running"][data-trigger="rule|button"]
+         td.nc-run-trigger .nc-run-status .nc-run-duration   .nc-runlog-toggle (time, when it has output)
+       tr.nc-runlog-output > td > pre.nc-run-output   the output tail (shown on toggle)
+     .nc-runlog-tools > .nc-runlog-refresh   the "Refresh" link
+     .center-flash                transient message (.error variant)
+     .center-empty .center-more .center-status
+   Center-only variables (all default to the shared ones):
+     --nc-center-row-hover, --nc-center-row-selected, --nc-center-bar-bg, --nc-center-title-bg,
+     --nc-center-danger, --nc-center-radius, --nc-center-font-size,
+     --nc-center-anim-duration (open/close, default 160ms; no animation under reduced motion)
+*/
+
+html, body {
+  height: 100%;
+  background: var(--nc-bg);
+  overflow: hidden;
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+.center {
+  --nc-center-row-hover: rgba(255, 255, 255, 0.045);
+  --nc-center-row-selected: rgba(138, 180, 248, 0.14);
+  --nc-center-bar-bg: rgba(255, 255, 255, 0.03);
+  --nc-center-title-bg: var(--nc-bg);
+  --nc-center-danger: var(--nc-urgency-critical);
+  --nc-center-radius: min(var(--nc-radius), 8px);
+  --nc-center-font-size: 13px;
+  --nc-center-anim-duration: 160ms;
+
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  background: var(--nc-bg);
+  color: var(--nc-fg);
+  font-family: var(--nc-font-family);
+  font-size: var(--nc-center-font-size);
+  line-height: 1.4;
+}
+.center *, .center *::before, .center *::after { box-sizing: border-box; }
+.center [hidden] { display: none !important; }
+
+.center-view { display: flex; flex-direction: column; flex: 1; min-height: 0; }
+
+/* ---- toolbar and controls ---- */
+.center-bar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 7px 10px;
+  background: var(--nc-center-bar-bg);
+  border-bottom: 1px solid var(--nc-border-color);
+}
+.center-spacer { flex: 1; }
+.center-title { font-weight: 600; color: var(--nc-fg-muted); }
+
+.center-search, .center-filter {
+  font: inherit;
+  color: var(--nc-fg);
+  background: rgba(0, 0, 0, 0.25);
+  border: 1px solid var(--nc-border-color);
+  border-radius: var(--nc-center-radius);
+  padding: 5px 8px;
+  outline: none;
+}
+.center-search { flex: 1 1 120px; min-width: 110px; max-width: 280px; }
+.center-search:focus, .center-filter:focus { border-color: var(--nc-accent); }
+/* native selects ignore the dark theme, so draw the arrow ourselves (data: images are blocked) */
+.center-filter {
+  max-width: 150px;
+  padding-right: 22px;
+  -webkit-appearance: none;
+  appearance: none;
+  background-image:
+    linear-gradient(45deg, transparent 50%, var(--nc-fg-muted) 50%),
+    linear-gradient(135deg, var(--nc-fg-muted) 50%, transparent 50%);
+  background-position: calc(100% - 12px) 55%, calc(100% - 8px) 55%;
+  background-size: 4px 4px, 4px 4px;
+  background-repeat: no-repeat;
+}
+.center-filter option { background: var(--nc-bg); color: var(--nc-fg); }
+.center-check { display: inline-flex; align-items: center; gap: 5px; color: var(--nc-fg-muted); cursor: pointer; }
+.center-check input { accent-color: var(--nc-accent); }
+
+.btn {
+  font: inherit;
+  color: var(--nc-fg);
+  background: var(--nc-button-bg);
+  border: 1px solid transparent;
+  border-radius: var(--nc-center-radius);
+  padding: 5px 11px;
+  cursor: pointer;
+}
+.btn:hover:not(:disabled) { background: var(--nc-button-bg-hover); }
+.btn:focus-visible, .row-btn:focus-visible { outline: 1px solid var(--nc-accent); }
+.btn:disabled { opacity: 0.45; cursor: not-allowed; }
+.btn-danger { color: var(--nc-center-danger); }
+.btn-action { color: var(--nc-accent); }
+.btn-link { color: var(--nc-accent); display: inline-flex; gap: 6px; max-width: 100%; }
+.btn-link .link-href {
+  color: var(--nc-fg-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 320px;
+}
+
+.center-confirm {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  background: rgba(242, 139, 130, 0.12);
+  border-bottom: 1px solid var(--nc-center-danger);
+}
+.center-confirm span { flex: 1; }
+
+/* ---- list ---- */
+.center-scroll { flex: 1; min-height: 0; overflow-y: auto; }
+.center-status {
+  padding: 3px 12px;
+  color: var(--nc-fg-muted);
+  font-size: 0.9em;
+  border-top: 1px solid var(--nc-border-color);
+}
+.center-empty, .center-more { padding: 24px; text-align: center; color: var(--nc-fg-muted); }
+
+.center-head { cursor: pointer; outline: none; -webkit-user-select: none; user-select: none; }
+.center-head:hover { background: var(--nc-center-row-hover); }
+.center-head:focus-visible { outline: 1px solid var(--nc-accent); outline-offset: -1px; }
+.center-head.selected { background: var(--nc-center-row-selected); }
+.center-chev {
+  flex: none;
+  width: 12px;
+  text-align: center;
+  color: var(--nc-fg-muted);
+  transition: transform var(--nc-center-anim-duration) ease;
+  transform: rotate(90deg);
+}
+.collapsed > .center-head > .center-chev { transform: none; }
+
+/* The rows live in a grid box whose single row animates between 1fr and 0fr. */
+.center-body {
+  display: grid;
+  grid-template-rows: 1fr;
+  transition: grid-template-rows var(--nc-center-anim-duration) ease,
+              visibility 0s linear 0s;
+}
+.center-inner { min-height: 0; overflow: hidden; }
+.collapsed > .center-body {
+  grid-template-rows: 0fr;
+  visibility: hidden;   /* out of the tab order and hit testing once closed */
+  transition: grid-template-rows var(--nc-center-anim-duration) ease,
+              visibility 0s linear var(--nc-center-anim-duration);
+}
+@media (prefers-reduced-motion: reduce) {
+  .center-chev, .center-body, .collapsed > .center-body { transition: none; }
+}
+
+.center-toggle-all { min-width: 98px; }
+.center-group-by { max-width: 190px; }
+
+/* The list toolbar never wraps or scrolls: the search box shrinks, the rarely used controls
+   (tag filter, group by, collapse all, clear history) live in the "..." overflow menu. */
+.center-list-view .center-bar { flex-wrap: nowrap; }
+.center-list-view .center-bar > * { flex: none; }
+.center-list-view .center-bar > .center-search { flex: 1 1 120px; min-width: 90px; }
+.center-list-view .center-bar > .center-spacer { flex: 1 1 0; min-width: 0; }
+.center-list-view .center-bar .center-filter { max-width: 130px; }
+.btn-icon { padding: 5px 9px; min-width: 32px; line-height: 1.2; font-size: 1.1em; }
+.btn-icon.active { color: var(--nc-accent); }
+.center-menu-wrap { position: relative; }
+.center-menu {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 6px);
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 230px;
+  padding: 10px;
+  background: var(--nc-bg);
+  border: 1px solid var(--nc-border-color);
+  border-radius: var(--nc-center-radius);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+}
+.center-menu-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; color: var(--nc-fg-muted); }
+.center-menu-row .center-filter { max-width: 150px; flex: 1; }
+.center-menu .btn { text-align: left; }
+
+.day-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  margin: 0;
+  padding: 6px 12px;
+  font-size: 0.85em;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--nc-fg-muted);
+  background: var(--nc-center-title-bg);
+  border-bottom: 1px solid var(--nc-border-color);
+}
+.app-title {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  padding: 6px 12px 2px;
+  font-weight: 600;
+  color: var(--nc-accent);
+}
+.app-count {
+  flex: none;
+  padding: 0 7px;
+  font-weight: 400;
+  color: var(--nc-fg-muted);
+  font-size: 0.85em;
+  line-height: 1.6;
+  border-radius: 999px;
+  background: var(--nc-button-bg);
+}
+.app-title { align-items: center; padding: 5px 12px; }
+.app-name { flex: none; max-width: 40%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.group-icon { flex: none; width: 18px; height: 18px; display: inline-flex; }
+.group-icon img { width: 100%; height: 100%; object-fit: contain; }
+.group-icon .nc-avatar { font-size: 10px; }
+.group-unread {
+  flex: none;
+  padding: 0 6px;
+  font-size: 0.8em;
+  line-height: 1.6;
+  font-weight: 400;
+  border-radius: 999px;
+  color: var(--nc-bg);
+  background: var(--nc-accent);
+}
+.group-summary {
+  flex: 1;
+  min-width: 0;
+  display: none;   /* the newest summary shows only while the group is collapsed */
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 400;
+  color: var(--nc-fg-muted);
+}
+.group-time { flex: none; margin-left: auto; margin-right: 54px; /* lines up with .row-time */ font-weight: 400; color: var(--nc-fg-muted); font-variant-numeric: tabular-nums; }
+.collapsed > .app-title .group-summary { display: block; }
+.collapsed > .app-title .group-time { margin-left: 0; }
+.day-label { flex: none; }
+.day-count, .day-unread { font-weight: 400; letter-spacing: 0; text-transform: none; font-size: 0.95em; }
+.day-count { padding: 0 7px; border-radius: 999px; background: var(--nc-button-bg); }
+.day-unread { color: var(--nc-accent); }
+.by-app > .center-group > .app-title {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: var(--nc-center-title-bg);
+  border-bottom: 1px solid var(--nc-border-color);
+}
+
+.row {
+  --nc-urgency: var(--nc-urgency-normal);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 5px 12px 5px 9px;
+  border-left: 3px solid var(--nc-urgency);
+  cursor: pointer;
+  outline: none;
+}
+.row[data-urgency="low"] { --nc-urgency: var(--nc-urgency-low); }
+.row[data-urgency="critical"] { --nc-urgency: var(--nc-urgency-critical); }
+.row[data-state="blocked"], .row[data-state="store_only"] { opacity: 0.6; }
+.row:hover { background: var(--nc-center-row-hover); }
+.row.selected { background: var(--nc-center-row-selected); }
+
+.row-icon, .detail-icon { flex: none; width: 24px; height: 24px; display: inline-flex; }
+.row-icon img, .detail-icon img { width: 100%; height: 100%; object-fit: contain; }
+.row-icon .nc-avatar { font-size: 12px; }
+
+.row-main { flex: 1; min-width: 0; }
+.row-head { display: flex; gap: 8px; align-items: baseline; min-width: 0; }
+.row-app {
+  flex: none;
+  max-width: 140px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.85em;
+  color: var(--nc-fg-muted);
+}
+.row-summary {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--nc-fg-muted);
+}
+.row.unread .row-summary { color: var(--nc-fg); font-weight: 600; }
+.row-preview {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--nc-fg-muted);
+  font-size: 0.95em;
+}
+
+.row-meta { flex: none; display: flex; align-items: center; gap: 8px; }
+.row-time { color: var(--nc-fg-muted); font-variant-numeric: tabular-nums; }
+.row-badges { display: inline-flex; gap: 4px; }
+
+.badge {
+  display: inline-block;
+  padding: 0 6px;
+  border-radius: 999px;
+  font-size: 0.8em;
+  line-height: 1.6;
+  color: var(--nc-fg-muted);
+  background: var(--nc-button-bg);
+  white-space: nowrap;
+}
+.badge-unread { color: var(--nc-bg); background: var(--nc-accent); }
+.badge-critical, .badge-urgency.badge-critical { color: var(--nc-center-danger); background: rgba(242, 139, 130, 0.16); }
+.badge-blocked { color: var(--nc-center-danger); }
+.badge-dnd, .badge-store_only { color: var(--nc-fg-muted); }
+
+.row-actions { flex: none; display: flex; gap: 2px; width: 44px; justify-content: flex-end; visibility: hidden; }
+.row:hover .row-actions, .row.selected .row-actions { visibility: visible; }
+.row-btn {
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  font: inherit;
+  line-height: 1;
+  color: var(--nc-fg-muted);
+  background: transparent;
+  border: 0;
+  border-radius: 50%;
+  cursor: pointer;
+}
+.row-btn:hover { background: var(--nc-button-bg-hover); color: var(--nc-fg); }
+.row-delete:hover { color: var(--nc-center-danger); }
+
+/* ---- details ---- */
+.detail { max-width: 860px; padding: 16px 20px 32px; }
+.detail-notfound { padding: 40px 0; color: var(--nc-fg-muted); font-size: 1.1em; }
+.detail-head { display: flex; gap: 12px; align-items: flex-start; }
+.detail-icon { width: 40px; height: 40px; }
+.detail-icon .nc-avatar { font-size: 20px; }
+.detail-titles { flex: 1; min-width: 0; }
+.detail-app { font-size: 0.85em; letter-spacing: 0.04em; text-transform: uppercase; color: var(--nc-fg-muted); }
+.detail-summary { margin: 2px 0 4px; font-size: 1.45em; font-weight: 600; overflow-wrap: anywhere; }
+.detail-line { display: flex; gap: 8px; align-items: center; color: var(--nc-fg-muted); }
+.detail-body {
+  margin: 14px 0 0;
+  padding: 10px 12px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-size: 1.05em;
+  line-height: 1.5;
+  background: rgba(0, 0, 0, 0.18);
+  border-left: 3px solid var(--nc-urgency, var(--nc-urgency-normal));
+  border-radius: var(--nc-center-radius);
+}
+.detail[data-urgency="low"] { --nc-urgency: var(--nc-urgency-low); }
+.detail[data-urgency="critical"] { --nc-urgency: var(--nc-urgency-critical); }
+.detail-body a { color: var(--nc-accent); text-decoration: underline; cursor: pointer; }
+.detail mark, .row mark { background: var(--nc-mark-bg); color: var(--nc-mark-fg); border-radius: 3px; }
+
+.detail-image { margin-top: 12px; }
+.detail-image .nc-image { margin-top: 0; }
+
+.detail-tools, .detail-buttons-row { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+.detail-section { margin-top: 22px; }
+.detail-section h3 {
+  margin: 0 0 6px;
+  font-size: 0.8em;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--nc-fg-muted);
+  border-bottom: 1px solid var(--nc-border-color);
+  padding-bottom: 3px;
+}
+.detail-note { margin-top: 6px; color: var(--nc-center-danger); }
+.detail-empty { margin: 6px 0 0; color: var(--nc-fg-muted); font-style: italic; }
+.detail-buttons-row:empty { display: none; }
+.nc-button[data-kind="run"] { color: var(--nc-accent); }
+.detail-empty[hidden] { display: none; }
+
+table.nc-runlog { width: 100%; border-collapse: collapse; }
+table.nc-runlog th, table.nc-runlog td { padding: 3px 10px 3px 0; vertical-align: top; text-align: left; }
+table.nc-runlog th { font-weight: 400; color: var(--nc-fg-muted); white-space: nowrap; }
+table.nc-runlog td { font-size: 0.95em; overflow-wrap: anywhere; }
+.nc-run-duration { white-space: nowrap; color: var(--nc-fg-muted); }
+.nc-run-status { white-space: nowrap; }
+.nc-run[data-state="failed"] .nc-run-status,
+.nc-run[data-state="signal"] .nc-run-status,
+.nc-run[data-state="timeout"] .nc-run-status { color: var(--nc-center-danger); }
+.nc-run[data-state="skipped"] .nc-run-status { color: var(--nc-fg-muted); font-style: italic; }
+.nc-runlog-toggle {
+  font: inherit;
+  color: var(--nc-accent);
+  background: none;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+  text-align: left;
+}
+.nc-runlog-toggle::before { content: "\25B8\00a0"; }
+.nc-run.open .nc-runlog-toggle::before { content: "\25BE\00a0"; }
+.nc-runlog-output[hidden] { display: none; }
+pre.nc-run-output {
+  margin: 0 0 6px;
+  padding: 8px 10px;
+  max-height: 14em;
+  overflow: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-family: ui-monospace, "JetBrains Mono", monospace;
+  font-size: 0.9em;
+  background: var(--nc-center-bar-bg);
+  border: 1px solid var(--nc-border-color);
+  border-radius: var(--nc-center-radius);
+}
+.nc-runlog-tools { margin-top: 6px; }
+.nc-runlog-refresh {
+  font: inherit;
+  color: var(--nc-accent);
+  background: none;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+  text-decoration: underline;
+}
+
+table.kv { width: 100%; border-collapse: collapse; }
+table.kv th, table.kv td { padding: 2px 0; vertical-align: top; text-align: left; }
+table.kv th {
+  width: 150px;
+  padding-right: 12px;
+  font-weight: 400;
+  color: var(--nc-fg-muted);
+  white-space: nowrap;
+}
+table.kv td { overflow-wrap: anywhere; font-family: ui-monospace, "JetBrains Mono", monospace; font-size: 0.95em; }
+.chips { display: inline-flex; flex-wrap: wrap; gap: 4px; }
+.chip { padding: 0 7px; border-radius: 999px; background: var(--nc-button-bg); }
+
+/* ---- flash ---- */
+.center-flash {
+  position: fixed;
+  right: 16px;
+  bottom: 28px;
+  z-index: 10;
+  padding: 7px 12px;
+  color: var(--nc-fg);
+  background: var(--nc-button-bg-hover);
+  border: 1px solid var(--nc-border-color);
+  border-radius: var(--nc-center-radius);
+  box-shadow: var(--nc-shadow);
+}
+.center-flash.error { color: var(--nc-center-danger); border-color: var(--nc-center-danger); }
+
+/* ---- scrollbars ---- */
+.center-scroll::-webkit-scrollbar { width: 10px; }
+.center-scroll::-webkit-scrollbar-thumb {
+  background: var(--nc-border-color);
+  border-radius: 5px;
+  border: 2px solid var(--nc-bg);
+}

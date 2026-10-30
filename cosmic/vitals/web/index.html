@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="en" data-theme="server">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>vitals</title>
+<meta name="theme-color" content="#10131a">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="vitals">
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="icon" href="/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/icon-192.png">
+<link rel="stylesheet" href="/uplot.css">
+<link rel="stylesheet" href="/app.css">
+</head>
+<body>
+<header id="bar">
+  <h1>vitals</h1>
+  <span id="status" class="pill" role="status">connecting…</span>
+  <span id="clock" class="muted"></span>
+  <span class="spacer"></span>
+  <button id="wake" class="ibtn" type="button" aria-pressed="false" title="Keep the screen awake" hidden>Awake</button>
+  <button id="full" class="ibtn" type="button" title="Fullscreen" hidden>Full</button>
+  <button id="gear" class="ibtn" type="button" title="Settings" aria-label="Settings">&#9881;</button>
+</header>
+<div id="banner" class="banner" hidden>No certificate: provide a certificate folder, or the dashboard runs without HTTPS (no install-as-app, no keep-awake)</div>
+<main id="grid"></main>
+
+<div id="sheet" class="sheet" hidden>
+  <div class="panel" role="dialog" aria-modal="true" aria-label="Settings">
+    <div class="phead"><h2>Settings</h2><button id="sheet-close" class="ibtn" type="button">Done</button></div>
+    <p class="muted small">Saved on this device only. The server's own layout is the default.</p>
+    <h3>Display</h3>
+    <label class="row">Density
+      <select id="set-density"><option value="compact">Compact</option><option value="comfortable">Comfortable</option></select>
+    </label>
+    <label class="row">Layout
+      <select id="set-layout">
+        <option value="stacked">Stacked (one section per row)</option>
+        <option value="rows">Server rows</option>
+        <option value="custom">Custom rows</option>
+      </select>
+    </label>
+    <label class="row">Graph window
+      <select id="set-win">
+        <option value="1">1 minute</option><option value="2">2 minutes</option><option value="5">5 minutes</option>
+        <option value="10">10 minutes</option><option value="30">30 minutes</option>
+      </select>
+    </label>
+    <label class="row">Tokens window
+      <select id="set-twin">
+        <option value="1h">1 hour</option><option value="6h">6 hours</option><option value="24h">24 hours</option>
+        <option value="7d">7 days</option><option value="30d">30 days</option>
+      </select>
+    </label>
+    <label class="row">Theme
+      <select id="set-theme">
+        <option value="server">Server theme</option><option value="dark">Dark</option>
+        <option value="oled">Black</option><option value="light">Light</option>
+      </select>
+    </label>
+    <label class="row">Show idle interfaces <input id="set-idle" type="checkbox"></label>
+    <h3>Sections</h3>
+    <p class="muted small">Visible, Line (timeline), Bars, Sum (summary), chart height in px, order.</p>
+    <ul id="set-sections" class="list"></ul>
+    <div id="set-custom" hidden>
+      <h3>Custom rows</h3>
+      <p class="muted small">Each row holds sections side by side; the number is the width weight.</p>
+      <div id="set-rows"></div>
+      <button id="add-row" class="btn" type="button">Add row</button>
+    </div>
+    <h3>Network interfaces</h3>
+    <p class="muted small">The server's config decides which interfaces count; this list is read-only.</p>
+    <ul id="set-nets" class="list"></ul>
+    <h3>This device</h3>
+    <div class="row"><button id="install" class="btn" type="button" hidden>Install as app</button>
+      <a id="cert" class="btn" href="/certificate.crt" hidden>Download certificate</a>
+      <button id="reset-layout" class="btn" type="button">Reset layout</button>
+      <button id="reset" class="btn" type="button">Reset everything</button></div>
+    <p id="set-info" class="muted small"></p>
+  </div>
+</div>
+
+<script src="/uplot.js"></script>
+<script src="/app.js"></script>
+</body>
+</html>

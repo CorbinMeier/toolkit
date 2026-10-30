@@ -1,0 +1,21 @@
+[package]
+name = "cosmic-applet-notification-center"
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+description = "Panel applet for the cosmic-notification-center daemon: bell, unread badge, DND"
+
+[dependencies]
+# zbus 5 and tokio are already in libcosmic's lockfile; features match libcosmic's `tokio` feature.
+zbus = { version = "5", default-features = false, features = ["tokio"] }
+tokio = { version = "1", features = ["rt", "macros", "time"] }
+futures-util = "0.3"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+# Pinned to the libcosmic rev in cosmic-applets 328d142 (COSMIC 1.11.0) Cargo.lock.
+[dependencies.libcosmic]
+git = "https://github.com/pop-os/libcosmic.git"
+rev = "430f3d48a97d8779f9c1985473912e594ccca1ae"
+default-features = false
+features = ["applet", "applet-token", "multi-window", "tokio", "wayland", "winit"]
