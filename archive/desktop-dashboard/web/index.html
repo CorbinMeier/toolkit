@@ -1,0 +1,1178 @@
+<!doctype html>
+<html lang="en" class="h-full">
+<head>
+<meta charset="utf-8">
+<title>Desktop Dashboard</title>
+<script src="vendor/tailwind.js"></script>
+<style type="text/tailwindcss">
+  @theme {
+    --font-sans: "Fira Sans", system-ui, sans-serif;
+    --font-mono: "Fira Mono", ui-monospace, monospace;
+    --color-ink:      oklch(0.96 0.01 250);
+    --color-muted:    oklch(0.70 0.03 255);
+    --color-faint:    oklch(0.52 0.03 258);
+    --color-panel:    oklch(0.19 0.015 260 / 0.88);
+    --color-hairline: oklch(0.70 0.04 260 / 0.14);
+    /* Cyberpunk UIKit accent triad (ui/cyberpunk/CyberpunkUIKit) -- exact
+       hex values from the template so the two stay in visual sync. */
+    --color-accent:        #2be4ea;  /* cyan   */
+    --color-warm:          #fed33f;  /* amber  */
+    --color-crimson:       #e8615a;
+    --color-cyan-border:   #1f6a6e;
+    --color-amber-border:  #8a6a12;
+    --color-crimson-border:#9c3230;
+    --color-online:        #2bfea0;
+    /* Projects status triad (#62) -- see the restated :root below for why
+       these two are separate tokens rather than reuses, and why no theme
+       overrides them. */
+    --color-actionable:    #2bfea0;  /* green  -- actionable open issues */
+    --color-done:          #a072f0;  /* violet -- closed issues */
+  }
+</style>
+<style>
+  /* Tailwind's browser JIT only emits an @theme token onto :root when its
+     scanner sees the token's name inside an HTML class attribute (a plain
+     utility like `text-warm`, or the var() spelled out in `[...]`
+     arbitrary-value syntax) -- never for a var() reference buried in this
+     <style> tag or in app.js. --color-warm used to be emitted only because
+     the old offline banner happened to carry `text-warm`; removing that
+     class (recoloring the banner crimson, below) silently broke every
+     other var(--color-warm) reference app-wide -- sun icon, hot-threshold
+     bars, sparkline gradient, sun arc. Restating the palette here, as plain
+     CSS the browser parses unconditionally, decouples every var() consumer
+     (this stylesheet and app.js) from Tailwind's scanner entirely. @theme
+     keeps its own copy so text-accent/text-crimson/bg-crimson etc. still
+     generate -- the two are intentionally redundant. */
+  :root{
+    /* #50: same "Tailwind's scanner never emits an @theme token onto :root
+       unless a class in markup names it" gotcha as the --color-* restated
+       below -- no element carries a font-mono/font-sans utility class or
+       [family-name:var(--font-mono)] arbitrary value, so the @theme block's
+       copies above are never actually live. Restating here, in a plain
+       <style> tag the browser parses unconditionally, is what makes
+       body{font-family:var(--font-mono)} below actually resolve. */
+    --font-sans: "Fira Sans", system-ui, sans-serif;
+    --font-mono: "Fira Mono", ui-monospace, monospace;
+    --color-ink:      oklch(0.96 0.01 250);
+    --color-muted:    oklch(0.70 0.03 255);
+    --color-faint:    oklch(0.52 0.03 258);
+    --color-panel:    oklch(0.19 0.015 260 / 0.88);
+    --color-hairline: oklch(0.70 0.04 260 / 0.14);
+    --color-accent:        #2be4ea;
+    --color-warm:          #fed33f;
+    --color-crimson:       #e8615a;
+    --color-cyan-border:   #1f6a6e;
+    --color-amber-border:  #8a6a12;
+    --color-crimson-border:#9c3230;
+    --color-online:        #2bfea0;
+    /* Panel-chrome-only crimson (border/underline for .accent-crimson,
+       e.g. Log): separate from --color-crimson/-border above, which stay
+       semantic red for alert states (offline banner, critical log status)
+       even under Retro Terminal -- #38 asked for the panel chrome to go
+       green, not for alerts to lose their signal color. Same values as
+       --color-crimson by default, so night_ops looks unchanged. */
+    --color-crimson-panel:        #e8615a;
+    --color-crimson-panel-border: #9c3230;
+    /* Weather value alert badge (#49): a filled white-on-red badge for an
+       out-of-range reading (hot temp/forecast high, high rain %, severe
+       condition text -- see .alert-badge below and renderWeather() in
+       app.js). Deeper/more saturated than --color-crimson (that's tuned
+       to sit as text/border on a dark panel; this is a solid fill a white
+       label needs to read clearly against), and deliberately not themed
+       per-theme like --color-crimson-panel is -- same "stays genuinely
+       red regardless of theme" intent as --color-crimson itself. */
+    --color-alert-bg: #b3121a;
+    /* Projects panel status triad (#62): red = ai-blocked (waiting on a
+       human), green = actionable, violet = closed. Red reuses
+       --color-crimson, which already resists theming for exactly this
+       "carries meaning, not chrome" reason; the other two are declared
+       here as their own tokens.
+
+       The green is NOT --color-online, even though that is the house green
+       and the obvious reuse. --color-online is panel chrome and every theme
+       overrides it -- retro_orange sets it to #ff9a2e -- so borrowing it
+       rendered the "green" column amber under the active theme and
+       collapsed a three-color triad into two. A status color that a theme
+       can recolor is not a status color.
+
+       Both are deliberately left out of the per-theme blocks below, on the
+       same reasoning as --color-crimson and --color-alert-bg above. The CRT
+       themes converge accent/warm onto a single phosphor, which would erase
+       the distinction this card exists to draw. Retune here if they
+       clash. */
+    --color-actionable: #2bfea0;
+    --color-done:       #a072f0;
+    /* CPU/MEM/BAT utilization-bar spectrum (#31's angled-bar graphic,
+       app.js's spectrumColor()) -- read via getComputedStyle rather than
+       hardcoded in JS so a theme can override them like every other
+       color here (#39). red -> gold -> green by default. */
+    --spectrum-lo:  #e8615a;
+    --spectrum-mid: #fed33f;
+    --spectrum-hi:  #2bfea0;
+    /* Safe-area insets so panels don't render under the user's own
+       top/bottom bars. Real values come from config.json's
+       display.safe_area_* (applied in app.js's apply()); these are just
+       the pre-first-paint fallback. */
+    --safe-top:    0px;
+    --safe-bottom: 0px;
+
+    /* Surface tint (#78; the opaque background itself since #89, strength-
+       adjustable per #88; moving skybox geometry since #92): app.js's
+       sunTint() sets these every poll to a continuously-interpolated
+       three-stop rgba gradient at alpha 1 -- this paints the real
+       background, so the pre-first-paint fallback below must already be
+       an opaque neutral slate (TINT_NEUTRAL in app.js), not `transparent`;
+       leaving it transparent would flash body's Night Ops ambient
+       gradient (reds/purples) before the first poll lands, same failure
+       mode --safe-top/-bottom guard against. display.tint_strength
+       (Off/Subtle/Medium/Strong) now scales how far the color departs from
+       this neutral pair, not alpha -- Off holds exactly this pair, no
+       motion at all. --tint-glow/--tint-glow-pos are the #92 addition: a
+       third, moving stop between top and bottom -- their pre-first-paint
+       defaults MUST be real values, not left unset, since an unset custom
+       property referenced inside a gradient() invalidates the whole
+       `background` at computed-value time (the same flash failure mode,
+       triggered a different way) -- computed here as the same neutral
+       pair's own interpolation at the default 82% position, so a first
+       paint before any poll lands reads as a perfectly flat two-stop
+       gradient, indistinguishable from the pre-#92 fallback. Plain custom
+       properties, not part of the @theme-scanned --color-* set -- nothing
+       here is ever spelled out in an HTML class attribute, so the
+       Tailwind-scanner gotcha (web-styling.md) doesn't apply; this set
+       only ever needs the plain :root default already given. */
+    --tint-top: rgb(34, 36, 44);
+    --tint-glow: rgb(23, 24, 30);
+    --tint-glow-pos: 82%;
+    --tint-bottom: rgb(20, 21, 27);
+
+    /* Rendering layers (#32): a fixed z-order stack every component picks
+       one slot from, instead of ad-hoc z-index values scattered per
+       element. bg sits behind the panels (ambient glow blobs today); fx
+       sits above panel content but below the offline banner/boot overlay
+       -- built for the Retro Terminal CRT overlay (scanlines/vignette/
+       flicker), but themeless: any future effect that needs to sit above
+       content without being part of it uses this same slot. */
+    --z-bg: -1;
+    --z-content: 0;
+    --z-fx: 30;
+    --z-banner: 40;
+    --z-boot: 50;
+  }
+
+  /* ---------------------------------------------------------------- theme
+     Theme toggle surface (#32): a config.json `display.theme` field,
+     applied by app.js's apply() as data-theme on <html>. Three themes ship:
+     "night_ops" (default, no override needed -- it's the base palette
+     above), "retro_terminal" (CRT/green-phosphor), and "retro_orange" (#45,
+     the same CRT treatment in amber phosphor). A theme overrides only the
+     CSS custom properties every component already reads through
+     (--color-*, --panel-accent/--panel-border via .accent-*) -- component
+     shape/markup never branches on theme, so a new theme is a palette +
+     fx-layer addition, not a parallel set of components. */
+  html[data-theme="retro_terminal"]{
+    --color-ink:      #b9ffce;
+    --color-muted:    #6fe39a;
+    --color-faint:    #3f8f63;
+    --color-panel:    oklch(0.09 0.03 150 / 0.92);
+    --color-hairline: oklch(0.55 0.10 150 / 0.22);
+    /* Monochrome phosphor: accent/warm/crimson all converge on the same
+       green so accent-cyan/amber/crimson panels (System/Forecast/offline)
+       read as one consistent CRT palette without touching the class
+       assignments in index.html or app.js. */
+    --color-accent:         #39ff88;
+    --color-warm:           #39ff88;
+    --color-crimson:        #ff5f4d;
+    --color-cyan-border:    #1c6b3f;
+    --color-amber-border:   #1c6b3f;
+    --color-crimson-border: #7a2a1f;
+    --color-online:         #39ff88;
+    /* #38: Log panel chrome (border/underline) converges on the
+       same green as every other panel; --color-crimson/-border above
+       stay red so alert states (offline banner/dot, critical log) still
+       stand out on the phosphor screen. */
+    --color-crimson-panel:        #39ff88;
+    --color-crimson-panel-border: #1c6b3f;
+    /* #39: CPU/MEM/BAT utilization bars go all-green too -- graduated
+       dim -> bright phosphor instead of the red/gold/green spectrum. */
+    --spectrum-lo:  #145c33;
+    --spectrum-mid: #21a35c;
+    --spectrum-hi:  #39ff88;
+  }
+  html[data-theme="retro_terminal"] body{
+    background:#040a06;
+  }
+  html[data-theme="retro_terminal"] body.transparent{background:transparent}
+  /* CRT is flat and monochrome -- the cyberpunk ambient glow blobs and
+     panel blur belong to the Night Ops palette, not this one. */
+  html[data-theme="retro_terminal"] .glow{display:none}
+  html[data-theme="retro_terminal"] .panel{backdrop-filter:none}
+
+  /* retro_orange (#45): same CRT/phosphor treatment as retro_terminal,
+     amber hue instead of green -- mirrors its structure line for line so
+     the two stay in sync if the CRT mechanic ever changes. */
+  html[data-theme="retro_orange"]{
+    --color-ink:      #ffdcae;
+    --color-muted:    #e3a35a;
+    --color-faint:    #8f5f2e;
+    --color-panel:    oklch(0.10 0.03 55 / 0.92);
+    --color-hairline: oklch(0.55 0.10 55 / 0.22);
+    /* Monochrome phosphor: accent/warm/crimson all converge on the same
+       amber so accent-cyan/amber/crimson panels (System/Forecast/offline)
+       read as one consistent CRT palette without touching the class
+       assignments in index.html or app.js. */
+    --color-accent:         #ff9a2e;
+    --color-warm:           #ff9a2e;
+    --color-crimson:        #ff5f4d;
+    --color-cyan-border:    #8a4f14;
+    --color-amber-border:   #8a4f14;
+    --color-crimson-border: #7a2a1f;
+    --color-online:         #ff9a2e;
+    /* Log panel chrome (border/underline) converges on the same
+       amber as every other panel; --color-crimson/-border above stay red
+       so alert states (offline banner/dot, critical log) still stand out
+       on the phosphor screen. */
+    --color-crimson-panel:        #ff9a2e;
+    --color-crimson-panel-border: #8a4f14;
+    /* CPU/MEM/BAT utilization bars go all-amber too -- graduated dim ->
+       bright phosphor instead of the red/gold/green spectrum. */
+    --spectrum-lo:  #5c3210;
+    --spectrum-mid: #c4741e;
+    --spectrum-hi:  #ff9a2e;
+  }
+  html[data-theme="retro_orange"] body{
+    background:#0a0503;
+  }
+  html[data-theme="retro_orange"] body.transparent{background:transparent}
+  html[data-theme="retro_orange"] .glow{display:none}
+  html[data-theme="retro_orange"] .panel{backdrop-filter:none}
+
+  html,body{height:100%;margin:0;overflow:hidden}
+  body{
+    color:var(--color-ink);
+    /* #50: monospace is the one voice everywhere now, not a CRT-theme-only
+       detail -- previously only retro_terminal/retro_orange overrode this
+       to Fira Mono while night_ops (the default palette) stayed on Fira
+       Sans. var(--font-mono), not a literal, so this and the @theme token
+       (used by any future font-mono utility class) can't drift apart. */
+    font-family:var(--font-mono);
+    -webkit-font-smoothing:antialiased;
+    background:
+      radial-gradient(55% 48% at 30% 8%,  rgb(70 22 22 / .45), transparent 72%),
+      radial-gradient(120% 90% at 12% 0%,  oklch(0.32 0.09 265 / .55), transparent 62%),
+      radial-gradient(100% 80% at 92% 8%,  oklch(0.34 0.10 200 / .40), transparent 58%),
+      radial-gradient(90%  90% at 60% 108%,oklch(0.30 0.08 300 / .38), transparent 60%),
+      linear-gradient(160deg, oklch(0.16 0.03 265), oklch(0.11 0.02 255) 55%, oklch(0.13 0.03 240));
+  }
+  /* Transparent mode: let cosmic-bg's photo wallpaper show through.
+     display.transparent defaults to false since #89 -- #suntint is the
+     real, opaque background now -- but the rule stays as a one-key revert
+     for anyone who flips the config flag back. */
+  body.transparent{background:transparent}
+  /* #94: the Tint submenu's Opacity slider sets #suntint's opacity inline. */
+  body.transparent .panel{backdrop-filter:blur(18px) saturate(1.3)}
+
+  /* Cyberpunk UIKit accent triad -- any element opts in with one of these
+     classes; .panel/.sec-head/.glowtext/.dot read the accent back via the
+     --panel-accent/--panel-border custom props they set. Mixed accents can
+     coexist on one page, same as the template's per-component `accent` prop. */
+  .accent-cyan   {--panel-accent:var(--color-accent);  --panel-border:var(--color-cyan-border)}
+  .accent-amber  {--panel-accent:var(--color-warm);    --panel-border:var(--color-amber-border)}
+  .accent-crimson{--panel-accent:var(--color-crimson-panel); --panel-border:var(--color-crimson-panel-border)}
+
+  /* Weather out-of-range value badge (#49): filled white-on-red, not just
+     recolored text -- renderWeather() in app.js toggles this on the
+     specific span (current temp, forecast high, rain %, condition text)
+     that crossed a config.weather_alerts threshold. Sharp corners, no
+     radius, to match the panel/notch language rather than a soft pill. */
+  .alert-badge{background:var(--color-alert-bg); color:#fff; padding:0 0.3em}
+
+  /* Notched cut-corner card, ported from CyberpunkUIKit's CyberpunkPad --
+     solid dark fill, 2px accent-colored border, diagonal corner cut with a
+     glowing tab in the notch. */
+  .panel{
+    position:relative;
+    background:var(--color-panel);
+    border:2px solid var(--panel-border, var(--color-hairline));
+    clip-path:polygon(0 0,100% 0,100% calc(100% - 1.15rem),calc(100% - 1.15rem) 100%,0 100%);
+    backdrop-filter:blur(6px);
+  }
+  .panel::after{
+    content:"";
+    position:absolute;right:-2px;bottom:0.62rem;
+    width:1.55rem;height:3px;
+    background:var(--panel-accent, var(--color-accent));
+    box-shadow:0 0 6px var(--panel-accent, var(--color-accent));
+    transform:rotate(-45deg);transform-origin:right center;
+    pointer-events:none;
+  }
+  body.transparent .panel::after{box-shadow:none}
+
+  /* Section headers: glowing accent underline, ported from
+     CyberpunkSectionHeader's after: rule. */
+  .sec-head{position:relative;padding-bottom:0.65vmin}
+  .sec-head::after{
+    content:"";position:absolute;left:0;bottom:0;width:100%;height:1px;
+    background:var(--panel-accent, var(--color-accent));
+    box-shadow:0 0 6px var(--panel-accent, var(--color-accent));
+  }
+
+  /* Glow text, ported from CyberpunkGlowText -- reserved for the two
+     headline readouts (clock, temperature) so it reads as emphasis, not
+     noise. */
+  .glowtext{text-shadow:-6px -4px 26px var(--panel-accent, var(--color-accent))}
+
+  /* Status dot, ported from CyberpunkStatusDot. */
+  .dot{display:inline-block;width:0.55em;height:0.55em;border-radius:50%;
+       vertical-align:middle;margin-right:0.6em;flex:none}
+
+  .num{font-variant-numeric:tabular-nums;font-feature-settings:"tnum"}
+
+  /* System table: icon | label | value | histograph/badge, one row per
+     metric, so everything lines up in real grid columns instead of
+     independently-sized flex rows. No icons, one font size (#57
+     standardized System onto the same conventions Weather's .kv-grid
+     settled on) -- label | value(+status bar), with an optional sub line
+     directly underneath the value (#58 -- dash-prefixed, sitting below
+     the row rather than beside it as a third column). width:fit-content
+     for the same reason .kv-grid needs it: a direct child of .panel's
+     flex column otherwise inherits align-items:stretch and gets forced
+     to the panel's full cross-axis width. */
+  .sys-grid{display:grid;grid-template-columns:auto auto;
+    column-gap:1vmin;row-gap:0.3vmin;align-items:center;width:fit-content}
+  .sys-grid > .sys-key{text-align:left}
+  .sys-grid > .sys-val{justify-self:end;display:flex;align-items:center;gap:0.6vmin}
+  .sys-grid > .sys-sub{justify-self:end;grid-column:2}
+  /* A chart that has outgrown the value cell and taken its own row (#59,
+     Network's side-by-side down/up boxes). Spans both columns so it is not
+     bound to the value column's width, and adds a little top margin so it
+     reads as its own band rather than a third line of the row above. The
+     metric row itself keeps the standard shape -- this is an extra row
+     under it, not a change to its geometry. */
+  .sys-grid > .sys-graph{grid-column:1 / -1;margin-top:0.35vmin}
+
+  /* Projects panel (#62): repo | blocked | actionable | closed. Same
+     "one grid, so the columns line up top to bottom" principle as
+     .sys-grid/.kv-grid, but the three count columns are fixed-width and
+     right-aligned (ch units, not auto) so the numbers form true columns
+     instead of jittering as digit counts change between rows -- a 2-digit
+     count next to a 3-digit one would otherwise shift the whole row.
+     No width:fit-content here, unlike .sys-grid: the repo column is the
+     flexible one and should take the panel's width so long names have
+     room to truncate into. */
+  /* line-height is pinned rather than left to the default so .proj-scroll's
+     max-height below can be exact: an inherited/unspecified line-height
+     makes a row's height a guess, and guessing it low clips the last row
+     mid-glyph, which reads as a rendering bug rather than a fold. */
+  .proj-grid{display:grid;grid-template-columns:1fr 3.2ch 3.2ch 4ch;
+    column-gap:0.9vmin;row-gap:0.28vmin;align-items:baseline;width:100%;
+    line-height:1.5}
+  .proj-grid > .proj-num{text-align:right;font-variant-numeric:tabular-nums}
+  /* A zero count is noise on a status card -- the eye should land on the
+     rows that have something. Dimmed rather than blanked so the columns
+     still read as columns. */
+  .proj-grid > .proj-num.is-zero{color:var(--color-faint);opacity:0.45}
+  /* One page of repo rows (#64). This used to be the box the auto-cycle
+     (#29) passively scrolled, because the surface had no pointer to grab a
+     scrollbar with; since #36 it does, so Projects paginates instead and
+     is no longer an auto-cycle consumer (the mechanism itself stays, it
+     just has no shipped consumer again).
+     --proj-page is the SINGLE source of truth for the page size: this
+     height is computed from it, and renderProjects() reads it back off the
+     computed style to size its slice. Keeping the count in one place
+     preserves the property the auto-cycle version had -- the visible row
+     count is one layout fact that adapts if the font scales, not a magic
+     number duplicated in CSS and JS.
+     Eight line boxes plus the SEVEN gaps between them -- not eight gaps;
+     counting one gap per row overshoots by a gap and lets a sliver of a
+     ninth row show. 1.5em tracks .proj-grid's pinned line-height above;
+     the two must move together.
+     height, not max-height: a short last page would otherwise shrink the
+     panel and make the whole card jump on every page turn. */
+  .proj-scroll{--proj-page:8;
+    height:calc(var(--proj-page) * 1.5em + (var(--proj-page) - 1) * 0.28vmin);
+    overflow:hidden}
+  /* #91: Projects always shares #colLeft with System, but what else joins
+     it there differs by layout -- Sessions stacks under it in 'narrow',
+     nothing does in 'wide' (Sessions moves to #colCenter, see placePanels()
+     in app.js) -- so the page size is retuned per layout rather than left
+     at one value that's too tall for narrow and wastes space in wide.
+     Still the same single-source-of-truth property #64 established:
+     renderProjects() reads --proj-page back off the computed style,
+     wherever it lands. */
+  [data-layout="wide"] .proj-scroll{--proj-page:10}
+  [data-layout="narrow"] .proj-scroll{--proj-page:5}
+
+  /* Sessions panel (#71): user | where | login | duration. Same "one grid,
+     so the columns line up top to bottom" principle as .proj-grid/.sys-grid/
+     .kv-grid. The trailing three columns are auto-width and right-aligned
+     with tabular figures, so the times form true columns instead of
+     jittering as "5m" grows into "1h 20m". width:100% rather than
+     fit-content (matching .proj-grid, unlike .sys-grid): the user column is
+     the flexible one, and it is what long names should truncate into. */
+  .sess-grid{display:grid;grid-template-columns:1fr auto auto auto;
+    column-gap:0.9vmin;row-gap:0.28vmin;align-items:baseline;width:100%;
+    line-height:1.5}
+  .sess-grid > .sess-num{text-align:right;font-variant-numeric:tabular-nums}
+  /* #91: bounded box, not a fixed page like Projects -- Sessions has no
+     pager UI (see the panel's own comment) and its row count is genuinely
+     open-ended (every login since boot), so overflow past --sess-rows
+     reveals via the auto-cycle scroll-dwell loop (#29) instead. max-height
+     (not height, unlike .proj-scroll) so a boot with only two logins
+     doesn't force a tall empty box -- DESIGN.md's "leftover space stays
+     unfilled" still holds, this just caps how much space it's ALLOWED to
+     claim. --sess-rows is retuned per column composition, same reasoning
+     as .proj-scroll's --proj-page above. */
+  .sess-scroll{max-height:calc(var(--sess-rows, 6) * 1.6em);overflow:hidden}
+  [data-layout="narrow"] #colLeft .sess-scroll{--sess-rows:4}
+  [data-layout="wide"] #colCenter .sess-scroll{--sess-rows:9}
+  /* A session that is still open is a genuine live status condition, so it
+     takes the region's own accent rather than introducing a hue for this
+     panel -- DESIGN.md's One Accent Per Region Rule. Ended sessions stay
+     neutral ink: they are history, not a signal. */
+  .sess-grid > .sess-live{color:var(--color-accent)}
+
+  /* Control Button (#36) -- the system's first interactive affordance.
+     DESIGN.md's shape language has no rounded-rectangle vocabulary, so
+     these are sharp-cornered; and since glow is reserved for a real status
+     condition there, hover/active shift border+text color rather than
+     lighting up. Disabled is the honest end-of-range signal for pagination:
+     the control stays in place (so the row doesn't reflow) and goes flat. */
+  .ctl-btn{appearance:none;background:transparent;cursor:pointer;
+    border:1px solid var(--panel-border, var(--color-hairline));
+    color:var(--color-faint);font:inherit;line-height:1;
+    padding:0.25em 0.5em;transition:color .12s linear,border-color .12s linear}
+  .ctl-btn:hover:not(:disabled){color:var(--color-ink);
+    border-color:var(--panel-accent, var(--color-accent))}
+  .ctl-btn:active:not(:disabled){color:var(--panel-accent, var(--color-accent))}
+  .ctl-btn:disabled{opacity:0.3;cursor:default}
+
+  /* Context Menu (#66) -- the surface's own right-click menu, replacing
+     WebKit's default (Reload / Inspect Element / ...) now that #36 gave the
+     page pointer reach. Reuses .panel wholesale (same notched clip-path,
+     border, corner-tab glow) so it re-themes for free with every other
+     panel -- picking `.accent-cyan` at open time, same as System's own
+     accent, rather than inventing a fourth palette entry. Fixed-positioned
+     at the click point (openContextMenu() in app.js clamps it inside the
+     viewport) and sized to its content, never full-width. */
+  .ctx-menu{position:fixed;z-index:50;display:flex;flex-direction:column;
+    padding:0.3vmin;min-width:11rem}
+  /* A long list (Cards, Profiles) scrolls inside the viewport instead of
+     running off the bottom; positionMenu() clamps using the capped height. */
+  .ctx-menu{max-height:calc(100vh - 8px);overflow-y:auto;overscroll-behavior:contain;
+    scrollbar-width:thin}
+  .ctx-menu-item{appearance:none;background:transparent;cursor:pointer;
+    border:none;text-align:left;color:var(--color-faint);font:inherit;
+    padding:0.45em 0.7em;transition:color .12s linear,background-color .12s linear}
+  .ctx-menu-item:hover{color:var(--color-ink);
+    background-color:color-mix(in srgb, var(--panel-accent, var(--color-accent)) 14%, transparent)}
+  .ctx-menu-item:active{color:var(--panel-accent, var(--color-accent))}
+  /* #94: menu rows that are not plain buttons. */
+  .ctx-menu-head{color:var(--color-faint);font-size:0.8em;letter-spacing:.08em;
+    text-transform:uppercase;padding:0.45em 0.7em 0.2em}
+  .ctx-menu-row{display:flex;align-items:stretch}
+  .ctx-menu-row .ctx-menu-item{flex:1}
+  .ctx-menu-row .ctx-menu-item.ctx-mini{flex:none;padding:0.45em 0.55em}
+  .ctx-menu-row .ctx-mini-tag{flex:none;align-self:center;padding:0 0.4em;font-size:0.8em;opacity:0.7;letter-spacing:0.05em}
+  .ctx-slider{flex-direction:column;padding:0.45em 0.7em;gap:0.3em;color:var(--color-faint)}
+  .ctx-slider input{width:100%;accent-color:var(--panel-accent, var(--color-accent))}
+  .ctx-kb-value{padding:0.35em 0.7em;color:var(--color-faint);min-height:1.6em;
+    border-bottom:1px solid color-mix(in srgb, var(--color-faint) 30%, transparent)}
+  .ctx-kb-row{display:flex;gap:2px}
+  .ctx-kb-row .ctx-kb-key{flex:1;padding:0.4em 0;text-align:center}
+  .ctx-kb-row .ctx-kb-wide{flex:2}
+  .ctx-menu-item:disabled{opacity:0.3;cursor:default}
+  .ctx-missing{opacity:0.5;font-size:0.85em}
+  /* Touch (#107): the menu never scrolls, so no gesture may hijack a press
+     (a pan would pointercancel hold-to-delete); sliders keep horizontal pan. */
+  .ctx-menu{touch-action:pan-y}
+  .ctx-hold{touch-action:none}
+  .ctx-slider input{touch-action:pan-x}
+  @media (pointer: coarse){
+    .ctx-menu{min-width:14rem}
+    .ctx-menu-item{min-height:44px;display:flex;align-items:center}
+    .ctx-menu-row .ctx-menu-item.ctx-mini{min-width:44px;justify-content:center}
+    .ctx-slider{min-height:44px;justify-content:center}
+    .ctx-slider input{min-height:32px}
+  }
+  /* Hold-to-delete (#94): the bar sits under the row and fills over the
+     remaining hold time; releasing early removes it. */
+  .ctx-hold{position:relative}
+  .ctx-hold-bar{position:absolute;left:0;right:0;bottom:0;height:0.25em;
+    background:color-mix(in srgb, var(--color-crimson-panel) 25%, transparent)}
+  .ctx-hold-bar>i{display:block;height:100%;width:0;background:var(--color-crimson-panel);
+    transition:width var(--hold-ms,2750ms) linear}
+
+  /* Spreadsheet-style key:value grid (#50) -- key column left, value
+     column right, one CSS grid so both columns line up across every row
+     instead of each stat picking its own layout mechanism (the old
+     Weather panel paired unrelated values into a 2x2 table above a
+     separately-laid-out flex list below, so the value column didn't
+     start at the same x position row to row). Used by Weather/Forecast's
+     current-conditions block; any future panel wanting the same
+     "spreadsheet" read reuses this instead of inventing another grid. */
+  .kv-grid{display:grid;grid-template-columns:auto 1fr;column-gap:1.2vmin;row-gap:0.3vmin}
+  .kv-grid > .kv-key{text-align:left}
+  /* justify-self:end (#51), not the grid default stretch -- a value cell
+     is a direct grid item in the 1fr column, so without this it fills the
+     entire column width. That made .alert-badge's background stretch
+     full-width on a plain value (e.g. TEMP) while reading tight/small on
+     High/Low's alert-badge (nested one level deeper, on a plain inline
+     span inside the value cell, never a grid item itself) -- same badge,
+     wildly different apparent size. Shrinking every value cell to its own
+     content makes every badge hug just its text, uniformly. */
+  .kv-grid > .kv-val{text-align:right;justify-self:end}
+
+  /* Per-output layout (config.json outputs.<name>.layout, plumbed onto
+     <html data-layout> by app.js's apply() -- #3, wired up for real at
+     #91). 'auto' resolves in app.js to 'narrow' or 'wide' by measured
+     aspect ratio (>=2 counts as wide) rather than a fixed breakpoint,
+     since the two real outputs here are 1.6 and 2.37 -- a config author
+     can still force either value explicitly per-output. #root is a real
+     CSS Grid of #colLeft/#colCenter/#colRight (placePanels() in app.js
+     moves the panel <section>s between them, since the same section
+     needs to sit in a different column depending on layout and a column
+     can't be built from grid-template-areas when its members' natural
+     heights differ from its neighbour's). 'narrow' is 2 tracks
+     (System/Projects/Sessions | Forecast/Music/Log, matching the
+     pre-#91 arrangement); 'wide' is 3 -- Sessions moves into a new
+     center track under Forecast, which is what actually fills the Dell's
+     empty middle rather than just widening the two existing columns
+     (regrouping existing panels per the issue, not adding a new one).
+     #colCenter is unused and hidden under 'narrow'. grid-auto-rows:
+     minmax(0,1fr) with a single row is what gives every column a real,
+     definite height to stretch to -- without it the flex children below
+     (min-h-0) have nothing to measure their own overflow against, which
+     was the actual root cause of #91's clipping (the old wrapper was
+     items-start, i.e. shrink-to-fit, so min-h-0 on every section below
+     it was inert). */
+  #root{grid-template-columns:repeat(2, minmax(0, 1fr));grid-auto-rows:minmax(0,1fr)}
+  [data-layout="wide"] #root{grid-template-columns:repeat(3, minmax(0, 1fr))}
+  #colCenter{display:none}
+  [data-layout="wide"] #colCenter{display:flex}
+  #colLeft,#colCenter,#colRight{overflow:hidden}
+
+  /* Small inline sysIcon variant for the sun/moon rise/set readout --
+     same hand-rolled-SVG philosophy as .sysicon (no emoji, no external
+     assets, matches the System panel's technical/HUD line-art), just
+     sized and aligned for sitting next to a text baseline instead of a
+     table cell. (The Network row's down/up arrow glyphs that used to
+     share this were removed at #57 -- no icons in System anymore.) */
+  .icon-inline{width:0.9em;height:0.9em;display:inline-block;vertical-align:-0.15em}
+
+  /* Angled utilization bar (#31, replacing the retired status
+     LED -- user feedback: "not working out"). A row of slanted parallelogram
+     <polygon> segments built in app.js's utilBars(); this rule just gives
+     the containing <svg> a small glow so the lit segments read as
+     illuminated rather than flat fills, matching the reference racing-stat
+     graphic's glow. */
+  .util-bars polygon{transition:fill .6s ease}
+  .util-bars{filter:drop-shadow(0 0 1.5px rgb(0 0 0 / .4))}
+
+  /* Surface tint (#78; strength live-adjustable per #88; opaque and IS the
+     background since #89 -- display.transparent now defaults false, so
+     this replaces cosmic-bg's wallpaper rather than riding on top of it;
+     recolored to real time-of-day hues by #90; moving skybox geometry by
+     #92, see the palette/geometry notes in app.js): a full-viewport,
+     three-stop gradient painted by the surface itself -- lives on the
+     same bg layer as the ambient glow blobs below (behind every panel,
+     never above content), but as its own element rather than a .glow
+     instance: it is a daylight cue tied to the real sun, not the Night
+     Ops HUD's cyberpunk ambient lighting, so it is NOT hidden by the
+     theme overrides that hide .glow (see DESIGN.md's Surface Tint entry
+     for the theme-independence decision). app.js's sunTint() recomputes
+     --tint-top/--tint-glow/--tint-glow-pos/--tint-bottom every poll
+     (always alpha 1): top is the sky (darkens toward the base as the sun
+     nears the horizon), glow is a warm middle stop whose POSITION climbs
+     and falls with solar altitude -- the "skybox" #92 asks for, not just
+     a colour cycling in place -- and bottom is the unchanged deep base.
+     Every value is a continuous function of solar altitude (see
+     solarAltitude() in app.js), so there is never a discrete step to
+     transition away from. display.tint_strength is still the colour
+     departure from a neutral slate base -- a live multiplier the context
+     menu's Tint submenu edits, Off meaning the flat neutral base with no
+     time shift OR motion at all, never a transparent surface. */
+  #suntint{position:fixed;inset:0;pointer-events:none;z-index:var(--z-bg);
+    background:linear-gradient(180deg,var(--tint-top) 0%,var(--tint-glow) var(--tint-glow-pos),var(--tint-bottom) 100%)}
+
+  /* Ambient glow blobs (crimson/cyan, matching CyberpunkEnvironment's
+     reddish ambient glow) -- Night Ops HUD chrome, not a background
+     treatment. #90: with the surface opaque (#89) and #suntint now a real,
+     saturated time-of-day colour rather than a near-neutral slate, these
+     sat on the same bg layer and directly fought the signal the tint
+     exists to send -- a cyan blob over a warm sunrise, or a crimson one
+     over noon's open blue, muddies exactly the read this issue asks for.
+     Removed under the opaque surface, same call retro_terminal/
+     retro_orange already made for their own reasons (see below) -- no
+     theme depends on them, and .g1/.g2 stay declared so the one-key revert
+     to display.transparent:true (documented at #89) also brings the
+     original cyberpunk-over-wallpaper look back with it. */
+  body:not(.transparent) .glow{display:none}
+  .glow{position:fixed;border-radius:50%;filter:blur(110px);pointer-events:none;z-index:var(--z-bg)}
+  .g1{width:44vw;height:44vw;top:-16vw;left:-8vw;
+      background:oklch(0.55 0.17 25/.30);animation:d1 42s ease-in-out infinite alternate}
+  .g2{width:38vw;height:38vw;bottom:-16vw;right:-6vw;
+      background:oklch(0.58 0.15 195/.26);animation:d2 55s ease-in-out infinite alternate}
+  @keyframes d1{to{transform:translate(9vw,7vw) scale(1.18)}}
+  @keyframes d2{to{transform:translate(-8vw,-6vw) scale(1.22)}}
+  @media (prefers-reduced-motion:reduce){.glow{animation:none}}
+
+  .fadein{animation:fi .6s ease both}
+  @keyframes fi{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+
+  /* Opt-in for any panel content that can outgrow its box (#29): give the
+     element a height/max-height so it can actually overflow, add
+     class="auto-cycle", and app.js's refreshAutoCycles() drives it through
+     a passive scroll-dwell-reset loop -- there is no scrollbar a user could
+     ever grab on this surface. No-op on an element that already fits.
+     auto-cycle-x is the same mechanism on the horizontal axis (scrollLeft
+     instead of scrollTop) -- Music's song-title marquee (#26 follow-up) is
+     its first user: a track title too long for its clamped column scrolls
+     to reveal the rest instead of just truncating silently. */
+  .auto-cycle-x{overflow-x:hidden;white-space:nowrap}
+  .auto-cycle{overflow-y:hidden}
+
+  /* #91: Log's first opt-in ("no shipped panel opts in yet" no longer
+     holds -- Sessions above is the other). renderLog() already caps at the
+     12 most recent matched lines; this just bounds how tall that list is
+     allowed to render so #colRight's other members (Music, and Log itself
+     in the narrow layout) always have room, with anything past the fold
+     reachable via the same scroll-dwell loop as Sessions/Music's title
+     marquee rather than clipped. */
+  .log-scroll{max-height:calc(var(--log-rows, 8) * 1.55em);overflow:hidden}
+  [data-layout="narrow"] .log-scroll{--log-rows:6}
+  [data-layout="wide"] .log-scroll{--log-rows:10}
+
+  /* CRT fx layer (#32): a component-independent overlay above panel
+     content (fx layer) but below the offline banner/boot. Hidden by
+     default for every theme except retro_terminal -- the layer mechanism
+     itself is theme-agnostic (any future effect can target it), but this
+     is its one live consumer today: scanlines + a soft vignette + an
+     occasional flicker, the way a real phosphor CRT never sits perfectly
+     still. Never intercepts input -- same read-only surface as everything
+     else in this system. */
+  #crtfx{position:fixed;inset:0;display:none;pointer-events:none;z-index:var(--z-fx)}
+  html[data-theme="retro_terminal"] #crtfx,
+  html[data-theme="retro_orange"] #crtfx{
+    display:block;
+    animation:crtflicker 6.4s steps(1) infinite;
+  }
+  html[data-theme="retro_terminal"] #crtfx{
+    background:
+      repeating-linear-gradient(to bottom,
+        rgb(0 0 0 / 0) 0px, rgb(0 0 0 / 0) 1px,
+        rgb(0 0 0 / .22) 2px, rgb(0 0 0 / .22) 3px),
+      radial-gradient(120% 100% at 50% 50%, transparent 55%, rgb(0 10 4 / .6) 100%);
+  }
+  /* retro_orange (#45): same scanline/vignette mechanic, vignette tinted
+     warm instead of green-black so it reads as amber phosphor, not CRT
+     green with a color filter slapped on top. */
+  html[data-theme="retro_orange"] #crtfx{
+    background:
+      repeating-linear-gradient(to bottom,
+        rgb(0 0 0 / 0) 0px, rgb(0 0 0 / 0) 1px,
+        rgb(0 0 0 / .22) 2px, rgb(0 0 0 / .22) 3px),
+      radial-gradient(120% 100% at 50% 50%, transparent 55%, rgb(10 4 0 / .6) 100%);
+  }
+  @keyframes crtflicker{
+    0%, 94%, 100% { opacity: 1; }
+    95%           { opacity: .88; }
+    96%           { opacity: .98; }
+    97%           { opacity: .91; }
+  }
+  @media (prefers-reduced-motion:reduce){#crtfx{animation:none}}
+
+  #boot{position:fixed;inset:0;display:grid;place-items:center;
+        background:oklch(0.12 0.02 255);z-index:var(--z-boot);transition:opacity .5s}
+</style>
+</head>
+
+<body class="h-full">
+  <div id="suntint" aria-hidden="true"></div>
+  <div class="glow g1"></div><div class="glow g2"></div>
+
+  <!-- fx layer (#32): theme-driven overlay effects (Retro Terminal's
+       scanlines/vignette/flicker today) live here, independent of and
+       above #root's panel content -- see --z-fx in the theme block above. -->
+  <div id="crtfx" aria-hidden="true"></div>
+
+  <!-- #91 verification hook: STATIC-only (see apply()'s STATIC block in
+       app.js), never populated on the live wallpaper. Holds a JSON dump of
+       every panel's rect plus each bounded box's real overflow, so a
+       headless render can prove nothing clips instead of relying on a
+       screenshot -- refreshAutoCycles() is inert under STATIC and a
+       screenshot alone would only ever show page 1 of any list. -->
+  <div id="layoutdebug" class="hidden" aria-hidden="true"></div>
+
+  <div id="boot"><div class="glowtext text-faint text-2xl tracking-widest">STARTING…</div></div>
+
+  <!-- offline / server-down banner -->
+  <div id="offline" class="hidden fixed top-4 left-1/2 -translate-x-1/2 z-40
+       accent-crimson panel px-5 py-2 text-crimson text-sm tracking-wide">
+    <span class="dot bg-crimson"></span>data feed unreachable — showing last known values
+  </div>
+
+  <!-- No date/clock/location readout -- the user's system already shows
+       all three (see #5, #9). #91: #root is a real CSS Grid of 2 or 3
+       column tracks (data-layout, see the stylesheet rule above) --
+       #colLeft/#colCenter/#colRight are its only direct children, each
+       given the grid row's full, definite height (grid-auto-rows:
+       minmax(0,1fr) + the grid default align-items:stretch) so the
+       min-h-0/flex chain inside them can actually bound overflow instead
+       of growing past the viewport (#91's root cause: the old items-start
+       wrapper was shrink-to-fit, so nothing below it had a real height to
+       measure against). app.js's placePanels() moves each panel <section>
+       into the column the current layout wants it in; the markup below is
+       the 'narrow' arrangement (System/Projects/Sessions left, Forecast/
+       Music/Log right) since that's the pre-#91 grouping and the
+       reasonable no-JS fallback. -->
+  <main id="root" class="h-full w-full px-[2.2vmin] gap-[1.8vmin]
+        pt-[calc(2.2vmin+var(--safe-top))] pb-[calc(2.2vmin+var(--safe-bottom))]
+        grid">
+
+    <div id="colLeft" class="flex flex-col items-stretch gap-[1.8vmin] min-h-0">
+    <section id="secSystem" class="accent-cyan flex flex-col min-h-0 shrink-0">
+      <div class="panel px-[2vmin] py-[1.5vmin] flex flex-col gap-[0.6vmin]">
+        <h2 class="sec-head text-faint uppercase tracking-[0.3em] text-[clamp(.55rem,1.15vmin,.8rem)]">
+          System</h2>
+        <!-- CPU, Memory, Battery -- a .sys-grid (#57) so label / value
+             (+ Utilization Bars) / sub line up across every row without
+             icons or a stacked second line. Compact (width:fit-content,
+             #17), not stretched to fill the panel. The 30-minute trend
+             graph that used to render beneath these rows (#17, #33) was
+             removed (#34) -- not wanted on the wallpaper. Metrics
+             collection is untouched (dashd-collect, metrics.db,
+             /api/history) for possible later use. -->
+        <div id="sys" class="sys-grid text-[clamp(.56rem,1.2vmin,.88rem)]"></div>
+
+        <!-- Storage: its own visually separated area, not mixed into the
+             cpu/mem/bat metric rows above. -->
+        <div class="pt-[0.6vmin] border-t border-[var(--color-hairline)]">
+          <h3 class="sec-head text-faint uppercase tracking-[0.3em]
+              text-[clamp(.48rem,1vmin,.68rem)] mb-[0.35vmin]">Storage</h3>
+          <div id="disks" class="sys-grid text-[clamp(.56rem,1.2vmin,.88rem)]"></div>
+        </div>
+
+        <!-- Network: its own dedicated area below Storage. The NET metric
+             row, then a full-width graph row under it holding separate
+             download and upload step charts side by side (#59). -->
+        <div class="pt-[0.6vmin] border-t border-[var(--color-hairline)]">
+          <h3 class="sec-head text-faint uppercase tracking-[0.3em]
+              text-[clamp(.48rem,1vmin,.68rem)] mb-[0.35vmin]">Network</h3>
+          <div id="net" class="sys-grid text-[clamp(.56rem,1.2vmin,.88rem)]"></div>
+        </div>
+
+        <div id="sysfoot" class="text-faint num tracking-wide
+             text-[clamp(.46rem,.95vmin,.68rem)] pt-[0.55vmin]
+             border-t border-[var(--color-hairline)]">—</div>
+      </div>
+    </section>
+
+    <!-- PROJECTS (#62): per-repo GitHub issue stats, one row per project.
+         Three counts, colored by what they ask of the user: RED
+         (--color-crimson) = open issues labeled ai-blocked, i.e. waiting on
+         a human decision/credential/sign-off; GREEN (--color-actionable) =
+         actionable = open minus blocked, work that can start right now;
+         VIOLET (--color-done) = closed, progress already banked.
+
+         Sorted blocked desc, then actionable desc, then most-recently
+         pushed -- so what is stuck on the user floats to the top. Repos
+         untouched past config.projects.stale_after_days are filtered out
+         server-side, keeping dormant projects off a live worklist.
+
+         Reuses System's cyan accent rather than introducing a fourth panel
+         accent, same call #25 made for Tasks -- DESIGN.md's palette is a
+         three-accent system and the violet here is a status color inside
+         the card, not panel chrome.
+
+         Data is fetched once every few hours on a background thread (see
+         cached_projects in bin/dashd-serve), not per poll. -->
+    <section id="secProjects" class="accent-cyan flex flex-col min-h-0 shrink-0">
+      <div class="panel px-[2vmin] py-[1.5vmin] flex flex-col gap-[0.6vmin]">
+        <!-- No sibling on this row (totals dropped, pager moved below) --
+             h2 is back to being a direct flex item of .panel's column
+             layout, so its own sec-head underline (::after, width:100%)
+             stretches to the panel's full width again via the column's
+             default align-items:stretch, same as every other panel header
+             here. It only needs a wrapping row -- and sec-head moved onto
+             that row instead of the h2 -- when something else shares the
+             line with it (see Music, #65 follow-up). -->
+        <h2 class="sec-head text-faint uppercase tracking-[0.3em] text-[clamp(.55rem,1.15vmin,.8rem)]">
+          Projects</h2>
+        <div id="projscroll" class="proj-scroll
+             text-[clamp(.44rem,.9vmin,.62rem)] num">
+          <div id="projgrid" class="proj-grid"></div>
+        </div>
+        <!-- Pager (#64), moved to the bottom of the card, below the row
+             list rather than above it -- prev/next flush to the panel's
+             left/right edges (justify-between) with the page indicator
+             riding in the middle. Text labels, not glyphs (&#9664;/&#9654;
+             used to stagger vertically against each other the same way
+             Music's transport glyphs did -- see that fix). Replaces the
+             auto-cycle hook (#29) that used to reveal rows past the fold:
+             that existed only because the surface had no pointer reach,
+             which #36 fixed. The whole control strip is hidden by
+             renderProjects() when everything fits on one page -- a pager
+             for a single page is chrome. -->
+        <div id="projpager" class="hidden flex items-center justify-between
+             gap-[0.6vmin] num text-faint text-[clamp(.42rem,.85vmin,.6rem)]">
+          <button id="projprev" type="button" class="ctl-btn"
+                  aria-label="Previous page of repositories">PREV</button>
+          <span id="projpage" aria-live="polite"></span>
+          <button id="projnext" type="button" class="ctl-btn"
+                  aria-label="Next page of repositories">NEXT</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- SESSIONS (#71): who has logged into this machine since it booted --
+         one row per session, ended sessions included. The list is scoped to
+         the current boot (journalctl -b in lib/sessions.py), so a login that
+         opened, ran something, and logged out is still here until the next
+         reboot; that persistence is the panel's whole reason to exist.
+
+         Read from systemd-logind's journal, NOT utmp/wtmp: the COSMIC
+         greeter writes no user utmp record, so `last`/`who` show nothing on
+         this machine and the classic tools are a dead end rather than a
+         fallback (see lib/sessions.py's module docstring for the
+         measurements).
+
+         Still-open sessions render in the region's teal accent; ended ones
+         stay neutral ink. That is the one visual distinction the panel
+         makes, and it reuses System's accent instead of adding a fourth --
+         same call Projects (#62) and Tasks (#25) made, per DESIGN.md's One
+         Accent Per Region Rule.
+
+         Failed login attempts are deliberately NOT here: they belong to the
+         Log panel's highlight feed (#28/#72), which already carries a
+         "Failed login" pattern. -->
+    <section id="secSessions" class="accent-cyan flex flex-col min-h-0">
+      <div class="panel px-[2vmin] py-[1.5vmin] flex flex-col min-h-0 gap-[0.6vmin]">
+        <h2 class="sec-head text-faint uppercase tracking-[0.3em] text-[clamp(.55rem,1.15vmin,.8rem)]">
+          Sessions</h2>
+        <!-- #91: was "no fixed-height fold and no pager here, unlike
+             Projects" -- true until this issue, but the server-side cap
+             (config.sessions.max_rows) bounds the DATA, not the box it
+             renders into, and a column with System+Projects above it
+             doesn't always have room for every row. .sess-scroll (max-
+             height, #91) + class="auto-cycle" reveals anything past the
+             fold via the same scroll-dwell loop Projects used before #64
+             gave it a pager -- Sessions has no pointer-driven pager of its
+             own, so auto-cycle (passive, #29) is the right mechanism here,
+             not a second copy of Projects' prev/next UI. -->
+        <div id="sessscroll" class="sess-scroll auto-cycle flex-1 min-h-0">
+          <div id="sessgrid" class="sess-grid text-[clamp(.44rem,.9vmin,.62rem)] num"></div>
+        </div>
+      </div>
+    </section>
+    </div>
+
+    <!-- #91: center column -- only populated (and only given a track by
+         #root's grid) under data-layout="wide". placePanels() moves
+         #secSessions here, under Forecast, which is what actually fills
+         the Dell's previously-empty middle third rather than just
+         widening the two flanking columns. -->
+    <div id="colCenter" class="flex-col items-stretch gap-[1.8vmin] min-h-0"></div>
+
+    <!-- ============ RIGHT COLUMN: Calendar + Weather, Music, Log ============ -->
+    <!-- Moved here from a fixed bottom-right anchor (user request: "keeping
+         the same layout for the calendar, weather, and music, move it to
+         the top right (where the log is placed)") -- this whole group is
+         now a plain flex item of the top row wrapper (col-span-full
+         above), the exact same "System top-left, this top-right" flex
+         arrangement Log used alone before. No position:fixed needed here
+         anymore: that was only ever necessary to guarantee a literal
+         screen-corner position independent of sibling heights (see the
+         top-row wrapper's own comment for that history), and this group
+         sits in the SAME slot Log used to, via the SAME mechanism.
+         flex-col order is top-to-bottom in DOM order -- Calendar+Weather's
+         row first, Music second (satisfies "weather above the player"
+         without hardcoding Music's height, which varies: hidden... no,
+         idle-but-visible now, or one row when playing), Log last (user
+         request: "move the log below the music player"). items-stretch:
+         Music is meant to match the Calendar+Weather row's full width
+         (user request: "expand the media player to fit the size of both
+         of those components") -- align-items:stretch on an intrinsically-
+         sized flex column makes every child fill the width of the widest
+         one, which also keeps every child's right edge flush against the
+         same left edge (originally "these should border the right side"
+         when this was screen-edge-anchored; now it just means flush
+         against each other, which items-stretch still gives for free). -->
+    <div id="colRight" class="flex flex-col items-stretch gap-[1.8vmin] min-h-0">
+
+      <!-- Calendar (left) + Weather/Forecast (right). grid grid-cols-2 (not
+           flex) + items-stretch: user request "expand the calendar to be
+           the same size as the weather component" needs Calendar's box to
+           match Weather's, in both height AND width, while Weather itself
+           stays at its own natural size. items-stretch (the grid default,
+           stated explicitly) handles height -- the shorter Calendar
+           stretches to Weather's row height. Width needs grid specifically:
+           two 1fr columns in a grid whose own width is intrinsic (this row
+           isn't given an explicit width) resolve BOTH columns to the
+           WIDER column's max-content size, not a forced 50/50 split of
+           some externally-set width -- exactly "Calendar grows to match
+           Weather," not "both meet in the middle." A plain flex row with
+           flex-1 on both sides would do the latter instead, which isn't
+           what was asked. -->
+      <div id="secForecast" class="grid grid-cols-2 items-stretch gap-[1.8vmin] shrink-0">
+        <!-- CALENDAR (#22): current-month grid. Reuses Forecast's amber
+             accent (date/schedule data, same family as weather) rather
+             than inventing a fourth color, same reasoning System/Log
+             share teal/crimson. Source-agnostic -- optional event dots
+             come from state.extra.calendar (data/extra.json, same
+             pass-through pattern as everything else under "extra"), so a
+             future ICS/CalDAV sync script can populate it without
+             touching the server or this file. -->
+        <section class="accent-amber flex flex-col">
+          <!-- justify-start (not -center): the calendar grid is shorter
+             than Weather's box, and centering it split the leftover space
+             evenly above and below -- top-heavy dead space plus a
+             bottom gap. User request: shift the content to the top of the
+             box and leave the leftover space at the bottom only, since
+             it's earmarked for more content later. -->
+          <div class="panel px-[2vmin] py-[1.5vmin] flex flex-col justify-start
+               gap-[0.6vmin] h-full">
+            <h2 class="sec-head text-faint uppercase tracking-[0.3em] text-[clamp(.55rem,1.15vmin,.8rem)]">
+              Calendar</h2>
+            <div id="calendar" class="flex flex-col"></div>
+          </div>
+        </section>
+
+        <!-- WEATHER/FORECAST: current conditions + week. Stays accent-amber
+             always -- an out-of-range reading (renderWeather(), #48/#49)
+             gets a filled alert-badge (white on deep red) on just that
+             value, not the panel accent; #46's first cut swapped the
+             whole panel to red, which was the wrong shape (a single hot
+             value shouldn't make the whole card read as an alert). -->
+        <section class="accent-amber flex flex-col">
+          <div class="panel px-[2.4vmin] py-[1.8vmin] flex flex-col gap-[1.3vmin]">
+            <!-- Weather had no header at all (user feedback: "seems like
+                 the weather panel doesn't have a label") -- every other
+                 panel has one, this one only lost it because "NOW" used
+                 to read as enough of a heading on its own. -->
+            <!-- #77: the city name sits to the right of the heading text,
+                 same "sec-head row stretches full width, second element
+                 floats right of it" shape Music's transport controls use
+                 (#65) -- no new card, no new accent, a label on the
+                 existing header band. renderWeather() fills #wlocation
+                 from weather.location; empty until the first /api/state
+                 poll lands. -->
+            <h2 class="sec-head flex items-baseline justify-between gap-[1.2vmin] text-faint uppercase tracking-[0.3em] text-[clamp(.55rem,1.15vmin,.8rem)]">
+              <span>Weather</span>
+              <span id="wlocation" class="text-ink normal-case tracking-normal"></span>
+            </h2>
+
+            <!-- Official NWS alert banner (#80). Deliberately distinct from
+                 weather.alert (our own threshold-derived signal, #46/#48) --
+                 an active Red Flag Warning and "today's forecast high
+                 crossed a configured number" answer different questions and
+                 can both be true. Hidden entirely when there's no active
+                 alert -- an empty "no alerts" row every day teaches you to
+                 stop looking (per the issue). Reuses .alert-badge's filled
+                 white-on-red treatment rather than swapping the whole
+                 panel's accent-amber, same "highlight the value, not the
+                 card" call #48 already made for weather.alert. -->
+            <div id="nwsalert" class="hidden alert-badge px-[0.6em] py-[0.3em]
+                 text-[clamp(.56rem,1.2vmin,.88rem)] tracking-wide"></div>
+
+            <!-- No icons in this card (user request). Spreadsheet-style
+                 key:value grid (#50, .kv-grid) -- every stat is one row,
+                 key column left (uppercase label, matching the system's
+                 existing Label typography role) and value column right,
+                 all in the same grid so the value column starts at one
+                 consistent x position top to bottom. Replaces the old
+                 2x2 table (which paired unrelated values -- description
+                 next to feels-like, temp next to high/low) plus a
+                 separately-laid-out flex list for Wind/Humid/Rain/UV that
+                 didn't share a column grid with it. -->
+            <!-- Every value cell is text-ink (#52) -- three different
+                 colors (text-muted, text-ink, text-ink/90) used to be
+                 spread across these rows, left over from three different
+                 layout mechanisms that predated .kv-grid (#50) and were
+                 never reconciled once merged into one grid. A spreadsheet
+                 keeps cell data at one consistent contrast; .alert-badge
+                 alone carries emphasis now (DESIGN.md's Status-Only Glow
+                 Rule -- nothing calls for attention decoratively). -->
+            <div class="kv-grid text-[clamp(.56rem,1.2vmin,.88rem)]">
+              <span class="kv-key text-faint uppercase tracking-[0.1em]">Condition</span>
+              <span id="wdesc" class="kv-val num text-ink"></span>
+
+              <span class="kv-key text-faint uppercase tracking-[0.1em]">Temp</span>
+              <span id="wtemp" class="kv-val num text-ink"></span>
+
+              <span class="kv-key text-faint uppercase tracking-[0.1em]">Feels</span>
+              <span id="wfeels" class="kv-val num text-ink"></span>
+
+              <span class="kv-key text-faint uppercase tracking-[0.1em]">High / Low</span>
+              <span id="whilo" class="kv-val num text-ink"></span>
+
+              <span class="kv-key text-faint uppercase tracking-[0.1em]">Wind</span>
+              <span id="wwind" class="kv-val num text-ink"></span>
+
+              <span class="kv-key text-faint uppercase tracking-[0.1em]">Humidity</span>
+              <span id="whumid" class="kv-val num text-ink"></span>
+
+              <span class="kv-key text-faint uppercase tracking-[0.1em]">Rain</span>
+              <span id="wrain" class="kv-val num text-ink"></span>
+
+              <span class="kv-key text-faint uppercase tracking-[0.1em]">UV</span>
+              <span id="wuv" class="kv-val num text-ink"></span>
+
+              <!-- Air quality (#79). Both spans start hidden and renderAirQuality()
+                   un-hides the pair together -- hiding only the value would leave
+                   an orphan key label and shift every kv-grid row below it. -->
+              <span id="waqi-key" class="kv-key text-faint uppercase tracking-[0.1em] hidden">AQI</span>
+              <span id="waqi" class="kv-val num text-ink hidden"></span>
+            </div>
+
+            <!-- Hourly strip hidden -- user feedback: too much dead space on
+                 the wallpaper. Markup/render code kept intact (renderHourly()
+                 in app.js still runs, just targets a hidden node) in case it
+                 comes back, same pattern as the retired CPU/MEM trend graphs
+                 (#34). -->
+            <div class="hidden pt-[1.1vmin] border-t border-[var(--color-hairline)]">
+              <h3 class="sec-head text-faint uppercase tracking-[0.3em]
+                  text-[clamp(.5rem,1.05vmin,.72rem)] mb-[0.6vmin]">Hourly</h3>
+              <div id="hourly" class="flex justify-between gap-[0.4vmin]"></div>
+            </div>
+
+            <!-- Upcoming hidden -- removed from this card (user request).
+                 Markup/render code kept intact (renderWeek() in app.js still
+                 runs, just targets a hidden node), same pattern as Hourly/
+                 Sun & Moon below. -->
+            <div class="hidden pt-[1.1vmin] border-t border-[var(--color-hairline)]">
+              <h3 class="sec-head text-faint uppercase tracking-[0.3em]
+                  text-[clamp(.5rem,1.05vmin,.72rem)] mb-[0.4vmin]">Upcoming</h3>
+              <div id="week" class="flex flex-col"></div>
+            </div>
+
+            <!-- Sun & Moon hidden -- same "too much dead space" feedback as
+                 Hourly. Markup/render code kept intact (renderSunMoon() in
+                 app.js still runs, just targets hidden nodes), same pattern as
+                 the retired CPU/MEM trend graphs (#34). -->
+            <div class="hidden pt-[1.1vmin] border-t border-[var(--color-hairline)]">
+              <h3 class="sec-head text-faint uppercase tracking-[0.3em]
+                  text-[clamp(.5rem,1.05vmin,.72rem)] mb-[0.7vmin]">Sun &amp; Moon</h3>
+              <svg id="sunarc" viewBox="0 0 300 96" class="w-full"></svg>
+              <div class="flex items-center justify-between mt-[0.9vmin]">
+                <div id="suntimes" class="num text-muted flex items-center gap-[1.2vmin]
+                     text-[clamp(.56rem,1.2vmin,.88rem)] tracking-wide"></div>
+                <div class="flex items-center gap-[1vmin]">
+                  <svg id="moon" viewBox="0 0 100 100"
+                       class="w-[clamp(1.3rem,3.4vmin,2.3rem)] h-[clamp(1.3rem,3.4vmin,2.3rem)]"></svg>
+                  <div id="moontext" class="text-faint leading-tight
+                       text-[clamp(.5rem,1.05vmin,.76rem)]"></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+      </div>
+
+      <!-- MUSIC (#26): MPRIS now-playing. Source-agnostic -- local player or
+           browser tab, whatever registers over MPRIS. Hidden by default;
+           renderMusic() in app.js only reveals it while something is
+           actually playing/paused -- the wrapper's flex-col sizing means
+           the whole stack just shrinks up when it's hidden, no gap left
+           behind. No explicit width class needed to "fit the size of both
+           [Calendar and Weather]" (user request) -- this section is a
+           direct child of the outer items-stretch wrapper, so it's
+           already stretched to the Calendar+Weather row's width (the
+           widest sibling); its own .panel div then fills that via the
+           section's own default (unset) align-items:stretch on its single
+           flex-col child, same mechanism every other panel here already
+           relies on for height. -->
+      <section id="musicSection" class="accent-cyan flex flex-col shrink-0">
+        <div class="panel px-[2vmin] py-[1.5vmin] flex flex-col gap-[0.6vmin]">
+          <!-- sec-head (the glowing underline) lives on this row, not the
+               h2 alone -- the row stretches to the panel's full width (flex
+               item in a flex-col parent, default align-items:stretch), so
+               the separator now runs under the controls too instead of
+               stopping at "MUSIC"'s own text width. -->
+          <div class="sec-head flex items-baseline justify-between gap-[1.2vmin]">
+            <h2 class="text-faint uppercase tracking-[0.3em] text-[clamp(.55rem,1.15vmin,.8rem)]">
+              Music</h2>
+            <!-- Transport controls (#65), moved up beside the heading and
+                 floated right of it -- previously a separate row below the
+                 art/title/progress block. POST /api/music/command ->
+                 playerctl, against whatever MPRIS player now_playing() is
+                 already reporting on. Disabled (not hidden) while nothing is
+                 playing/paused: the section deliberately "sits idle" rather
+                 than disappearing, so its controls should hold their place
+                 too instead of making the panel reflow on every track end.
+                 Text labels, not glyphs -- the transport icons (⏮⏯⏭) render
+                 with inconsistent em-box heights across fonts, which read as
+                 a vertical stagger between the three buttons; fixed-width
+                 4-char labels on the shared monospace body font align
+                 cleanly instead. PREV/NEXT are static; PLAY/PAUS is swapped
+                 by renderMusic() to match the live state -- a fixed label
+                 can't tell you which way the toggle is about to go. -->
+            <div id="musicControls" class="flex items-center
+                 gap-[0.9vmin] text-[clamp(.5rem,1.05vmin,.76rem)]">
+              <button id="musicPrev" type="button" class="ctl-btn"
+                      aria-label="Previous track">PREV</button>
+              <button id="musicToggle" type="button" class="ctl-btn"
+                      aria-label="Play or pause">PLAY</button>
+              <button id="musicNext" type="button" class="ctl-btn"
+                      aria-label="Next track">NEXT</button>
+            </div>
+          </div>
+          <!-- No sys-table, no note icon (both dropped on user request) --
+               renderMusic() in app.js builds cover art (musicArt, left,
+               hidden unless the player's MPRIS metadata has an art_url --
+               proxied/redirected through GET /api/music/art since a
+               file://-sourced art_url can't be loaded directly from this
+               http-origin page) beside a two-row musicBody: title
+               (clamped to the remaining space, w-0 + min-w-0 + auto-cycle-x
+               so a too-long title scrolls to reveal itself instead of
+               silently truncating -- w-0 is load-bearing, not just
+               min-w-0: this row's own ancestors size shrink-to-fit, so a
+               flex item's *intrinsic* contribution to that still uses its
+               max-content size regardless of min-width/flex-basis, which
+               is what let a long title stretch the whole panel before)
+               left, artist/album right on row one; elapsed time | progress
+               bar | total time (HH:MM:SS, .num tabular-nums so the digits
+               don't jump around) on row two, square-corner bar per an
+               earlier user request. When nothing is playing/paused: an idle
+               placeholder, art hidden. The section itself is never hidden
+               -- user report: "it should not disappear just because no
+               media is playing, should just sit idle". -->
+          <div id="music" class="flex gap-[0.8vmin] items-start">
+            <img id="musicArt" alt=""
+                 class="hidden shrink-0 object-cover"
+                 style="width:clamp(2.4rem,6vmin,4.2rem);height:clamp(2.4rem,6vmin,4.2rem);
+                        border:1px solid var(--panel-accent, var(--color-accent));" />
+            <div id="musicBody" class="flex-1 min-w-0 flex flex-col gap-[0.5vmin]"></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- LOG: filtered/status-colored journalctl or file tail (#28).
+           Source (journalctl unit or file) + patterns are config.logs,
+           editable via the Control Backend (#30). Moved below Music (user
+           request) -- was the sole occupant of this top-right slot before
+           Calendar/Weather/Music joined it here. #91: dropped shrink-0 --
+           it used to mean "protect Log's height from a flex-shrink fight
+           it can't win," but #colRight's Forecast row and Music are both
+           shrink-0 themselves now, and Log is the one member with a
+           genuinely unbounded row count (matched log lines keep coming),
+           so it's the natural one to take flex-1 and absorb whatever
+           vertical space #colRight has left -- same split Sessions took
+           in #colLeft/#colCenter. min-h-0 on both the section and .panel
+           is what lets .log-scroll's own max-height (not this section's)
+           be the thing that actually bounds it. -->
+      <section id="secLog" class="accent-crimson flex flex-col min-h-0 flex-1">
+        <div class="panel px-[2vmin] py-[1.5vmin] flex flex-col min-h-0 gap-[0.6vmin]">
+          <h2 class="sec-head text-faint uppercase tracking-[0.3em] text-[clamp(.55rem,1.15vmin,.8rem)]">
+            Log</h2>
+          <div id="logscroll" class="log-scroll auto-cycle flex-1 min-h-0">
+            <div id="logbox" class="flex flex-col gap-[0.25vmin]
+                 text-[clamp(.42rem,.85vmin,.6rem)] num"></div>
+          </div>
+        </div>
+      </section>
+    </div>
+  </main>
+
+  <script src="app.js"></script>
+</body>
+</html>

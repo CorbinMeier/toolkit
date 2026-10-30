@@ -1,0 +1,26 @@
+[Unit]
+Description=Desktop dashboard mobile control surface (LAN-reachable)
+Documentation=file:%h/Code/Dashboards/desktop/README.md
+PartOf=graphical-session.target
+After=graphical-session.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/python3 %h/Code/Dashboards/desktop/bin/dashd-control
+Restart=on-failure
+RestartSec=3
+# Unlike serve/collect, this one binds LAN-reachable by design (#30) --
+# every route past /api/health is token-gated in the app itself (see
+# bin/dashd-control's docstring). Still no elevated OS access needed.
+PrivateDevices=yes
+ProtectHome=read-only
+# config.json is deliberately NOT writable: it holds tracked definitions
+# and is never written at runtime (#74). Selections go to
+# data/config.local.json, and data/ is granted at DIRECTORY level, which
+# is what lets that write use tmp-then-rename -- the single-file grant
+# this line used to carry could not create a sibling temp file (#69/#70).
+ReadWritePaths=%h/Code/Dashboards/desktop/data
+NoNewPrivileges=yes
+
+[Install]
+WantedBy=graphical-session.target

@@ -1,0 +1,36 @@
+data/weather.json
+# Open-Meteo Air Quality cache (#79) -- same refetch-past-TTL,
+# serve-stale-on-failure posture as weather.json.
+data/air_quality.json
+# api.weather.gov active-alerts cache (#80) -- same posture as weather.json.
+data/nws_alerts.json
+data/extra.json
+data/tasks.json
+# Selectable locations for the Location submenu (#77) -- source-agnostic
+# like tasks.json/extra.json, populated by GET /api/geocode or hand-edited,
+# never by the wallpaper itself.
+data/locations.json
+data/metrics.db
+data/metrics.db-wal
+data/metrics.db-shm
+data/control_token.txt
+# This machine's own selections -- theme, units, log source (#74). Untracked
+# by design: config.json holds the tracked definitions and is never written
+# at runtime, so changing the theme can no longer leave a modified tracked
+# file behind (which used to block --ff-only merges, see #73).
+data/config.local.json
+data/config.local.json.tmp
+# Projects panel cache (#62). Unlike the rest of data/, this is not just
+# machine-local state -- it holds repo names and issue counts for every
+# private org the gh token can see, so it must never be committed.
+data/projects.json
+# Pending apt-get upgrade count cache (#83) -- machine-local state, not part
+# of the tracked config.
+data/apt_updates.json
+# Monitors dashd-host last reported (#93) -- machine-local.
+data/outputs_detected.json
+data/outputs_detected.json.tmp
+__pycache__/
+.venv/
+node_modules/
+.impeccable/hook.cache.json

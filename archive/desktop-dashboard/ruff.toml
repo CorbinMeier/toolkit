@@ -1,0 +1,8 @@
+line-length = 88
+target-version = "py312"
+# bin/ scripts are extensionless CLI entry points; without this ruff reports
+# "no Python files found" and exits 0 having checked nothing at all.
+extend-include = ["bin/dashd-*"]
+
+[lint]
+select = ["E", "F", "W", "B", "SIM", "UP", "N", "C4", "RET", "PTH"]

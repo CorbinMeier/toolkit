@@ -1,0 +1,242 @@
+#!/usr/bin/env python3
+"""Paint the dashboard onto the desktop as a Wayland layer-shell surface.
+
+Creates one WebKit view per monitor, anchored to all four edges of that
+output, on the layer named in config.json.
+
+Why BOTTOM and not BACKGROUND: cosmic-bg owns the BACKGROUND layer and draws
+over anything else placed there, so a BACKGROUND surface renders correctly but
+stays invisible. BOTTOM sits above cosmic-bg and below every normal window --
+which is what "wallpaper" actually means here, and it lets a transparent page
+composite over the photo wallpaper cosmic-bg is still cycling underneath.
+
+Verified on cosmic-comp (COSMIC / Pop!_OS 24.04): surfaces map, receive frame
+callbacks at ~30fps, and never take keyboard focus.
+
+Pointer input is governed by display.interactive (#36). When false the surface
+gets an EMPTY input region and every click/scroll falls through to whatever is
+behind it -- the original wallpaper behaviour. When true the region is left at
+its default (the whole surface), so the WebKit view receives pointer events and
+the page's own controls work. Keyboard mode stays NONE either way, which is what
+keeps a click on the dashboard from stealing focus from the foreground window.
+"""
+from __future__ import annotations
+
+import json
+import signal
+import sys
+import urllib.parse
+import urllib.request
+from pathlib import Path
+
+import cairo
+import gi
+
+gi.require_version("Gdk", "3.0")
+gi.require_version("Gtk", "3.0")
+gi.require_version("GtkLayerShell", "0.1")
+gi.require_version("WebKit2", "4.1")
+from gi.repository import Gdk, GLib, Gtk, GtkLayerShell, WebKit2  # noqa: E402
+
+ROOT = Path(__file__).resolve().parent.parent
+CONFIG = ROOT / "config.json"
+
+
+def load_config() -> dict:
+    with CONFIG.open() as fh:
+        return json.load(fh)
+
+
+def monitor_name(mon: Gdk.Monitor, index: int) -> str:
+    model = (mon.get_model() or "").strip()
+    return model if model and model != "Unknown" else f"monitor-{index}"
+
+
+def monitor_keys(display: Gdk.Display) -> list[str]:
+    """One unique config key per connected monitor (#93).
+
+    Two identical panels report the same model, which would make them share
+    one `outputs.<key>` entry and one layout -- defeating per-monitor layouts.
+    The second and later of a model get a ` #2`, ` #3` suffix in GDK's
+    enumeration order; the first keeps the bare model so existing config
+    (e.g. "DELL U2913WM") is unaffected.
+    """
+    seen: dict[str, int] = {}
+    keys = []
+    for i in range(display.get_n_monitors()):
+        base = monitor_name(display.get_monitor(i), i)
+        seen[base] = seen.get(base, 0) + 1
+        keys.append(base if seen[base] == 1 else f"{base} #{seen[base]}")
+    return keys
+
+
+def wait_for_server(url: str, tries: int = 40) -> bool:
+    """Poll the health endpoint so we don't load a blank page on a race."""
+    for _ in range(tries):
+        try:
+            with urllib.request.urlopen(url, timeout=1) as r:
+                if r.status == 200:
+                    return True
+        except OSError:
+            GLib.usleep(250_000)
+    return False
+
+
+class Host:
+    def __init__(self, cfg: dict):
+        self.cfg = cfg
+        self.windows: dict[int, Gtk.Window] = {}
+        self.display = Gdk.Display.get_default()
+        if self.display is None:
+            raise SystemExit("no Wayland display (is WAYLAND_DISPLAY set?)")
+
+        srv = cfg["server"]
+        self.base = f"http://{srv['host']}:{srv['port']}"
+
+        self.display.connect("monitor-added", lambda *_: self.sync())
+        self.display.connect("monitor-removed", lambda *_: self.sync())
+
+    def url_for(self, name: str, geo) -> str:
+        q = urllib.parse.urlencode(
+            {"output": name, "w": geo.width, "h": geo.height})
+        return f"{self.base}/index.html?{q}"
+
+    def build(self, mon: Gdk.Monitor, key: str) -> Gtk.Window:
+        name = key
+        geo = mon.get_geometry()
+        layer = self.cfg["display"].get("layer", "BOTTOM").upper()
+        interactive = bool(self.cfg["display"].get("interactive", True))
+
+        win = Gtk.Window()
+        GtkLayerShell.init_for_window(win)
+        GtkLayerShell.set_layer(win, getattr(GtkLayerShell.Layer, layer))
+        GtkLayerShell.set_monitor(win, mon)
+        GtkLayerShell.set_namespace(win, "desktop-dashboard")
+        for edge in (GtkLayerShell.Edge.TOP, GtkLayerShell.Edge.BOTTOM,
+                     GtkLayerShell.Edge.LEFT, GtkLayerShell.Edge.RIGHT):
+            GtkLayerShell.set_anchor(win, edge, True)
+        # -1 => ignore other clients' exclusive zones, so the dashboard spans
+        # the full output instead of being inset by the COSMIC panel/dock.
+        GtkLayerShell.set_exclusive_zone(win, -1)
+        GtkLayerShell.set_keyboard_mode(
+            win, GtkLayerShell.KeyboardMode.NONE)
+
+        view = WebKit2.WebView()
+        settings = view.get_settings()
+        settings.set_enable_developer_extras(True)
+        settings.set_enable_write_console_messages_to_stdout(True)
+        settings.set_hardware_acceleration_policy(
+            WebKit2.HardwareAccelerationPolicy.ALWAYS)
+        # Belt-and-braces stop (#66): the page's own `contextmenu` handler
+        # already preventDefault()s to show our themed menu instead, but
+        # returning True here means WebKit's default menu (Reload / Inspect
+        # Element / Open Frame in New Window ...) never has a code path to
+        # reach the wallpaper even if JS fails to load or a click races it.
+        view.connect("context-menu", lambda *_a: True)
+
+        # Always an RGBA surface with a clear view background (#94): whether
+        # the wallpaper shows through is the page's call now (the Tint
+        # submenu's Transparent choice toggles it live), and an opaque page
+        # paints over the clear background exactly as before.
+        win.set_app_paintable(True)
+        if (rgba := win.get_screen().get_rgba_visual()):
+            win.set_visual(rgba)
+        view.set_background_color(Gdk.RGBA(0, 0, 0, 0))
+
+        # Never take keyboard focus, interactive or not: clicking a control on
+        # the dashboard must not pull focus away from the window you're in.
+        view.set_can_focus(interactive)
+        win.set_accept_focus(False)
+
+        view.load_uri(self.url_for(name, geo))
+        win.add(view)
+        win.show_all()
+
+        # Empty input region => clicks/scrolls fall through to whatever is
+        # behind. Must happen after realize, when the GdkWindow exists.
+        # Leaving it alone (interactive) keeps the default full-surface region.
+        if not interactive and (gdk_win := win.get_window()) is not None:
+            gdk_win.input_shape_combine_region(cairo.Region(), 0, 0)
+
+        print(f"  + {name:22s} {geo.width}x{geo.height} @{geo.x},{geo.y} "
+              f"layer={layer} interactive={interactive}", flush=True)
+        return win
+
+    def sync(self) -> None:
+        """Rebuild surfaces to match the current monitor set."""
+        want = self.display.get_n_monitors()
+        for win in self.windows.values():
+            win.destroy()
+        self.windows.clear()
+        print(f"syncing {want} monitor(s):", flush=True)
+        keys = monitor_keys(self.display)
+        report = []
+        for i in range(want):
+            mon = self.display.get_monitor(i)
+            if mon is not None:
+                self.windows[i] = self.build(mon, keys[i])
+                g = mon.get_geometry()
+                report.append({"key": keys[i], "width": g.width,
+                               "height": g.height, "x": g.x, "y": g.y,
+                               "scale": mon.get_scale_factor()})
+        self.report_outputs(report)
+
+    def report_outputs(self, report: list[dict]) -> None:
+        """Tell dashd-serve which monitors exist (#93) so the menu can lay
+        each one out separately. Best-effort: a down server just means the
+        menu falls back to the output it is running on."""
+        req = urllib.request.Request(
+            f"{self.base}/api/outputs",
+            data=json.dumps({"outputs": report}).encode(),
+            headers={"Content-Type": "application/json"}, method="POST")
+        try:
+            urllib.request.urlopen(req, timeout=2).close()
+        except OSError as exc:
+            print(f"  ! could not report outputs: {exc}", file=sys.stderr,
+                  flush=True)
+
+    def reload(self) -> None:
+        for win in self.windows.values():
+            child = win.get_child()
+            if isinstance(child, WebKit2.WebView):
+                child.reload()
+        print("reloaded all views", flush=True)
+
+
+def main() -> int:
+    cfg = load_config()
+
+    if "--list" in sys.argv:
+        disp = Gdk.Display.get_default()
+        keys = monitor_keys(disp)
+        for i in range(disp.get_n_monitors()):
+            mon = disp.get_monitor(i)
+            g = mon.get_geometry()
+            print(f"{keys[i]!r}  {g.width}x{g.height} "
+                  f"@{g.x},{g.y}  scale={mon.get_scale_factor()}")
+        return 0
+
+    srv = cfg["server"]
+    base = f"http://{srv['host']}:{srv['port']}"
+    if not wait_for_server(f"{base}/api/health"):
+        print(f"WARNING: {base} not responding; loading anyway", file=sys.stderr)
+
+    host = Host(cfg)
+    host.sync()
+    if not host.windows:
+        print("no monitors found", file=sys.stderr)
+        return 1
+
+    # SIGHUP => re-read the page (edit web/, then `systemctl --user reload`)
+    GLib.unix_signal_add(GLib.PRIORITY_DEFAULT, signal.SIGHUP,
+                         lambda: (host.reload(), True)[1])
+    GLib.unix_signal_add(GLib.PRIORITY_DEFAULT, signal.SIGTERM,
+                         lambda: (Gtk.main_quit(), True)[1])
+
+    print("dashd-host running (SIGHUP reloads, SIGTERM quits)", flush=True)
+    Gtk.main()
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

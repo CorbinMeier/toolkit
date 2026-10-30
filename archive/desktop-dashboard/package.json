@@ -1,0 +1,19 @@
+{
+  "name": "desktop-dashboard",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "lint:js": "eslint web/app.js web/control/control.js eslint.config.js",
+    "lint:py": ".venv/bin/ruff check .",
+    "lint": "pnpm run lint:js && pnpm run lint:py",
+    "test": "/usr/bin/python3 -m unittest discover -s tests",
+    "build": "/usr/bin/python3 scripts/smoke.py",
+    "check": "scripts/check.sh",
+    "deploy": "scripts/update-desktop.sh"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9",
+    "eslint": "^9",
+    "globals": "^15"
+  }
+}

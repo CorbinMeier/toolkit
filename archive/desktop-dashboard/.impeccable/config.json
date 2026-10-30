@@ -1,0 +1,143 @@
+{
+  "detector": {
+    "ignoreRules": [],
+    "ignoreFiles": [],
+    "ignoreValues": [
+      {
+        "rule": "dark-glow",
+        "value": "*",
+        "files": [
+          "web/index.html"
+        ],
+        "createdAt": "2026-08-20T22:45:45.699Z",
+        "reason": "Explicit user request to port ui/cyberpunk/CyberpunkUIKit's visual language; the kit's own source (--cp-glow: 0 0 5px accent, GlowText text-shadow, section-header underline glow) is authored with these exact glow shadows as its genre look, same sanctioned-exception class as FalloutTerminal/CrtNotFound's CRT scanline look per the template library's own meta.md (\"kept intentionally... not stripped as branding\")."
+      },
+      {
+        "rule": "design-system-font",
+        "value": "fira mono",
+        "files": [
+          "web/index.html"
+        ],
+        "createdAt": "2026-08-21T04:03:27.691Z",
+        "reason": "DESIGN.md typography section already reserves Fira Mono as --font-mono ('declared in the token set but not actually applied anywhere... reserved, not a live typographic voice') for a future live use; the Retro Terminal theme (#32) is that use."
+      },
+      {
+        "rule": "design-system-color",
+        "value": "#e6edf3",
+        "createdAt": "2026-08-21T04:07:29.856Z",
+        "reason": "web/control is a standalone mobile config form (#30), deliberately not styled to DESIGN.md's Night Ops HUD -- it's a phone-viewed utility page, not the wallpaper surface"
+      },
+      {
+        "rule": "design-system-color",
+        "value": "#7ee7ea",
+        "createdAt": "2026-08-21T04:07:29.911Z",
+        "reason": "web/control is a standalone mobile config form (#30), deliberately not styled to DESIGN.md's Night Ops HUD -- it's a phone-viewed utility page, not the wallpaper surface"
+      },
+      {
+        "rule": "design-system-radius",
+        "value": "8px",
+        "createdAt": "2026-08-21T04:07:29.977Z",
+        "reason": "web/control is a standalone mobile config form (#30), deliberately not styled to DESIGN.md's Night Ops HUD -- it's a phone-viewed utility page, not the wallpaper surface"
+      },
+      {
+        "rule": "design-system-color",
+        "value": "#9fb0bd",
+        "createdAt": "2026-08-21T04:07:30.031Z",
+        "reason": "web/control is a standalone mobile config form (#30), deliberately not styled to DESIGN.md's Night Ops HUD -- it's a phone-viewed utility page, not the wallpaper surface"
+      },
+      {
+        "rule": "design-system-color",
+        "value": "#c3ccd4",
+        "createdAt": "2026-08-21T04:07:30.086Z",
+        "reason": "web/control is a standalone mobile config form (#30), deliberately not styled to DESIGN.md's Night Ops HUD -- it's a phone-viewed utility page, not the wallpaper surface"
+      },
+      {
+        "rule": "design-system-color",
+        "value": "#161b22",
+        "createdAt": "2026-08-21T04:07:30.146Z",
+        "reason": "web/control is a standalone mobile config form (#30), deliberately not styled to DESIGN.md's Night Ops HUD -- it's a phone-viewed utility page, not the wallpaper surface"
+      },
+      {
+        "rule": "design-system-color",
+        "value": "#30363d",
+        "createdAt": "2026-08-21T04:07:30.205Z",
+        "reason": "web/control is a standalone mobile config form (#30), deliberately not styled to DESIGN.md's Night Ops HUD -- it's a phone-viewed utility page, not the wallpaper surface"
+      },
+      {
+        "rule": "design-system-color",
+        "value": "#1f6a6e",
+        "createdAt": "2026-08-21T04:07:30.264Z",
+        "reason": "web/control is a standalone mobile config form (#30), deliberately not styled to DESIGN.md's Night Ops HUD -- it's a phone-viewed utility page, not the wallpaper surface"
+      },
+      {
+        "rule": "design-system-color",
+        "value": "#0d1117",
+        "createdAt": "2026-08-21T04:07:30.323Z",
+        "reason": "web/control is a standalone mobile config form (#30), deliberately not styled to DESIGN.md's Night Ops HUD -- it's a phone-viewed utility page, not the wallpaper surface"
+      },
+      {
+        "rule": "design-system-color",
+        "value": "#22303c",
+        "createdAt": "2026-08-21T04:07:30.379Z",
+        "reason": "web/control is a standalone mobile config form (#30), deliberately not styled to DESIGN.md's Night Ops HUD -- it's a phone-viewed utility page, not the wallpaper surface"
+      },
+      {
+        "rule": "design-system-color",
+        "value": "rgb(70 22 22 / .45)",
+        "createdAt": "2026-08-21T04:40:43.329Z",
+        "reason": "pre-existing Cyberpunk UIKit restyle color (commit 01fac0d), predates this merge session, unrelated to any change made here"
+      },
+      {
+        "rule": "design-system-color",
+        "value": "oklch(0.32 0.09 265 / .55)",
+        "createdAt": "2026-08-21T04:40:43.383Z",
+        "reason": "pre-existing Cyberpunk UIKit restyle color (commit 01fac0d), predates this merge session, unrelated to any change made here"
+      },
+      {
+        "rule": "design-system-color",
+        "value": "oklch(0.34 0.10 200 / .40)",
+        "createdAt": "2026-08-21T04:40:43.438Z",
+        "reason": "pre-existing Cyberpunk UIKit restyle color (commit 01fac0d), predates this merge session, unrelated to any change made here"
+      },
+      {
+        "rule": "design-system-color",
+        "value": "oklch(0.30 0.08 300 / .38)",
+        "createdAt": "2026-08-21T04:40:43.492Z",
+        "reason": "pre-existing Cyberpunk UIKit restyle color (commit 01fac0d), predates this merge session, unrelated to any change made here"
+      },
+      {
+        "rule": "design-system-color",
+        "value": "oklch(0.55 0.17 25/.30)",
+        "createdAt": "2026-08-21T04:40:43.548Z",
+        "reason": "pre-existing Cyberpunk UIKit restyle color (commit 01fac0d), predates this merge session, unrelated to any change made here"
+      },
+      {
+        "rule": "design-system-color",
+        "value": "oklch(0.35 0.02 260)",
+        "createdAt": "2026-08-21T04:40:47.679Z",
+        "reason": "pre-existing app.js color, predates this merge session, unrelated to any change made here"
+      },
+      {
+        "rule": "design-system-radius",
+        "value": "6px",
+        "createdAt": "2026-08-21T04:23:55.290Z",
+        "reason": "web/control is a standalone mobile config form (#30), deliberately not styled to DESIGN.md's Night Ops HUD -- same sanctioned exception as the other web/control color/radius ignores"
+      },
+      {
+        "rule": "design-system-color",
+        "value": "#fff",
+        "createdAt": "2026-08-23T19:47:19.783Z",
+        "reason": "user explicitly requested white text on the weather alert badge (issue #49) as the contrast color against the badge's deep-red fill"
+      },
+      {
+        "rule": "cramped-padding",
+        "value": "*",
+        "files": [
+          "web/index.html"
+        ],
+        "createdAt": "2026-09-22T02:41:46.913Z",
+        "reason": "The static analyzer can't resolve arbitrary-value Tailwind vmin padding (px-[2vmin] py-[1.5vmin], the panel px-[2.4vmin] py-[1.8vmin]), so it reads every .panel as near-zero padding. Measured via CDP getComputedStyle at a real 2560x1080 render (#87): actual padding is ~15-18px vertical / ~20-24px horizontal on every panel, above the hook's own 12-16px ideal. Intended HUD density (DESIGN.md), not a defect -- verified #87."
+      }
+    ]
+  }
+}

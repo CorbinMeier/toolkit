@@ -1,0 +1,119 @@
+{
+  "location": {
+    "name": "Chico, CA",
+    "latitude": 39.72849,
+    "longitude": -121.83748,
+    "timezone": "America/Los_Angeles"
+  },
+  "units": {
+    "temperature": "fahrenheit",
+    "wind": "mph",
+    "precipitation": "inch",
+    "clock24": true
+  },
+  "server": {
+    "host": "127.0.0.1",
+    "port": 4320
+  },
+  "control": {
+    "_comment": "bin/dashd-control -- mobile-facing config surface (#30). Binds LAN-reachable (unlike server.host above), so every route past /api/health requires the pairing token; qr.svg/rotate are loopback-only regardless of token.",
+    "host": "0.0.0.0",
+    "port": 4321
+  },
+  "logs": {
+    "_comment": "Log-highlighter panel (#28), source editable from the Control Backend. source_type is 'journalctl' or 'file'. journalctl_matches are raw journal field matches, OR'd together -- they match on the PROCESS rather than the unit because local auth failures come from cosmic-greeter/greetd/sudo spread across several units, including per-session session-N.scope names that cannot be hardcoded, so no single unit catches a failed login (#72). Indexed field matches, never --grep: a system-wide grep is a full text scan and measured 4.3s even bounded to 24h, versus 126ms here. journalctl_unit is the Control Backend's phone-editable override and WINS when set -- clear it (null) to return to the broad matches below.",
+    "source_type": "journalctl",
+    "journalctl_unit": null,
+    "journalctl_matches": [
+      "_COMM=sshd",
+      "_COMM=sudo",
+      "_COMM=su",
+      "_COMM=login",
+      "_COMM=cosmic-greeter",
+      "_COMM=greetd"
+    ],
+    "file_path": null,
+    "max_lines": 200,
+    "patterns": [
+      {
+        "regex": "Failed password|authentication failure|Invalid user",
+        "status": "critical",
+        "label": "Failed login"
+      },
+      {
+        "regex": "Accepted password|Accepted publickey",
+        "status": "ok",
+        "label": "Login OK"
+      },
+      {
+        "regex": "sudo:.*COMMAND",
+        "status": "warn",
+        "label": "sudo"
+      }
+    ]
+  },
+  "projects": {
+    "_comment": "Projects panel (#62) -- per-repo GitHub issue stats from one `gh api graphql` call covering the authenticated user plus every org they belong to. Owners are always discovered, never listed here (a hand-kept list goes stale the moment an org is joined); exclude_owners only trims. refresh_seconds is deliberately hours -- this is a standing reminder of outstanding work, not a live metric -- and the fetch runs on a background thread so a slow `gh` never stalls /api/state. stale_after_days hides repos untouched that long, keeping dormant projects off the card; 0 disables the cutoff.",
+    "enabled": true,
+    "refresh_seconds": 21600,
+    "stale_after_days": 90,
+    "exclude_owners": []
+  },
+  "updates": {
+    "_comment": "Pending apt-get upgrade counts (#83) -- `apt-get -s upgrade` (a read-only simulation against the local apt cache, no network, no root) measured ~4s on this machine, so it runs on a background thread and is cached the same fetch-once way Projects is. refresh_seconds is hours: apt's own cache refreshes on its own cadence already, so polling faster than that would just re-measure the same numbers.",
+    "enabled": true,
+    "refresh_seconds": 21600
+  },
+  "sessions": {
+    "_comment": "Sessions panel (#71) -- who logged in since the last boot, read from systemd-logind's journal. NOT utmp/wtmp: the COSMIC greeter writes no user utmp record, so `last`/`who` see nothing on this machine. The list resets at every boot because the read is scoped with `journalctl -b`; there is no stored history to prune, unlike metrics.db. min_uid is the retroactive human-sessions-only filter -- a closed session has no logind object left to test Class=user against, but its uid separates the same set, and it drops the uid-988 cosmic-greeter session that opens and closes at every single boot. max_rows caps the panel; 0 disables the cap.",
+    "enabled": true,
+    "min_uid": 1000,
+    "max_rows": 12
+  },
+  "weather_alerts": {
+    "_comment": "Weather panel highlight (#46). temp_high_f/rain_pct compare directly against weather.temp/precip_prob, which are already in units.temperature/units above -- assumes fahrenheit, matching this config's units. condition_patterns are regex over weather.desc, same {regex, label} shape as logs.patterns above; first match wins. aqi_high (#79) compares against air_quality.aqi (US AQI scale); 101 is the first \"Unhealthy for Sensitive Groups\" value.",
+    "temp_high_f": 90,
+    "rain_pct": 40,
+    "aqi_high": 101,
+    "condition_patterns": [
+      {
+        "regex": "rain|shower|drizzle|storm|thunder|hail|snow|sleet",
+        "label": "Severe weather"
+      }
+    ]
+  },
+  "display": {
+    "layer": "BOTTOM",
+    "interactive": true,
+    "transparent": false,
+    "theme": "night_ops",
+    "_theme_options": [
+      "night_ops",
+      "retro_terminal",
+      "retro_orange"
+    ],
+    "tint_strength": 1,
+    "_tint_strength_comment": "Multiplier over web/app.js's TINT_PHASES alphas (#88, follow-up to #78's surface tint which was calibrated to invisible). A selection (#74), same as theme -- edit here only to change the shipped default; a live pick from the context menu's Tint submenu persists to data/config.local.json instead. 1 == Medium (web/app.js's TINT_STRENGTHS), the baseline TINT_PHASES were tuned against; 0 == Off, genuinely no paint.",
+    "safe_area_top": 48,
+    "safe_area_bottom": 48
+  },
+  "refresh": {
+    "weather_seconds": 600,
+    "air_quality_seconds": 900,
+    "nws_alerts_seconds": 300,
+    "state_poll_seconds": 5,
+    "metrics_sample_seconds": 30,
+    "metrics_retain_hours": 24
+  },
+  "outputs": {
+    "_comment": "Per-output layout overrides. Key = monitor model or connector as reported by the host (see `dashd-host --list`). 'layout' picks a top-level layout in web/app.js; omit an output to use 'auto'.",
+    "DELL U2913WM": {
+      "layout": "wide",
+      "scale": 1.0
+    },
+    "default": {
+      "layout": "auto",
+      "scale": 1.0
+    }
+  }
+}

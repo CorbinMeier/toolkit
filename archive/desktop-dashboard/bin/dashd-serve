@@ -1,0 +1,1256 @@
+#!/usr/bin/env python3
+"""Localhost data + static server for the desktop dashboard.
+
+Serves web/ as static files and a merged /api/state document:
+
+    weather   Open-Meteo, cached to data/weather.json (refetched on interval)
+    air_quality  Open-Meteo Air Quality API (#79), cached to
+              data/air_quality.json on its own TTL -- US AQI + PM2.5,
+              same lat/lon as weather, same stale-beats-error posture
+    nws_alerts   api.weather.gov active alerts by lat/lon (#80), cached to
+              data/nws_alerts.json -- kept distinct from weather.alert
+              (our own threshold-derived signal); empty outside the US
+    sun/moon  sunrise/sunset from Open-Meteo, moon phase computed locally
+    sys       live CPU/RAM/disk/net/battery via psutil (lib/sysinfo.py)
+    music     current MPRIS now-playing state via `playerctl`, or None if
+              nothing is playing/paused (lib/sysinfo.py, source-agnostic --
+              works with any player that registers over MPRIS). Its
+              art_url (when present) is served through GET /api/music/art
+              -- proxied from disk for a local file://, redirected for a
+              remote http(s)://, since the frontend can't load a file://
+              subresource from an http-origin page
+    tasks     {"items": [...]} read verbatim from data/tasks.json -- source-
+              agnostic by design (#25): any script/cron/integration writes
+              that file in the {"items": [{"text","done","due"}]} shape and
+              the Tasks panel picks it up on the next poll, no server code
+              involved
+    extra     verbatim passthrough of data/extra.json, so cron jobs or other
+              scripts can inject arbitrary panels without touching this file
+    locations selectable {name, latitude, longitude, timezone} entries from
+              data/locations.json, read the same source-agnostic way as
+              extra.json/tasks.json (#77) -- missing file just means the
+              configured location is the only choice. Written by POST
+              /api/locations (the menu's Location > Search picks, #104;
+              looked up via GET /api/geocode), consumed by
+              the context menu's Location submenu
+
+This process only ever *reads* data/metrics.db (the /api/history route,
+below) -- every write to it belongs to the standalone `bin/dashd-collect`,
+which samples on its own timer independent of whether this server is being
+polled at all (see #14). "Current value" numbers in /api/state
+stay on the fast live psutil path (system_stats(), below), unrelated to
+that split.
+
+Binds loopback only. No auth by design -- do not expose this port.
+"""
+from __future__ import annotations
+
+import json
+import math
+import mimetypes
+import os
+import re
+import sys
+import threading
+import time
+import urllib.error
+import urllib.parse
+import urllib.request
+from datetime import datetime, UTC
+from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
+from pathlib import Path
+
+import psutil
+
+ROOT = Path(__file__).resolve().parent.parent
+WEB = ROOT / "web"
+DATA = ROOT / "data"
+CONFIG = ROOT / "config.json"
+
+sys.path.insert(0, str(ROOT / "lib"))
+import aptcheck  # noqa: E402
+import ghstats  # noqa: E402
+import logsrc  # noqa: E402
+import metrics  # noqa: E402
+import sessions  # noqa: E402
+import userconf  # noqa: E402
+import sysinfo  # noqa: E402 -- used directly (music_command); tests patch its subprocess
+from sysinfo import (  # noqa: E402,F401 -- re-exported for tests/back-compat
+    _disk_tree_from_psutil, battery_charging, disk_tree, now_playing, system_stats,
+)
+
+# https://open-meteo.com/en/docs -- WMO weather interpretation codes
+WMO = {
+    0: ("Clear", "clear"), 1: ("Mainly clear", "clear"),
+    2: ("Partly cloudy", "partly"), 3: ("Overcast", "cloudy"),
+    45: ("Fog", "fog"), 48: ("Rime fog", "fog"),
+    51: ("Light drizzle", "drizzle"), 53: ("Drizzle", "drizzle"),
+    55: ("Dense drizzle", "drizzle"),
+    56: ("Freezing drizzle", "sleet"), 57: ("Freezing drizzle", "sleet"),
+    61: ("Light rain", "rain"), 63: ("Rain", "rain"), 65: ("Heavy rain", "rain"),
+    66: ("Freezing rain", "sleet"), 67: ("Freezing rain", "sleet"),
+    71: ("Light snow", "snow"), 73: ("Snow", "snow"), 75: ("Heavy snow", "snow"),
+    77: ("Snow grains", "snow"),
+    80: ("Light showers", "rain"), 81: ("Showers", "rain"),
+    82: ("Violent showers", "rain"),
+    85: ("Snow showers", "snow"), 86: ("Snow showers", "snow"),
+    95: ("Thunderstorm", "storm"),
+    96: ("Thunderstorm, hail", "storm"), 99: ("Thunderstorm, hail", "storm"),
+}
+
+
+def night_adjusted(icon: str, is_day: bool) -> str:
+    """clear/partly are the only icon kinds with a distinct night variant."""
+    return f"{icon}-night" if icon in ("clear", "partly") and not is_day else icon
+
+
+_lock = threading.Lock()
+
+
+def load_config() -> dict:
+    # Tracked definitions from config.json, with this machine's selections
+    # (theme, units, log source) layered on top from the untracked
+    # data/config.local.json -- see lib/userconf.py for why the split exists.
+    return userconf.load(ROOT)
+
+
+# Dotted config paths the wallpaper's own context menu (#66) may write.
+# Same whitelist-not-sanitise posture as bin/dashd-control's EDITABLE
+# (bin/dashd-control:52) and #65's MUSIC_COMMANDS -- a request body can
+# never touch a field outside this set, no matter what it contains.
+# "location" (#77) is a full replacement of the sub-object -- the Location
+# submenu (#66/#77) always sends all four fields together (one of
+# data/locations.json's entries, or the current selection unchanged), never
+# a partial patch, so this being leaf-key-whitelisted rather than
+# type-checked is consistent with how "display" already works.
+EDITABLE = {
+    # "tint_opacity" (#94, 0-1) is the Tint submenu's Opacity slider: the one
+    # place the surface stops being opaque, chosen live, never by default.
+    # "transparent" stays writable so the slider can clear that older flag.
+    # "safe_area_top"/"safe_area_bottom" (#105, px) are the Settings > Safe
+    # area sliders; global, not per-monitor.
+    "display": {"theme", "tint_strength", "tint_opacity", "transparent",
+                "safe_area_top", "safe_area_bottom"},
+    "location": {"name", "latitude", "longitude", "timezone"},
+    # "units" (#103): each key is checked against UNIT_VALUES below.
+    "units": {"temperature", "wind", "precipitation", "clock24"},
+}
+
+SAFE_AREA_MAX = 160  # px; matches the Settings > Safe area sliders (#105)
+# Per-key value whitelist for EDITABLE["units"] (#103) -- Open-Meteo's own
+# accepted spellings, since these go straight into the forecast query.
+UNIT_VALUES = {
+    "temperature": ("fahrenheit", "celsius"),
+    "wind": ("mph", "kmh", "ms", "kn"),
+    "precipitation": ("inch", "mm"),
+}
+# Changing any of these changes the numbers Open-Meteo returns, so the
+# cached observations are in the wrong unit until refetched.
+FETCHED_UNIT_KEYS = ("temperature", "wind", "precipitation")
+
+# Panel ids the "Cards" menu (#94) can place, in web/index.html. A whitelist
+# for the same reason EDITABLE is one: the ids end up as getElementById keys.
+CARD_IDS = ("secSystem", "secProjects", "secSessions", "secForecast",
+            "musicSection", "secLog")
+# outputs.<name>.layout choices (#100); anything but wide/narrow resolves by aspect.
+LAYOUT_CHOICES = ("auto", "narrow", "wide")
+# Output and profile names are user/hardware strings that become JSON keys.
+_NAME_RE = re.compile(r"^[\w .\-]{1,64}$")
+
+
+def _valid_cards(cards) -> bool:
+    return (isinstance(cards, list) and len(set(cards)) == len(cards)
+            and all(c in CARD_IDS for c in cards))
+
+
+def _valid_outputs(outputs, allow_reset: bool = False) -> bool:
+    """`allow_reset` lets `cards` be null: a delete of the stored list (#98),
+    valid only in a live patch, never inside a saved profile."""
+    return (isinstance(outputs, dict)
+            and all(_NAME_RE.match(k) and isinstance(v, dict)
+                    and set(v) <= {"cards", "layout"}
+                    and (_valid_cards(v.get("cards", []))
+                         or (allow_reset and "cards" in v and v["cards"] is None))
+                    and v.get("layout", "auto") in LAYOUT_CHOICES
+                    for k, v in outputs.items()))
+
+
+def rename_profile(profiles: dict, old, new) -> tuple[dict | None, str | None]:
+    """Validate a profile rename (#95). Returns (patch, None) -- one patch that
+    saves the snapshot under `new` and deletes `old` -- or (None, reason)."""
+    if not (isinstance(old, str) and isinstance(new, str)):
+        return None, "names must be strings"
+    new = new.strip()
+    if not _NAME_RE.match(new):
+        return None, "invalid name"
+    if old not in profiles:
+        return None, "no such profile"
+    if new == old:
+        return None, "name unchanged"
+    if new in profiles:
+        return None, "name already used"
+    return {"profiles": {new: profiles[old], old: None}}, None
+
+
+def filter_patch(patch: dict) -> tuple[dict, list[str]]:
+    """Split `patch` into the part EDITABLE permits and the dotted keys it
+    doesn't, so the caller can report a rejection instead of silently
+    dropping fields.
+
+    Returns the accepted patch rather than mutating a config dict (#74): the
+    patch itself is what gets persisted, into data/config.local.json, so the
+    stored file stays a set of overrides and never becomes a full snapshot
+    that would freeze the tracked defaults.
+    """
+    accepted: dict = {}
+    rejected: list[str] = []
+    if not isinstance(patch, dict):
+        return accepted, ["<patch body>"]
+    for section, fields in patch.items():
+        # Structured sections (#94) are validated whole, not leaf-by-leaf.
+        if section == "outputs":
+            if _valid_outputs(fields, allow_reset=True):
+                accepted["outputs"] = fields
+            else:
+                rejected.append("outputs")
+            continue
+        if section == "profiles":
+            # {name: {"outputs": {...}, "when"?: "day"|"night"|null}} (#102) to save,
+            # {name: None} to delete.
+            ok = isinstance(fields, dict) and all(
+                _NAME_RE.match(k) and (v is None or (
+                    isinstance(v, dict) and "outputs" in v
+                    and set(v) <= {"outputs", "when"}
+                    and v.get("when") in (None, "day", "night")
+                    and _valid_outputs(v["outputs"])))
+                for k, v in fields.items())
+            if ok:
+                accepted["profiles"] = fields
+            else:
+                rejected.append("profiles")
+            continue
+        if section not in EDITABLE or not isinstance(fields, dict):
+            rejected.append(section)
+            continue
+        for key, value in fields.items():
+            if key not in EDITABLE[section]:
+                rejected.append(f"{section}.{key}")
+                continue
+            if key == "tint_opacity" and not (
+                    isinstance(value, (int, float)) and not isinstance(value, bool)
+                    and 0 <= value <= 1):
+                rejected.append(f"{section}.{key}")
+                continue
+            if key in ("safe_area_top", "safe_area_bottom") and not (
+                    isinstance(value, (int, float)) and not isinstance(value, bool)
+                    and 0 <= value <= SAFE_AREA_MAX):
+                rejected.append(f"{section}.{key}")
+                continue
+            if section == "units" and (
+                    (key == "clock24" and not isinstance(value, bool))
+                    or (key in UNIT_VALUES and value not in UNIT_VALUES[key])):
+                rejected.append(f"{section}.{key}")
+                continue
+            if key == "transparent" and not isinstance(value, bool):
+                rejected.append(f"{section}.{key}")
+                continue
+            accepted.setdefault(section, {})[key] = value
+    return accepted, rejected
+
+
+# ---------------------------------------------------------------- moon phase
+
+def moon_phase(when: datetime) -> dict:
+    """Age-of-moon from a known new moon, mean synodic month.
+
+    Accurate to well under a day, which is all a wallpaper needs.
+    """
+    synodic = 29.530588853
+    known_new = datetime(2000, 1, 6, 18, 14, tzinfo=UTC)
+    days = (when - known_new).total_seconds() / 86400.0
+    age = days % synodic
+    frac = age / synodic
+    illum = (1 - math.cos(2 * math.pi * frac)) / 2
+    names = [
+        (1.0, "New Moon"), (6.4, "Waxing Crescent"), (8.4, "First Quarter"),
+        (13.8, "Waxing Gibbous"), (15.8, "Full Moon"), (21.1, "Waning Gibbous"),
+        (23.1, "Last Quarter"), (28.5, "Waning Crescent"), (30.0, "New Moon"),
+    ]
+    name = next(n for limit, n in names if age < limit)
+    return {"age_days": round(age, 2), "phase": round(frac, 4),
+            "illumination": round(illum, 4), "name": name}
+
+
+# ------------------------------------------------------------------- weather
+
+def fetch_weather(cfg: dict) -> dict:
+    loc, units = cfg["location"], cfg["units"]
+    q = urllib.parse.urlencode({
+        "latitude": loc["latitude"], "longitude": loc["longitude"],
+        "timezone": loc["timezone"],
+        "temperature_unit": units["temperature"],
+        "wind_speed_unit": units["wind"],
+        "precipitation_unit": units["precipitation"],
+        "current": ",".join([
+            "temperature_2m", "apparent_temperature", "relative_humidity_2m",
+            "is_day", "weather_code", "wind_speed_10m", "wind_direction_10m",
+            "pressure_msl", "cloud_cover", "precipitation"]),
+        "hourly": "temperature_2m,weather_code,precipitation_probability,is_day",
+        "daily": ",".join([
+            "weather_code", "temperature_2m_max", "temperature_2m_min",
+            "sunrise", "sunset", "uv_index_max",
+            "precipitation_probability_max"]),
+        "forecast_days": 7,
+    })
+    url = f"https://api.open-meteo.com/v1/forecast?{q}"
+    with urllib.request.urlopen(url, timeout=20) as resp:
+        raw = json.load(resp)
+
+    cur, daily, hourly = raw["current"], raw["daily"], raw["hourly"]
+    desc, icon = WMO.get(cur["weather_code"], ("Unknown", "clear"))
+    icon = night_adjusted(icon, cur["is_day"])
+
+    now = datetime.now(UTC)
+    # hourly arrays are local-time indexed; find the next 24h from now
+    times = hourly["time"]
+    local_now = datetime.now().strftime("%Y-%m-%dT%H:00")
+    start = next((i for i, t in enumerate(times) if t >= local_now), 0)
+    sl = slice(start, start + 24)
+
+    return {
+        "location": loc["name"],
+        "observed": raw["current"]["time"],
+        "temp": round(cur["temperature_2m"]),
+        "apparent": round(cur["apparent_temperature"]),
+        "humidity": cur["relative_humidity_2m"],
+        "code": cur["weather_code"], "desc": desc, "icon": icon,
+        "is_day": bool(cur["is_day"]),
+        "wind": round(cur["wind_speed_10m"]),
+        "wind_dir": cur["wind_direction_10m"],
+        # fetched, deliberately unrendered -- #84. Cloud cover partly
+        # duplicates desc/code (a "Clear"/"Overcast" condition string
+        # already implies it); raw pressure without a trend isn't
+        # actionable, and storing a trend would make dashd-collect (the
+        # sole metrics.db writer, #14) read data/weather.json, a new
+        # cross-process coupling deliberately not taken on here. Neither
+        # earned Forecast's space alongside #79/#80's two new rows --
+        # closed with this reasoning recorded rather than rendered.
+        "pressure": round(cur["pressure_msl"]),
+        "cloud": cur["cloud_cover"],
+        "high": round(daily["temperature_2m_max"][0]),
+        "low": round(daily["temperature_2m_min"][0]),
+        "uv": daily["uv_index_max"][0],
+        "precip_prob": daily["precipitation_probability_max"][0],
+        "sun": {"sunrise": daily["sunrise"][0], "sunset": daily["sunset"][0]},
+        "moon": moon_phase(now),
+        "hourly": [
+            {"time": t, "temp": round(v) if v is not None else None,
+             "code": c, "icon": night_adjusted(WMO.get(c, ("", "clear"))[1], bool(d)),
+             "precip": p}
+            # strict: misaligned arrays would pair one hour's temperature
+            # with another hour's icon. Better to raise and serve the cache.
+            for t, v, c, d, p in zip(
+                times[sl], hourly["temperature_2m"][sl],
+                hourly["weather_code"][sl], hourly["is_day"][sl],
+                hourly["precipitation_probability"][sl], strict=True)
+        ],
+        "daily": [
+            {"date": d, "hi": round(hi), "lo": round(lo), "code": c,
+             "desc": WMO.get(c, ("Unknown", ""))[0],
+             "icon": WMO.get(c, ("", "clear"))[1], "precip": p}
+            for d, hi, lo, c, p in zip(
+                daily["time"], daily["temperature_2m_max"],
+                daily["temperature_2m_min"], daily["weather_code"],
+                daily["precipitation_probability_max"], strict=True)
+        ],
+        "units": {"temp": "°F" if units["temperature"] == "fahrenheit" else "°C",
+                  "wind": units["wind"]},
+        "fetched_at": time.time(),
+    }
+
+
+# GET /api/geocode?q= input validation (#77). Whitelist-not-sanitise, same
+# posture as MUSIC_COMMANDS and EDITABLE: a query is either shaped like a
+# place name or it is rejected outright, never escaped/truncated/repaired
+# and forwarded anyway. `\w` is unicode-aware by default on a str pattern in
+# Python 3, so accented/non-Latin city names (Munich's "München") still
+# match; only the length cap and character set are the boundary.
+GEOCODE_QUERY_RE = re.compile(r"^[\w][\w .,'-]{0,79}$")
+GEOCODE_MAX_COUNT = 10
+# A saved location's display name (#104): "City, Region, Country" as built
+# by the picker -- same character set as a query, but longer.
+GEOCODE_NAME_RE = re.compile(r"^[\w][\w .,'-]{0,119}$")
+
+
+def geocode(query: str, count: int = 8) -> list[dict]:
+    """Top `count` name matches from Open-Meteo's geocoding API, trimmed to
+    just the fields a location picker needs.
+
+    Validates `query` itself, the same "checked at the point that would
+    reach a subprocess/network call, not just at the HTTP edge" posture
+    sysinfo.music_command() uses for MUSIC_COMMANDS -- the handler's own
+    400 short-circuit is a second layer, not the only one, so a future
+    caller (a helper script populating data/locations.json, say) can't
+    accidentally reach the network with an unvalidated query just because
+    it isn't going through the HTTP route.
+    """
+    if not GEOCODE_QUERY_RE.match(query or ""):
+        raise ValueError(f"invalid geocode query: {query!r}")
+    count = max(1, min(int(count), GEOCODE_MAX_COUNT))
+    q = urllib.parse.urlencode({
+        "name": query, "count": count, "language": "en", "format": "json"})
+    url = f"https://geocoding-api.open-meteo.com/v1/search?{q}"
+    with urllib.request.urlopen(url, timeout=10) as resp:
+        raw = json.load(resp)
+    return [
+        {"name": r.get("name"), "admin1": r.get("admin1"),
+         "country": r.get("country"), "latitude": r.get("latitude"),
+         "longitude": r.get("longitude"), "timezone": r.get("timezone")}
+        for r in (raw.get("results") or [])
+    ]
+
+
+def weather_alert(w: dict, cfg: dict) -> dict:
+    """Config-driven alert check against the current conditions -- same
+    "regex patterns in config.json, matched fresh every call" shape as
+    lib/logsrc.py's log patterns, so a threshold/pattern edit takes effect
+    on the next poll rather than waiting for the next weather refetch.
+
+    Per-field flags (#48), not a single active+reasons blob (#46's first
+    cut) -- the frontend highlights the specific value that crossed a
+    threshold (current temp, today's forecast high, rain %, or the
+    condition text), not the whole panel, so each check needs to be
+    addressable on its own.
+    """
+    alerts_cfg = cfg.get("weather_alerts", {})
+    temp_high = alerts_cfg.get("temp_high_f")
+    # The threshold is written in fahrenheit but weather.temp is in
+    # units.temperature (#103): convert so a celsius config still alerts at
+    # the same real temperature.
+    if (temp_high is not None
+            and cfg.get("units", {}).get("temperature") == "celsius"):
+        temp_high = (temp_high - 32) * 5 / 9
+    rain_pct = alerts_cfg.get("rain_pct")
+    temp, high, precip = w.get("temp"), w.get("high"), w.get("precip_prob")
+    desc = w.get("desc", "")
+
+    condition_label = None
+    for pat in alerts_cfg.get("condition_patterns", []):
+        if re.search(pat["regex"], desc, re.IGNORECASE):
+            condition_label = pat.get("label", desc)
+            break
+
+    fields = {
+        "temp": temp_high is not None and temp is not None and temp >= temp_high,
+        "high": temp_high is not None and high is not None and high >= temp_high,
+        "rain": rain_pct is not None and precip is not None and precip >= rain_pct,
+        "condition": condition_label is not None,
+    }
+    return {"active": any(fields.values()), "fields": fields,
+            "condition_label": condition_label}
+
+
+def cached_weather(cfg: dict) -> dict:
+    """Return cached weather, refetching past its TTL.
+
+    On failure the stale cache is served with stale=True rather than raising --
+    a dashboard that shows slightly old weather beats one showing an error.
+    """
+    w = _fetch_or_cache_weather(cfg)
+    if not w.get("unavailable"):
+        w["alert"] = weather_alert(w, cfg)
+    return w
+
+
+def invalidate_weather_cache() -> None:
+    """Drop the location-derived caches (weather, air quality, NWS alerts)
+    so the next /api/state poll refetches all three immediately instead of
+    serving the old location's data for up to their own TTLs (#77, extended
+    by #79/#80 -- air quality and alerts key off the same lat/lon and are
+    subject to the identical stale-city problem). Missing file is a no-op,
+    not an error -- same posture as every other data/ read in this file."""
+    with _lock:
+        (DATA / "weather.json").unlink(missing_ok=True)
+    with _aq_lock:
+        (DATA / "air_quality.json").unlink(missing_ok=True)
+    with _nws_lock:
+        (DATA / "nws_alerts.json").unlink(missing_ok=True)
+
+
+def _fetch_or_cache(path: Path, ttl: float, fetch_fn, lock: threading.Lock) -> dict:
+    """Generic cache-with-TTL-and-stale-fallback, the shape #46 established
+    for weather and #79/#80 reuse verbatim for air quality and NWS alerts:
+    serve the cache under its TTL, refetch past it, and on a failed refetch
+    serve the stale cache with stale=True rather than raising -- old data
+    beats an error on a wallpaper. No cache and a failed fetch degrades to
+    unavailable=True, the same posture ghstats/now_playing use for a source
+    that simply isn't there.
+    """
+    with lock:
+        cache = None
+        if path.exists():
+            try:
+                cache = json.loads(path.read_text())
+            except (json.JSONDecodeError, OSError):
+                cache = None
+        age = time.time() - cache["fetched_at"] if cache else 1e9
+        if age < ttl:
+            return {**cache, "stale": False, "age_seconds": round(age)}
+        try:
+            fresh = fetch_fn()
+            path.write_text(json.dumps(fresh, indent=1))
+            return {**fresh, "stale": False, "age_seconds": 0}
+        except (urllib.error.URLError, OSError, KeyError, ValueError,
+                TimeoutError) as exc:
+            if cache:
+                return {**cache, "stale": True, "age_seconds": round(age),
+                        "error": str(exc)}
+            return {"error": str(exc), "stale": True, "unavailable": True}
+
+
+def _fetch_or_cache_weather(cfg: dict) -> dict:
+    return _fetch_or_cache(DATA / "weather.json", cfg["refresh"]["weather_seconds"],
+                            lambda: fetch_weather(cfg), _lock)
+
+
+# ---------------------------------------------------------- air quality (#79)
+#
+# Open-Meteo's Air Quality API -- same provider, no key, same lat/lon as the
+# forecast, so it inherits #77's location selection automatically. A
+# separate cache/lock/TTL from weather (own file, own age, own stale flag)
+# rather than nesting inside `weather`: the two sources have independent
+# fetch lifecycles and stuffing AQ into the weather dict would conflate two
+# different `stale` flags into one.
+
+_aq_lock = threading.Lock()
+
+# US AQI bands (airnow.gov / EPA); the label is what the row highlights
+# against, not a numeric threshold comparison in the frontend.
+_AQI_BANDS = (
+    (50, "Good"), (100, "Moderate"), (150, "Unhealthy for Sensitive Groups"),
+    (200, "Unhealthy"), (300, "Very Unhealthy"), (float("inf"), "Hazardous"),
+)
+
+
+def aqi_category(aqi: float) -> str:
+    for ceiling, label in _AQI_BANDS:
+        if aqi <= ceiling:
+            return label
+    return "Hazardous"  # pragma: no cover -- inf ceiling above always matches
+
+
+def fetch_air_quality(cfg: dict) -> dict:
+    loc = cfg["location"]
+    q = urllib.parse.urlencode({
+        "latitude": loc["latitude"], "longitude": loc["longitude"],
+        "timezone": loc["timezone"], "current": "us_aqi,pm2_5",
+    })
+    url = f"https://air-quality-api.open-meteo.com/v1/air-quality?{q}"
+    with urllib.request.urlopen(url, timeout=15) as resp:
+        raw = json.load(resp)
+    cur = raw["current"]
+    aqi = cur.get("us_aqi")
+    return {
+        "aqi": round(aqi) if aqi is not None else None,
+        "pm2_5": cur.get("pm2_5"),
+        "category": aqi_category(aqi) if aqi is not None else None,
+        "fetched_at": time.time(),
+    }
+
+
+def air_quality_alert(aq: dict, cfg: dict) -> bool:
+    """Config-driven threshold, same shape as weather_alert() -- the AQI row
+    gets the alert-badge treatment once it reaches config.weather_alerts.
+    aqi_high (default 101, the first "Unhealthy for Sensitive Groups" value).
+    """
+    threshold = cfg.get("weather_alerts", {}).get("aqi_high")
+    aqi = aq.get("aqi")
+    return threshold is not None and aqi is not None and aqi >= threshold
+
+
+def cached_air_quality(cfg: dict) -> dict:
+    """Last known air quality, refetching past its TTL; degrades to
+    unavailable the same way cached_weather does on a first-ever failure."""
+    ttl = cfg["refresh"].get("air_quality_seconds", 900)
+    aq = _fetch_or_cache(DATA / "air_quality.json", ttl,
+                         lambda: fetch_air_quality(cfg), _aq_lock)
+    if not aq.get("unavailable"):
+        aq["alert"] = air_quality_alert(aq, cfg)
+    return aq
+
+
+# ---------------------------------------------------------------- NWS alerts (#80)
+#
+# api.weather.gov active alerts by lat/lon -- free, no key, no auth. Kept
+# entirely distinct from weather.alert (our own threshold-derived signal,
+# #46): an official Red Flag Warning and "today's forecast high crossed a
+# configured number" answer different questions and can both be true at
+# once. Only US coordinates ever return anything; elsewhere this always
+# degrades to an empty list, which is the correct behavior, not a bug.
+
+_nws_lock = threading.Lock()
+_NWS_SEVERITY_ORDER = {"Extreme": 0, "Severe": 1, "Moderate": 2, "Minor": 3,
+                       "Unknown": 4}
+
+
+def shape_nws_alerts(raw: dict) -> list[dict]:
+    """GeoJSON FeatureCollection -> the compact rows the panel needs, most
+    severe first. Drops `description`/`instruction` (can run to several KB
+    per alert and nothing renders them) and anything not status=="Actual"
+    (NWS also returns Test/Exercise/Draft alerts in the same feed)."""
+    rows = []
+    for feat in raw.get("features") or []:
+        p = feat.get("properties") or {}
+        if p.get("status") and p["status"] != "Actual":
+            continue
+        rows.append({
+            "event": p.get("event"), "severity": p.get("severity") or "Unknown",
+            "headline": p.get("headline"), "onset": p.get("onset"),
+            "ends": p.get("ends") or p.get("expires"),
+            "sender": p.get("senderName"),
+        })
+    rows.sort(key=lambda r: _NWS_SEVERITY_ORDER.get(r["severity"], 4))
+    return rows
+
+
+def fetch_nws_alerts(cfg: dict) -> dict:
+    loc = cfg["location"]
+    # NWS requires an identifying User-Agent on every request; an
+    # unidentified UA is documented to be throttled/rejected.
+    q = urllib.parse.urlencode(
+        {"point": f"{loc['latitude']:.4f},{loc['longitude']:.4f}"})
+    req = urllib.request.Request(
+        f"https://api.weather.gov/alerts/active?{q}",
+        headers={"User-Agent": "desktop-dashboard (github.com/CorbinMeier/desktop)",
+                 "Accept": "application/geo+json"})
+    with urllib.request.urlopen(req, timeout=15) as resp:
+        raw = json.load(resp)
+    return {"alerts": shape_nws_alerts(raw), "fetched_at": time.time()}
+
+
+def cached_nws_alerts(cfg: dict) -> dict:
+    """Last known NWS alerts, refetching past its TTL -- shorter than
+    weather's, since freshness matters more for an active warning than for
+    a temperature reading."""
+    ttl = cfg["refresh"].get("nws_alerts_seconds", 300)
+    return _fetch_or_cache(DATA / "nws_alerts.json", ttl,
+                           lambda: fetch_nws_alerts(cfg), _nws_lock)
+
+
+# ---------------------------------------------------------------- system
+#
+# disk_tree(), battery_charging(), system_stats() now live in
+# lib/sysinfo.py, imported above -- shared with bin/dashd-collect so the two
+# processes can't measure a metric two different ways (see #14).
+
+
+# ------------------------------------------------------------- projects
+#
+# GitHub issue stats per repo (#62). Unlike weather, this one must never be
+# fetched on the request thread: `gh api graphql` shells out and does two
+# round trips, which would stall every /api/state poll behind it. So the
+# request thread only ever reads the cache file, and a miss *schedules* a
+# refresh instead of performing one -- the first poll after startup serves
+# `pending`, and a later poll picks up the result. The TTL is hours, not
+# minutes: this is a standing reminder of outstanding work, not a live
+# metric (the user's ask was explicitly "fetch once, not constantly").
+
+_projects_lock = threading.Lock()
+_projects_refreshing = False
+
+
+def _projects_refresh(cfg: dict) -> None:
+    global _projects_refreshing
+    path = DATA / "projects.json"
+    try:
+        fresh = ghstats.fetch(cfg)
+        payload = fresh
+    except ghstats.GhUnavailableError as exc:
+        # Cache the failure too, with its own timestamp, so a broken `gh`
+        # retries on the TTL instead of respawning a thread every poll.
+        payload = {"available": False, "error": str(exc),
+                   "fetched_at": time.time(), "rows": [], "totals": {}}
+    except Exception as exc:  # noqa: BLE001 -- a background thread that dies
+        # silently would leave the panel stuck on "pending" forever.
+        payload = {"available": False, "error": f"{type(exc).__name__}: {exc}",
+                   "fetched_at": time.time(), "rows": [], "totals": {}}
+    try:
+        DATA.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(payload, indent=1))
+    except OSError:
+        pass
+    with _projects_lock:
+        _projects_refreshing = False
+
+
+def cached_projects(cfg: dict) -> dict:
+    """Last known project stats, refreshing in the background past the TTL.
+
+    Always returns immediately. A stale cache is served with stale=True
+    rather than blocking or erroring -- old issue counts beat an empty panel.
+    """
+    global _projects_refreshing
+    pcfg = cfg.get("projects") or {}
+    if not pcfg.get("enabled", True):
+        return {"available": False, "disabled": True, "rows": [], "totals": {}}
+    ttl = float(pcfg.get("refresh_seconds", 21600))
+    path = DATA / "projects.json"
+    cache = None
+    if path.exists():
+        try:
+            cache = json.loads(path.read_text())
+        except (json.JSONDecodeError, OSError):
+            cache = None
+    age = time.time() - cache["fetched_at"] if cache else None
+
+    if age is None or age >= ttl:
+        with _projects_lock:
+            if not _projects_refreshing:
+                _projects_refreshing = True
+                threading.Thread(target=_projects_refresh, args=(cfg,),
+                                 daemon=True).start()
+    if cache is None:
+        return {"available": False, "pending": True, "rows": [], "totals": {}}
+    return {**cache, "stale": age >= ttl, "age_seconds": round(age)}
+
+
+# --------------------------------------------------------------- updates
+#
+# Pending apt-get upgrade counts (#83), same posture as projects above:
+# `apt-get -s upgrade` measured ~4s on this machine and touches no network,
+# but it's still local disk/CPU work the request thread must never wait on.
+# Same fetch-once-and-cache shape -- a miss schedules a background refresh
+# and serves `pending` meanwhile, a later poll picks up the result.
+
+_apt_lock = threading.Lock()
+_apt_refreshing = False
+
+
+def _apt_refresh() -> None:
+    global _apt_refreshing
+    path = DATA / "apt_updates.json"
+    try:
+        payload = aptcheck.fetch()
+    except aptcheck.AptUnavailableError as exc:
+        payload = {"available": False, "error": str(exc),
+                   "fetched_at": time.time(), "total": 0, "security": 0}
+    except Exception as exc:  # noqa: BLE001 -- a background thread that dies
+        # silently would leave the row stuck on "pending" forever.
+        payload = {"available": False, "error": f"{type(exc).__name__}: {exc}",
+                   "fetched_at": time.time(), "total": 0, "security": 0}
+    try:
+        DATA.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(payload, indent=1))
+    except OSError:
+        pass
+    with _apt_lock:
+        _apt_refreshing = False
+
+
+def cached_apt_updates(cfg: dict) -> dict:
+    """Last known pending-update counts, refreshing in the background past
+    the TTL. Always returns immediately -- a stale cache is served with
+    stale=True rather than blocking or erroring.
+    """
+    global _apt_refreshing
+    ucfg = cfg.get("updates") or {}
+    if not ucfg.get("enabled", True):
+        return {"available": False, "disabled": True, "total": 0, "security": 0}
+    ttl = float(ucfg.get("refresh_seconds", 21600))
+    path = DATA / "apt_updates.json"
+    cache = None
+    if path.exists():
+        try:
+            cache = json.loads(path.read_text())
+        except (json.JSONDecodeError, OSError):
+            cache = None
+    age = time.time() - cache["fetched_at"] if cache else None
+
+    if age is None or age >= ttl:
+        with _apt_lock:
+            if not _apt_refreshing:
+                _apt_refreshing = True
+                threading.Thread(target=_apt_refresh, daemon=True).start()
+    if cache is None:
+        return {"available": False, "pending": True, "total": 0, "security": 0}
+    return {**cache, "stale": age >= ttl, "age_seconds": round(age)}
+
+
+def load_tasks() -> dict:
+    """{"items": [...]} from data/tasks.json, source-agnostic (#25).
+
+    Any script/cron/integration can write this file directly -- same
+    verbatim-passthrough shape as extra.json -- so picking a concrete task
+    source (Todoist, a local file, etc.) is deferred to whatever writes it.
+    Missing file means no tasks yet, not an error.
+    """
+    path = DATA / "tasks.json"
+    if not path.exists():
+        return {"items": []}
+    try:
+        loaded = json.loads(path.read_text())
+    except (json.JSONDecodeError, OSError) as exc:
+        return {"items": [], "_error": str(exc)}
+    if not isinstance(loaded, dict) or not isinstance(loaded.get("items"), list):
+        return {"items": [],
+                "_error": "tasks.json must be an object with an items array"}
+    return loaded
+
+
+def load_locations() -> list[dict]:
+    """Selectable locations from data/locations.json, source-agnostic like
+    load_tasks()/extra.json (#77): a missing file is not an error, it just
+    means the configured location is the only choice. Not merged verbatim
+    like extra.json -- validated to the shape the Location submenu needs,
+    since a malformed entry there would otherwise silently break
+    POST /api/config's location patch on selection.
+    """
+    path = DATA / "locations.json"
+    if not path.exists():
+        return []
+    try:
+        loaded = json.loads(path.read_text())
+    except (json.JSONDecodeError, OSError):
+        return []
+    if not isinstance(loaded, list):
+        return []
+    return [
+        {"name": e["name"], "latitude": e["latitude"],
+         "longitude": e["longitude"], "timezone": e["timezone"]}
+        for e in loaded
+        if isinstance(e, dict) and {"name", "latitude", "longitude",
+                                     "timezone"} <= e.keys()
+    ]
+
+
+LOCATION_TZ_RE = re.compile(r"^[A-Za-z0-9_+\-]+(/[A-Za-z0-9_+\-]+){0,2}$")
+LOCATIONS_MAX = 50
+
+
+def clean_location_entry(body) -> dict | None:
+    """Validate a POST /api/locations body (#104); None when malformed.
+    Whitelist shape, same posture as clean_outputs_report: a display name,
+    in-range finite coordinates (bools are not numbers) and an IANA-style
+    timezone, nothing else is kept."""
+    if not isinstance(body, dict):
+        return None
+    name, tz = body.get("name"), body.get("timezone")
+    lat, lon = body.get("latitude"), body.get("longitude")
+    if not isinstance(name, str) or not GEOCODE_NAME_RE.match(name):
+        return None
+    if not isinstance(tz, str) or not LOCATION_TZ_RE.match(tz) or len(tz) > 64:
+        return None
+    for v, lim in ((lat, 90), (lon, 180)):
+        if isinstance(v, bool) or not isinstance(v, (int, float)):
+            return None
+        if not math.isfinite(v) or abs(v) > lim:
+            return None
+    return {"name": name.strip(), "latitude": lat, "longitude": lon,
+            "timezone": tz}
+
+
+def save_location(entry: dict) -> list[dict]:
+    """Append `entry` to data/locations.json atomically (tmp + replace),
+    replacing any saved entry of the same name; capped at LOCATIONS_MAX
+    (oldest dropped). Returns the saved list. Caller holds no lock; this
+    takes `_lock` so two picks can't interleave read-modify-write."""
+    with _lock:
+        rows = [r for r in load_locations() if r["name"] != entry["name"]]
+        rows.append(entry)
+        rows = rows[-LOCATIONS_MAX:]
+        path = DATA / "locations.json"
+        tmp = path.with_suffix(".json.tmp")
+        tmp.write_text(json.dumps(rows, indent=2) + "\n")
+        tmp.replace(path)
+    return rows
+
+
+def load_outputs_detected() -> list[dict]:
+    """The monitors dashd-host last reported (#93), or [] before it has."""
+    path = DATA / "outputs_detected.json"
+    try:
+        loaded = json.loads(path.read_text())
+    except (json.JSONDecodeError, OSError):
+        return []
+    return loaded if isinstance(loaded, list) else []
+
+
+def clean_outputs_report(body) -> list[dict] | None:
+    """Validate dashd-host's POST /api/outputs body; None when malformed."""
+    rows = body.get("outputs") if isinstance(body, dict) else None
+    if not isinstance(rows, list):
+        return None
+    out = []
+    for r in rows:
+        if not (isinstance(r, dict) and isinstance(r.get("key"), str)
+                and _NAME_RE.match(r["key"])
+                and all(isinstance(r.get(k), int) and not isinstance(r.get(k), bool)
+                        for k in ("width", "height", "x", "y", "scale"))):
+            return None
+        out.append({k: r[k] for k in ("key", "width", "height", "x", "y", "scale")})
+    return out
+
+
+def _sniff_image_type(data: bytes) -> str | None:
+    """Magic-byte fallback for a `file://` art_url with no extension --
+    Chromium's MPRIS bridge hands out temp paths like
+    `.org.chromium.Chromium.z0Ffbp`, which mimetypes.guess_type can't
+    classify from the name alone."""
+    if data.startswith(b"\x89PNG\r\n\x1a\n"):
+        return "image/png"
+    if data.startswith(b"\xff\xd8\xff"):
+        return "image/jpeg"
+    if data.startswith((b"GIF87a", b"GIF89a")):
+        return "image/gif"
+    if data[:4] == b"RIFF" and data[8:12] == b"WEBP":
+        return "image/webp"
+    return None
+
+
+def music_art_response() -> dict | None:
+    """What GET /api/music/art should send back, or None for "nothing to
+    show" (204). Local playerctl-reported art (`file://...`, the common
+    case -- most players cache album art to a local temp/cache file) is
+    read straight off disk and proxied, since a `file://` subresource
+    can't be loaded directly by a page served over http even on
+    localhost. A remote `http(s)://` art_url is handed to the browser via
+    redirect instead -- no proxying needed, it's not a local-file access
+    problem.
+    """
+    music = now_playing()
+    art_url = music.get("art_url") if music else None
+    if not art_url:
+        return None
+    parsed = urllib.parse.urlparse(art_url)
+    if parsed.scheme in ("http", "https"):
+        return {"redirect": art_url}
+    if parsed.scheme != "file":
+        return None
+    path = Path(urllib.parse.unquote(parsed.path))
+    try:
+        data = path.read_bytes()
+    except OSError:
+        return None
+    content_type, _ = mimetypes.guess_type(path.name)
+    if not content_type or not content_type.startswith("image/"):
+        content_type = _sniff_image_type(data) or "application/octet-stream"
+    return {"data": data, "content_type": content_type}
+
+
+def build_state(cfg: dict) -> dict:
+    extra = {}
+    extra_path = DATA / "extra.json"
+    if extra_path.exists():
+        try:
+            extra = json.loads(extra_path.read_text())
+        except (json.JSONDecodeError, OSError) as exc:
+            extra = {"_error": str(exc)}
+    sys_stats = system_stats()
+    return {
+        "ts": time.time(),
+        "config": {"units": cfg["units"], "display": cfg["display"],
+                   "location": cfg["location"]["name"],
+                   "outputs": cfg.get("outputs", {}),
+                   "profiles": cfg.get("profiles", {}),
+                   "poll": cfg["refresh"]["state_poll_seconds"],
+                   # so the frontend's /api/history fetch window can track
+                   # the server's actual retention instead of a hardcoded
+                   # guess that silently drifts from config.json
+                   "metrics_retain_hours": cfg["refresh"].get(
+                       "metrics_retain_hours", 24)},
+        "weather": cached_weather(cfg),
+        "air_quality": cached_air_quality(cfg),
+        "nws_alerts": cached_nws_alerts(cfg),
+        "sys": sys_stats,
+        "music": now_playing(),
+        "projects": cached_projects(cfg),
+        "updates": cached_apt_updates(cfg),
+        # Read on the request thread, unlike projects: this one is two local
+        # subprocesses against the journal and logind (~17ms combined), not a
+        # network round trip, so a cache file and a refresh thread would be
+        # more moving parts than the cost they save. Same call logsrc and
+        # now_playing() already make.
+        "sessions": sessions.collect(cfg),
+        "tasks": load_tasks(),
+        "logs": logsrc.read_log_lines(cfg),
+        "extra": extra,
+        "locations": load_locations(),
+        "outputs_detected": load_outputs_detected(),
+    }
+
+
+class Handler(SimpleHTTPRequestHandler):
+    def __init__(self, *a, **kw):
+        super().__init__(*a, directory=str(WEB), **kw)
+
+    def _json(self, payload: dict, code: int = 200) -> None:
+        body = json.dumps(payload).encode()
+        self.send_response(code)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(body)))
+        self.send_header("Cache-Control", "no-store")
+        self.end_headers()
+        self.wfile.write(body)
+
+    def do_GET(self) -> None:  # noqa: N802
+        route = urllib.parse.urlparse(self.path).path
+        if route == "/api/state":
+            try:
+                self._json(build_state(load_config()))
+            except Exception as exc:  # noqa: BLE001 - never kill the server
+                self._json({"error": repr(exc)}, 500)
+            return
+        if route == "/api/health":
+            self._json({"ok": True, "ts": time.time()})
+            return
+        if route == "/api/music/art":
+            try:
+                art = music_art_response()
+            except Exception as exc:  # noqa: BLE001 - never kill the server
+                self._json({"error": repr(exc)}, 500)
+                return
+            if art is None:
+                self.send_response(404)
+                self.end_headers()
+            elif "redirect" in art:
+                self.send_response(302)
+                self.send_header("Location", art["redirect"])
+                self.end_headers()
+            else:
+                self.send_response(200)
+                self.send_header("Content-Type", art["content_type"])
+                self.send_header("Content-Length", str(len(art["data"])))
+                self.send_header("Cache-Control", "no-store")
+                self.end_headers()
+                self.wfile.write(art["data"])
+            return
+        if route == "/api/geocode":
+            qs = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
+            q = qs.get("q", [""])[0]
+            # Whitelist, not sanitisation -- same posture as
+            # /api/music/command: anything not shaped like a place name
+            # never reaches urllib, let alone the network.
+            if not GEOCODE_QUERY_RE.match(q):
+                self._json({"error": "invalid query"}, 400)
+                return
+            count_raw = qs.get("count", ["8"])[0]
+            # Same whitelist posture as `q`: only 1-2 digits are a valid
+            # count at all, anything else falls back to the default rather
+            # than raising past this point.
+            count = int(count_raw) if re.match(r"^\d{1,2}$", count_raw) else 8
+            try:
+                self._json({"results": geocode(q, count)})
+            except (urllib.error.URLError, OSError, ValueError,
+                     TimeoutError) as exc:
+                self._json({"error": repr(exc)}, 502)
+            return
+        if route == "/api/history":
+            try:
+                cfg = load_config()
+                retain_hours = cfg.get("refresh", {}).get("metrics_retain_hours", 24)
+                qs = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
+                hours = float(qs.get("hours", [str(retain_hours)])[0])
+                hours = max(0.0, min(hours, retain_hours))
+                samples = metrics.query_history(
+                    DATA / "metrics.db", since_seconds=hours * 3600)
+                self._json({"samples": samples})
+            except Exception as exc:  # noqa: BLE001 - never kill the server
+                self._json({"error": repr(exc)}, 500)
+            return
+        super().do_GET()
+
+    def do_POST(self) -> None:  # noqa: N802
+        route = urllib.parse.urlparse(self.path).path
+        if route == "/api/music/command":
+            self._music_command()
+            return
+        if route == "/api/config":
+            self._config_patch()
+            return
+        if route == "/api/profile/rename":
+            self._profile_rename()
+            return
+        if route == "/api/outputs":
+            self._outputs_report()
+            return
+        if route == "/api/locations":
+            self._location_save()
+            return
+        self._json({"error": "not found"}, 404)
+
+    def _location_save(self) -> None:
+        """Remember a geocoded pick in data/locations.json (#104) so it
+        shows in the Location submenu next time."""
+        try:
+            length = int(self.headers.get("Content-Length") or 0)
+            entry = clean_location_entry(json.loads(self.rfile.read(length) or b"{}"))
+        except (ValueError, json.JSONDecodeError):
+            entry = None
+        if entry is None:
+            self._json({"error": "bad request body"}, 400)
+            return
+        try:
+            save_location(entry)
+        except OSError as exc:
+            self._json({"error": repr(exc)}, 500)
+            return
+        self._json({"ok": True})
+
+    def _outputs_report(self) -> None:
+        """dashd-host reports the connected monitors here on every sync (#93).
+        Loopback-only like every route on this server."""
+        try:
+            length = int(self.headers.get("Content-Length") or 0)
+            rows = clean_outputs_report(json.loads(self.rfile.read(length) or b"{}"))
+        except (ValueError, json.JSONDecodeError):
+            rows = None
+        if rows is None:
+            self._json({"error": "bad request body"}, 400)
+            return
+        path = DATA / "outputs_detected.json"
+        tmp = path.with_suffix(".json.tmp")
+        try:
+            tmp.write_text(json.dumps(rows, indent=2) + "\n")
+            tmp.replace(path)
+        except OSError as exc:
+            self._json({"error": repr(exc)}, 500)
+            return
+        self._json({"ok": True})
+
+    def _music_command(self) -> None:
+        try:
+            length = int(self.headers.get("Content-Length") or 0)
+            body = json.loads(self.rfile.read(length) or b"{}")
+            command = body.get("command")
+        except (ValueError, json.JSONDecodeError):
+            self._json({"error": "bad request body"}, 400)
+            return
+        # Whitelist, not sanitisation: anything not literally one of the three
+        # known verbs is rejected before it can reach a subprocess argv.
+        if command not in sysinfo.MUSIC_COMMANDS:
+            self._json({"error": f"unknown command: {command!r}"}, 400)
+            return
+        try:
+            self._json({"ok": sysinfo.music_command(command)})
+        except Exception as exc:  # noqa: BLE001 - never kill the server
+            self._json({"error": repr(exc)}, 500)
+
+    def _profile_rename(self) -> None:
+        """Rename a saved profile in one validated step (#95): the wallpaper
+        has no keyboard, so the menu's letter picker posts {from, to}."""
+        try:
+            length = int(self.headers.get("Content-Length") or 0)
+            body = json.loads(self.rfile.read(length) or b"{}")
+            old, new = body["from"], body["to"]
+        except (ValueError, KeyError, TypeError, json.JSONDecodeError):
+            self._json({"error": "bad request body"}, 400)
+            return
+        with _lock:
+            patch, err = rename_profile(
+                userconf.load(ROOT).get("profiles", {}), old, new)
+            if err:
+                self._json({"error": err}, 409 if "used" in err else 400)
+                return
+            try:
+                added = {k: v for k, v in patch["profiles"].items() if v}
+                userconf.apply_patch(ROOT, {"profiles": added})
+                userconf.remove_local(ROOT, ("profiles", old))
+            except OSError as exc:
+                self._json({"error": repr(exc)}, 500)
+                return
+        self._json({"ok": True})
+
+    def _config_patch(self) -> None:
+        """Persist an EDITABLE-scoped config change (#66 -- the wallpaper's
+        own context menu, e.g. theme switch). Writing config.json means the
+        next /api/state poll propagates the change to every output's
+        surface automatically, no cross-surface messaging needed."""
+        try:
+            length = int(self.headers.get("Content-Length") or 0)
+            patch = json.loads(self.rfile.read(length) or b"{}")
+        except (ValueError, json.JSONDecodeError):
+            self._json({"error": "bad request body"}, 400)
+            return
+        with _lock:
+            accepted, rejected = filter_patch(patch)
+            if rejected:
+                self._json({"error": "out of scope", "rejected": rejected}, 400)
+                return
+            try:
+                # Writes data/config.local.json only -- config.json is a
+                # tracked definitions file and is never written at runtime.
+                # A null profile is a delete: deep_merge would store the
+                # null, so those go through remove_local instead.
+                doomed = [n for n, v in accepted.get("profiles", {}).items()
+                          if v is None]
+                for name in doomed:
+                    del accepted["profiles"][name]
+                    userconf.remove_local(ROOT, ("profiles", name))
+                if accepted.get("profiles") == {}:
+                    del accepted["profiles"]
+                # Same for `outputs.<key>.cards: null` (#98): reset that
+                # monitor to its built-in layout.
+                for key, fields in list(accepted.get("outputs", {}).items()):
+                    if fields.get("cards", 0) is None:
+                        del fields["cards"]
+                        userconf.remove_local(ROOT, ("outputs", key, "cards"))
+                    if not fields:
+                        del accepted["outputs"][key]
+                if accepted.get("outputs") == {}:
+                    del accepted["outputs"]
+                if accepted:
+                    userconf.apply_patch(ROOT, accepted)
+            except OSError as exc:
+                self._json({"error": repr(exc)}, 500)
+                return
+        if "location" in accepted or any(
+                k in FETCHED_UNIT_KEYS for k in accepted.get("units", {})):
+            # (#103: unit changes need the same refetch, or the header shows
+            # old-unit numbers under the new unit label.)
+            # #77 acceptance criterion: a location change must not wait out
+            # weather_seconds' TTL, or the header names the new city over
+            # the old city's cached observations. Deleting the cache file
+            # (rather than patching fetched_at) reuses
+            # _fetch_or_cache_weather's existing "no cache" path, which
+            # already degrades to unavailable/stale=True on a failed
+            # refetch -- no new failure mode to reason about. Called
+            # outside the `with _lock` above -- invalidate_weather_cache()
+            # takes the same non-reentrant lock itself.
+            invalidate_weather_cache()
+        self._json({"ok": True})
+
+    def end_headers(self) -> None:
+        if self.path.endswith((".js", ".html", ".css")):
+            self.send_header("Cache-Control", "no-cache")
+        super().end_headers()
+
+    def log_message(self, fmt, *args):  # quiet; systemd journal does the rest
+        if os.environ.get("DASHD_VERBOSE"):
+            sys.stderr.write(f"{self.address_string()} {fmt % args}\n")
+
+
+def main() -> int:
+    cfg = load_config()
+    DATA.mkdir(exist_ok=True)
+    # DASHD_PORT lets a worktree run its own server alongside the installed
+    # unit on the configured port -- see scripts/smoke.py's false-green note.
+    host = cfg["server"]["host"]
+    port = int(os.environ.get("DASHD_PORT") or cfg["server"]["port"])
+    psutil.cpu_percent(interval=None)  # prime the CPU delta
+
+    if "--once" in sys.argv:  # smoke test: print one state document and exit
+        print(json.dumps(build_state(cfg), indent=2))
+        return 0
+
+    srv = ThreadingHTTPServer((host, port), Handler)
+    srv.daemon_threads = True
+    print(f"dashd-serve  http://{host}:{port}  root={WEB}", flush=True)
+    try:
+        srv.serve_forever()
+    except KeyboardInterrupt:
+        print("bye", flush=True)
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
