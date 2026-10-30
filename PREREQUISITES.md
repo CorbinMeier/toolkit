@@ -30,3 +30,4 @@ This repo **does not contain or copy** any of the projects below. No vendoring, 
 ## Where this policy bends
 - **libcosmic is pinned** by `rev` in each applet's `Cargo.toml` to match the installed COSMIC release (1.11.0). Latest libcosmic will not necessarily run against an older desktop. Re-pin after a COSMIC upgrade; steps are in `cosmic/applet-timer/CLAUDE.md`.
 - **`apt/local-ai/bootstrap.sh` pins versions** of llama.cpp, OpenCode and VoiceStudio (with checksums) for reproducible installs. To follow upstream's latest instead, bump the pins at the top of the script, or change it to resolve the newest release.
+- **`archive/desktop-dashboard` ships a vendored Tailwind CSS browser build** (`web/vendor/tailwind.js`, MIT, © Tailwind Labs). It is retired code and the only exception to the no-vendoring rule.
