@@ -10,7 +10,7 @@ scripts/check.sh                # last line CHECK PASS
 ```
 
 ## Outside this repo
-- **Not a COSMIC tool.** It sits in the `cosmic/` folder only because it depends on `../../libs/claude-usage-core`. To split it out, publish or vendor that crate first, or both builds break.
+- **Not a COSMIC tool.** It lives in `apt/` (Linux only; reads `/proc`). It depends on [`../../libs/claude-usage-core`](../../libs/claude-usage-core/README.md) by relative path (`path = "../../libs/claude-usage-core"`); keep the repo layout intact or fix `Cargo.toml`.
 - `scripts/install.sh` writes `~/.local/bin/vitals` (release build, not tracked here). With `--service` it also writes `~/.config/systemd/user/vitals-web.service` (`ExecStart=%h/.local/bin/vitals --serve`) and enables it. Uninstalling the binary without disabling the unit leaves a failing service.
 - Config: `$XDG_CONFIG_HOME/vitals/config.toml`, saved on every UI change. Cache: `~/.cache/vitals`.
 - Web mode has no key by default and relies on a private-network guard (`[web] auth = "none"`); set `auth = "key"` before exposing it.

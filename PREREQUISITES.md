@@ -2,7 +2,7 @@
 
 This repo **does not contain or copy** any of the projects below. No vendoring, no git submodules. They are things you install or clone yourself, from their own repos, and the goal is always **their most up-to-date code**. Credit and licences are theirs.
 
-## local-ai
+## apt/local-ai
 
 | Project | What for | Source |
 |---|---|---|
@@ -16,7 +16,7 @@ This repo **does not contain or copy** any of the projects below. No vendoring, 
 | wtype | Types dictated text on Wayland | https://github.com/atx/wtype |
 | python-evdev | Reads the dictation hotkey | https://github.com/gvalkov/python-evdev |
 
-## cosmic
+## cosmic/ and libs/
 
 | Project | What for | Source |
 |---|---|---|
@@ -28,5 +28,5 @@ This repo **does not contain or copy** any of the projects below. No vendoring, 
 | Rust toolchain | Builds the applets and `vitals` | https://rustup.rs |
 
 ## Where this policy bends
-- **libcosmic is pinned** by `rev` in each applet's `Cargo.toml` to match the installed COSMIC release (1.11.0). Latest libcosmic will not necessarily run against an older desktop. Re-pin after a COSMIC upgrade; steps are in `cosmic/cosmic-applet-timer/CLAUDE.md`.
-- **`local-ai/bootstrap.sh` pins versions** of llama.cpp, OpenCode and VoiceStudio (with checksums) for reproducible installs. To follow upstream's latest instead, bump the pins at the top of the script, or change it to resolve the newest release.
+- **libcosmic is pinned** by `rev` in each applet's `Cargo.toml` to match the installed COSMIC release (1.11.0). Latest libcosmic will not necessarily run against an older desktop. Re-pin after a COSMIC upgrade; steps are in `cosmic/applet-timer/CLAUDE.md`.
+- **`apt/local-ai/bootstrap.sh` pins versions** of llama.cpp, OpenCode and VoiceStudio (with checksums) for reproducible installs. To follow upstream's latest instead, bump the pins at the top of the script, or change it to resolve the newest release.

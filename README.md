@@ -1,11 +1,30 @@
-# Public
+# toolkit
 
-My workspace tooling for a Linux desktop (Pop!_OS 24.04 with COSMIC, Wayland). Two halves, each with its own README:
+My software toolkit for a Linux desktop (Pop!_OS 24.04 with COSMIC, Wayland): desktop tools, a terminal dashboard, and an offline AI kit.
 
-| Directory | What it is |
-|---|---|
-| [`cosmic/`](cosmic/README.md) | COSMIC desktop tools: a replacement notification service and panel applet, a timer applet, a Claude plan-usage applet, and `vitals`, a terminal system dashboard. Rust and Python. |
-| [`local-ai/`](local-ai/README.md) | Offline AI kit: a local Qwen model, OpenCode, VoiceStudio, OpenSEO, and Parakeet push-to-dictate. Shell and Python. |
+## The folder tells you what a tool needs
+Every tool lives in the folder named for the most specific thing it relies on. **Folder position is the dependency rule.**
+
+| Folder | A tool here needs | May depend on |
+|---|---|---|
+| [`libs/`](libs/README.md) | Only a language toolchain (Rust). No desktop, no distro. | nothing |
+| [`apt/`](apt/README.md) | A Linux machine with **apt** (Debian, Ubuntu, Pop!_OS). On pacman, dnf or similar, a sibling `pacman/` or `dnf/` folder would hold the equivalents. | `libs/` |
+| [`cosmic/`](cosmic/README.md) | The **COSMIC** desktop (COSMIC 1.11.0 on Pop!_OS 24.04). | `libs/` |
+| [`archive/`](archive/README.md) | Nothing: retired, unmaintained, kept for reference. | nothing depends on it |
+
+- Dependencies point **down the table only**: `apt/` and `cosmic/` may use `libs/`; `libs/` uses nothing; nothing uses `archive/`. A tool never reaches sideways into another tool's folder except through `libs/`.
+- If a tool's needs change, it moves folders. A general Linux script that needs apt packages goes in `apt/`; one that needs COSMIC goes in `cosmic/`.
+
+## What is in it
+| Tool | Folder | What it is |
+|---|---|---|
+| [`notification-center`](cosmic/notification-center/README.md) | `cosmic/` | Replaces COSMIC's notification service: toasts, rules, sounds, history, a shade, a panel applet. |
+| [`applet-timer`](cosmic/applet-timer/README.md) | `cosmic/` | Panel applet: one countdown timer. |
+| [`applet-claude-usage`](cosmic/applet-claude-usage/README.md) | `cosmic/` | Panel applet: Claude plan usage as two bars with a pace marker. |
+| [`claude-usage-core`](libs/claude-usage-core/README.md) | `libs/` | Rust library behind the usage applet and `vitals`: usage types, pace math, status-line feed. |
+| [`vitals`](apt/vitals/README.md) | `apt/` | btop-style terminal dashboard (CPU, memory, disk, network, Claude usage) with a web mode. |
+| [`local-ai`](apt/local-ai/README.md) | `apt/` | Offline AI kit: local Qwen model, OpenCode, VoiceStudio, OpenSEO, Parakeet push-to-dictate. |
+| [`desktop-dashboard`](archive/desktop-dashboard/README.md) | `archive/` | Retired: a live HTML page rendered as the COSMIC desktop background. |
 
 Each tool's README has an **Outside this repo** section. Read it before installing: these tools write to `~/.local`, `~/.config` and systemd user units, and some replace or shadow a running system service. All of it is reversible with the tool's own `scripts/uninstall.sh`.
 
@@ -14,5 +33,5 @@ Upstream projects (llama.cpp, OpenCode, libcosmic and others) are **prerequisite
 ## Honest caveats
 - **Built for one machine.** Paths, the COSMIC 1.11.0 libcosmic pin, the 150% display scale and the `input` group are all this laptop. Expect to adjust.
 - **`CLAUDE.md` files are agent instructions**, not user docs. They describe how I work with Claude Code on each project.
-- **Large downloads are not here.** `local-ai/bootstrap.sh` fetches binaries and models; Parakeet's models have no recorded source yet.
+- **Large downloads are not here.** `apt/local-ai/bootstrap.sh` fetches binaries and models; Parakeet's models have no recorded source yet.
 - **Licence: MIT** (see `LICENSE`). Copy it freely; keep the copyright notice, which is the credit.

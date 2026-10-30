@@ -1,3 +1,7 @@
+> **Archived 2026-10-30.** Retired and no longer maintained; kept here for reference with its full history. It needs the COSMIC desktop (it draws on the layer-shell `BOTTOM` layer), so if it is ever revived it belongs in `cosmic/`. It was previously its own repository, `CorbinMeier/desktop`.
+>
+> **Outside this repo:** while installed it ran from systemd user units (`scripts/systemd/*.service`) and wrote `~/.local/share/dashd-host`. If those are still enabled on a machine, disable them with `systemctl --user disable --now` on the units listed in `scripts/systemd/`.
+
 # Desktop Dashboard
 
 A live HTML page rendered as the desktop background on COSMIC / Wayland —

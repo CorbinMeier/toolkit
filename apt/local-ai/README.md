@@ -44,7 +44,7 @@ local-ai/
 ```
 
 ## Prerequisites
-OpenCode, VoiceStudio, OpenSEO, llama.cpp, the Qwen model and Parakeet's runtime are other people's projects. They are fetched from their own repos, never copied into this one. Links and the version policy: [`../PREREQUISITES.md`](../PREREQUISITES.md).
+OpenCode, VoiceStudio, OpenSEO, llama.cpp, the Qwen model and Parakeet's runtime are other people's projects. They are fetched from their own repos, never copied into this one. Links and the version policy: [`../../PREREQUISITES.md`](../../PREREQUISITES.md).
 
 ## Copying to another machine
 
@@ -64,8 +64,8 @@ What the target needs (nothing else to download):
 Updating a repo later: `git -C repos/<name> pull`. Updating a binary: see each guide.
 
 ## Outside this repo / what git tracks
-- This folder is part of the `Public` repo. `.gitignore` leaves out everything `bootstrap.sh` can rebuild: `bin/`, `models/`, `images/`, `repos/`, `data/`, and Parakeet's `venv/` and models. What is tracked is small: scripts, docs, the OpenCode config and the Parakeet source.
+- This folder lives in `apt/` of the `toolkit` repo. `.gitignore` leaves out everything `bootstrap.sh` can rebuild: `bin/`, `models/`, `images/`, `repos/`, `data/`, and Parakeet's `venv/` and models. What is tracked is small: scripts, docs, the OpenCode config and the Parakeet source.
 - `~/.local/bin/{qwen-server,oc,voicestudio,openseo}` are symlinks into `scripts/` made by `scripts/link-commands.sh`; they break if this folder moves.
 - Parakeet's three systemd units live in `~/.config/systemd/user/`; `parakeet/systemd/` only holds copies.
 - Parakeet's models are not fetched by `bootstrap.sh` yet, so "copy the folder to another machine" is the only way to move them.
-- This is the general (non-COSMIC) tooling. COSMIC desktop tools live in `../cosmic/` in the combined `Public` repo.
+- This is the general (non-COSMIC) tooling. COSMIC desktop tools live in `../../cosmic/`; see the root README for the folder rules.

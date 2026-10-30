@@ -46,6 +46,6 @@ toolchain to build. Verify a change with `scripts/check.sh`.
 - `scripts/install.sh` writes `~/.local/bin/cosmic-applet-claude-usage` (release build, not tracked) and `~/.local/share/applications/net.corbinmeier.CosmicAppletClaudeUsage.desktop`. `scripts/uninstall.sh` removes both.
 - **Hand edit it does not make:** the `statusLine` entry in `~/.claude/settings.json` (see above). Remove it yourself on uninstall, or Claude Code keeps calling a binary that is gone.
 - Runtime state: `$XDG_RUNTIME_DIR/claude-usage/rate_limits.json` (tmpfs, gone at logout).
-- **Depends on `../../libs/claude-usage-core`** (`path` dependency): it only builds with that directory beside it. `vitals` reads the same feed.
+- **Depends on `../../libs/claude-usage-core`** (`path` dependency): it only builds with the repo layout intact. `vitals` reads the same feed.
 - The `/usage` fallback shells out to `claude -p /usage` (about 16 s and 0.5 GB per run, at most every 15 minutes).
 - Part of the `cosmic/` folder (`../README.md`).
